@@ -8,6 +8,7 @@ var data: Dictionary = {}
 var font: Font
 var screen: Control
 var battle: Node2D
+var campaign: Control
 var result_layer: Control
 var result_canvas: CanvasLayer
 var current_level := -1
@@ -38,6 +39,24 @@ func _ready() -> void:
 		call_deferred("_capture", "battle8")
 	elif args.has("--capture-result"):
 		call_deferred("_capture", "result")
+	elif args.has("--capture-m2-world"):
+		call_deferred("_capture_m2", "world")
+	elif args.has("--capture-m2-town"):
+		call_deferred("_capture_m2", "town")
+	elif args.has("--capture-m2-shop"):
+		call_deferred("_capture_m2", "shop")
+	elif args.has("--capture-m2-party"):
+		call_deferred("_capture_m2", "party")
+	elif args.has("--capture-m2-forge"):
+		call_deferred("_capture_m2", "forge")
+	elif args.has("--capture-m2-recruit"):
+		call_deferred("_capture_m2", "recruit")
+	elif args.has("--capture-m2-save"):
+		call_deferred("_capture_m2", "save")
+	elif args.has("--capture-m2-battle"):
+		call_deferred("_capture_m2", "battle")
+	elif args.has("--capture-m2-battle-result"):
+		call_deferred("_capture_m2", "battle-result")
 
 
 func _capture(mode: String) -> void:
@@ -65,6 +84,47 @@ func _capture(mode: String) -> void:
 	get_tree().quit()
 
 
+func _capture_m2(mode: String) -> void:
+	_start_campaign()
+	for i in range(5):
+		await get_tree().process_frame
+	if is_instance_valid(campaign):
+		if mode == "town":
+			campaign._show_town(0)
+		elif mode == "shop":
+			campaign._show_town(1)
+			campaign._open_shop("junxie", false)
+		elif mode == "party":
+			campaign._show_town(0)
+			campaign._open_party()
+		elif mode == "forge":
+			campaign._show_town(0)
+			campaign._open_forge()
+		elif mode == "recruit":
+			campaign._show_town(0)
+			campaign._open_recruit()
+		elif mode == "save":
+			campaign._show_town(0)
+			campaign._open_save()
+		elif mode == "battle" or mode == "battle-result":
+			campaign._show_town(0)
+			campaign._start_battle(14)
+			for i in range(5):
+				await get_tree().process_frame
+			if mode == "battle-result" and is_instance_valid(campaign.battle):
+				for e in campaign.battle.enemy_units:
+					e.alive = false
+				campaign.battle._check_end()
+	for i in range(5):
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	var path := "/tmp/m2_%s.png" % mode
+	img.save_png(path)
+	print("CAPTURE ", path, " ", img.get_size())
+	get_tree().quit()
+
+
 func _load_data() -> Dictionary:
 	var f := FileAccess.open(M1_PATH, FileAccess.READ)
 	if f == null:
@@ -77,6 +137,9 @@ func _load_data() -> Dictionary:
 
 
 func _clear_all() -> void:
+	if is_instance_valid(campaign):
+		campaign.queue_free()
+		campaign = null
 	if is_instance_valid(result_canvas):
 		result_canvas.queue_free()
 		result_canvas = null
@@ -127,11 +190,21 @@ func _show_menu() -> void:
 	var title := _label("抗日：地雷战", 32, Color("#f2c14e"))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
-	var sub := _label("M1 单关试玩 / 地图 / 单位 / 移动 / 攻击 / 地雷", 16,
-			Color("#9fb0c8"))
+	var sub := _label("M2 战役 / M1 自由战斗", 16, Color("#9fb0c8"))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
 	box.add_child(HSeparator.new())
+
+	var m2btn := Button.new()
+	m2btn.text = "M2 战役：19 城镇 / 招兵 / 锻造 / 转职"
+	m2btn.custom_minimum_size = Vector2(520, 42)
+	m2btn.add_theme_font_override("font", font)
+	m2btn.add_theme_font_size_override("font_size", 16)
+	m2btn.pressed.connect(_start_campaign)
+	box.add_child(m2btn)
+	var free_label := _label("自由战斗（M1）", 16, Color("#8796aa"))
+	free_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(free_label)
 
 	for lv in data["levels"]:
 		var idx: int = int(lv["index"])
@@ -160,6 +233,14 @@ func _show_menu() -> void:
 			16, Color("#5f6c7d"))
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(foot)
+
+
+func _start_campaign() -> void:
+	_clear_all()
+	campaign = preload("res://scripts/m2/Campaign.gd").new()
+	add_child(campaign)
+	campaign.exit_requested.connect(_show_menu)
+	campaign.setup(font)
 
 
 func _level_by_index(idx: int) -> Dictionary:
