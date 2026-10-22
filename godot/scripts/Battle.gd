@@ -4,6 +4,7 @@ extends Node2D
 
 signal finished(result: String, message: String)
 signal looted(item_id: int)
+signal story_event(kind: String, data: Dictionary)
 
 const CombatRules = preload("res://scripts/battle/CombatRules.gd")
 const TILE := 48
@@ -83,6 +84,7 @@ var fast_sim := false
 var last_result := ""
 var last_message := ""
 var log_history: Array = []
+var pending_story: Array = []
 
 
 func setup(d: Dictionary, lv: Dictionary, f: Font, ctx: Dictionary = {}) -> void:
@@ -507,6 +509,11 @@ func update_hud() -> void:
 		btn_end.text = "战斗结束"
 	if overlay != null:
 		overlay.queue_redraw()
+
+
+func emit_story_event(kind: String, data: Dictionary = {}) -> void:
+	pending_story.append({"kind": kind, "data": data})
+	story_event.emit(kind, data)
 
 
 func _log(text: String) -> void:
@@ -2254,6 +2261,8 @@ func _finish(result: String, message: String) -> void:
 	finished_flag = true
 	last_result = result
 	last_message = message
+	emit_story_event("victory" if result == "victory" else "defeat",
+			{"message": message})
 	phase = "done"
 	busy = true
 	selected = null

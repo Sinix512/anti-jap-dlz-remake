@@ -19,6 +19,9 @@ var story_player: Control
 var cutscene: Control
 var ending_layer: CanvasLayer
 var _last_report: Dictionary = {}
+var battle_story_queue: Array = []
+var battle_story_seen: Dictionary = {}
+var story_layer: CanvasLayer
 
 
 func setup(font_ref: Font) -> void:
@@ -47,6 +50,24 @@ func _load_player_name() -> String:
 	if cfg.load("user://dlz_config.cfg") == OK:
 		return str(cfg.get_value("player", "name", "李勇"))
 	return "李勇"
+
+
+func _process(_delta: float) -> void:
+	if not is_instance_valid(battle) or battle.finished_flag \
+			or battle_story_queue.is_empty() or is_instance_valid(story_player) \
+			or is_instance_valid(cutscene):
+		return
+	if battle.busy or battle.phase != "player":
+		return
+	var ids: Array = battle_story_queue.pop_front()
+	if ids.is_empty():
+		return
+	battle.busy = true
+	var b = battle
+	_play_story(ids, func():
+		if is_instance_valid(b):
+			b.busy = false
+	)
 
 
 func load_campaign_slot(slot: int) -> bool:
@@ -482,10 +503,39 @@ func _launch_level(idx: int, standalone: bool) -> void:
 	add_child(battle)
 	battle.finished.connect(_on_battle_finished)
 	battle.looted.connect(_on_loot)
+	battle.story_event.connect(_on_battle_story_event)
+	battle_story_queue.clear()
+	battle_story_seen.clear()
 	var ctx: Dictionary = state.battle_context()
 	battle.setup(m4, level, font, ctx)
 	battle_start_stats = {"enemies": battle.enemy_units.size(),
 			"players": battle.player_units.size()}
+
+
+func _on_battle_story_event(kind: String, data: Dictionary) -> void:
+	if current_battle_standalone or current_battle_index < 0:
+		return
+	var scenes: Dictionary = m5.get("scenes", {})
+	var sc: Dictionary = scenes.get(str(current_battle_index), {})
+	var events: Array = sc.get("events", [])
+	for i in range(events.size()):
+		var ev: Dictionary = events[i]
+		if str(ev.get("trigger", "")) != kind:
+			continue
+		if kind == "turn" and int(ev.get("turn", -1)) != int(data.get("turn", -2)):
+			continue
+		if kind == "unit_died":
+			if _norm(str(ev.get("key", ""))) != _norm(str(data.get("key", ""))):
+				continue
+		var key := "%d:%d" % [current_battle_index, i]
+		if battle_story_seen.has(key):
+			continue
+		battle_story_seen[key] = true
+		battle_story_queue.append((ev.get("ids", []) as Array).duplicate())
+
+
+func _norm(text: String) -> String:
+	return str(text).replace("\u3000", "").replace(" ", "")
 
 
 func _on_loot(item_id: int) -> void:
@@ -494,6 +544,7 @@ func _on_loot(item_id: int) -> void:
 
 
 func _on_battle_finished(result: String, message: String) -> void:
+	battle_story_queue.clear()
 	var victory := result == "victory"
 	var stats: Dictionary = {}
 	if is_instance_valid(battle):
@@ -671,9 +722,18 @@ func _play_story(ids: Array, cb: Callable) -> void:
 	if is_instance_valid(story_player):
 		story_player.queue_free()
 	story_player = load("res://scripts/m5/StoryPlayer.gd").new()
-	add_child(story_player)
+	var parent: Node = self
+	if is_instance_valid(battle):
+		story_layer = CanvasLayer.new()
+		story_layer.layer = 120
+		add_child(story_layer)
+		parent = story_layer
+	parent.add_child(story_player)
 	story_player.setup(font, m5, ids, state.player_name, func():
 		story_player = null
+		if is_instance_valid(story_layer):
+			story_layer.queue_free()
+		story_layer = null
 		cb.call())
 
 

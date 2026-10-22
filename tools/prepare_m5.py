@@ -121,11 +121,62 @@ def main() -> None:
         ids = [n for n in ids if not (n in seen or seen.add(n))]
         intro = ids[:2]
         outro = ids[-2:] if len(ids) > 2 else []
+        # 战斗内事件：从中间的 TXT 记录里按关键词归到回合/死亡/宝箱/到达。
+        # 不能确定的记录保留在 all/archive，不假装有触发器。
+        mid = ids[2:-2] if len(ids) >= 6 else []
+        unit_names = []
+        for u in lv.get("units", []):
+            if u.get("side") == "enemy" and u.get("key"):
+                unit_names.append(str(u["key"]))
+        events = []
+        used = set()
+        for n in mid:
+            if len(events) >= 3:
+                break
+            rec = by_n.get(n)
+            if rec is None:
+                continue
+            text = str(rec.get("raw", ""))
+            ev = None
+            if ("宝箱" in text or "武器" in text or "弹药" in text) and \
+                    not any(e["trigger"] == "chest" for e in events):
+                ev = {"trigger": "chest", "ids": [n]}
+            elif ("增援" in text or "援兵" in text or "援军" in text) and \
+                    not any(e["trigger"] == "turn" for e in events):
+                ev = {"trigger": "turn", "turn": 2, "ids": [n]}
+            else:
+                for name in unit_names:
+                    if name and name in text:
+                        ev = {"trigger": "unit_died", "key": name, "ids": [n]}
+                        break
+            if ev is None and ("到达" in text or "山神庙" in text) and \
+                    not any(e["trigger"] == "reach" for e in events):
+                ev = {"trigger": "reach", "ids": [n]}
+            if ev is None and not any(e["trigger"] == "turn" for e in events):
+                ev = {"trigger": "turn", "turn": 3, "ids": [n]}
+            if ev is not None and n not in used:
+                used.add(n)
+                events.append(ev)
         scenes[str(lv["index"])] = {
             "intro": intro,
             "outro": outro,
             "all": ids,
+            "events": events,
         }
+        for n in ids:
+            rec = by_n.get(n)
+            if rec is None:
+                continue
+            if n in intro:
+                rec["trigger"] = "start"
+            elif n in outro:
+                rec["trigger"] = "victory"
+            else:
+                rec["trigger"] = "archive"
+        for ev in events:
+            for n in ev["ids"]:
+                if n in by_n:
+                    by_n[n]["trigger"] = ev["trigger"]
 
     # 剧情档案：按 n 顺序每 20 条一组
     archive = []

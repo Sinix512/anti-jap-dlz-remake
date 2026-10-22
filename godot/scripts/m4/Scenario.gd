@@ -62,6 +62,8 @@ func _key(text: String) -> String:
 
 func on_start() -> void:
 	started = true
+	if battle != null:
+		battle.emit_story_event("start", {})
 	# 赛跑关：柳忻获得兔子速度，龟田按乌龟速度走。原版赛跑关的脚本
 	# 不在 FIGHT.DAT 里，这里是可玩性补足，不是已确认数值。
 	if objective.get("type", "") == "race":
@@ -126,6 +128,8 @@ func _add_search_marker(tx: int, ty: int) -> void:
 func on_turn_start(turn: int) -> void:
 	if finished:
 		return
+	if battle != null:
+		battle.emit_story_event("turn", {"turn": turn})
 	# 增援
 	for wi in range(waves.size()):
 		var wave: Dictionary = waves[wi]
@@ -172,6 +176,8 @@ func on_unit_moved(u) -> void:
 				_finish("victory", "占领目标")
 				return
 		elif reached.size() >= target_count:
+			if battle != null:
+				battle.emit_story_event("reach", {"tile": [t.x, t.y]})
 			_finish("victory", str(level.get("success", "到达目标")))
 			return
 	if objective.get("type", "") == "collect":
@@ -194,6 +200,8 @@ func on_unit_moved(u) -> void:
 			var d: int = abs(tu.x - u.x) + abs(tu.y - u.y)
 			var radius := int(objective.get("radius", 1))
 			if d <= radius:
+				if battle != null:
+					battle.emit_story_event("reach", {"unit": tu.unit_name})
 				_finish("victory", "已接近 %s" % tu.unit_name)
 				return
 	if objective.get("type", "") == "race":
@@ -213,6 +221,8 @@ func on_unit_died(u) -> void:
 	if finished or u == null:
 		return
 	var k := _key(u.unit_name)
+	if battle != null:
+		battle.emit_story_event("unit_died", {"key": k, "name": u.unit_name})
 	if u.side == "enemy":
 		killed[k] = true
 		if objective.get("type", "") == "kill":
@@ -242,6 +252,9 @@ func on_unit_died(u) -> void:
 func on_chest(u, chest: Dictionary) -> void:
 	chests_opened += 1
 	var item := str(chest.get("item_name", "物资"))
+	if battle != null:
+		battle.emit_story_event("chest", {"item": item, "x": int(chest.get("x", 0)),
+				"y": int(chest.get("y", 0))})
 	battle._log("%s 打开宝箱：%s" % [u.unit_name, item])
 	battle.looted.emit(int(chest.get("wupin", -1)))
 	_update_status()
