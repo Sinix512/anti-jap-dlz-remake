@@ -97,7 +97,12 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 			3: v = int(state.ending_id)
 			4: v = state.campaign_completed.size()
 		b.put_u32(v)
-	_pad(b, 380)
+	# block13 用途未确认；尾部写私有 PARY 扩展保存队伍，供本工具回读。
+	var b13 := PackedByteArray(); b13.resize(380)
+	b13.encode_u32(0, 0x50415259)  # PARY
+	for i in range(10):
+		b13.encode_u32(4 + i * 4, int(state.party[i]["pid"]) if i < state.party.size() else 0)
+	b.put_data(b13)
 	_pad(b, 8192)
 	_pad(b, 8192)
 	var people := _people_bytes(state)
@@ -106,11 +111,17 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	for i in range(160):
 		b.put_u16(mini(65535, state.item_count(i)))
 	_pad(b, 320)
+	# block20/21 是 4×10 物品格缓存：当前页写前 10 个库存物品。
+	var top_ids: Array = []
+	for i in range(160):
+		if state.item_count(i) > 0:
+			top_ids.append(i)
+			if top_ids.size() >= 10:
+				break
 	for i in range(40):
-		b.put_u16(1 if state.has_member(i) else 0)
-	# block21：10 个 u32，按新游戏清零/10 人队伍推测为出战顺序；写 pid。
+		b.put_u16(state.item_count(int(top_ids[i])) if i < top_ids.size() else 0)
 	for i in range(10):
-		b.put_u32(int(state.party[i]["pid"]) if i < state.party.size() else 0)
+		b.put_u32(int(top_ids[i]) if i < top_ids.size() else 0)
 	_pad(b, 32768)
 	_pad(b, 8)
 	_pad(b, 28)
@@ -146,7 +157,8 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	var progress: Array = []
 	for i in range(14):
 		progress.append(int(b.get_u32()))
-	_skip(b, 380)
+	var b13_got = b.get_data(380)
+	var b13: PackedByteArray = b13_got[1]
 	_skip(b, 8192)
 	_skip(b, 8192)
 	var people_got = b.get_data(16896)
@@ -163,17 +175,20 @@ static func decode(data: PackedByteArray) -> Dictionary:
 			items[str(i)] = cangku[i]
 	out["items"] = items
 	_skip(b, 320)
-	var avail: Array = []
+	var grid_counts: Array = []
 	for i in range(40):
-		if int(b.get_u16()) != 0:
-			avail.append(i)
-	var order: Array = []
+		grid_counts.append(int(b.get_u16()))
+	var grid_ids: Array = []
 	for i in range(10):
-		var pid := int(b.get_u32())
-		if pid > 0 and pid < 40:
-			order.append(pid)
-	out["members"] = order if not order.is_empty() else avail
-	out["char_avail"] = avail
+		grid_ids.append(int(b.get_u32()))
+	out["item_grid"] = {"ids": grid_ids, "counts": grid_counts.slice(0, 10)}
+	var members: Array = []
+	if b13.size() >= 44 and b13.decode_u32(0) == 0x50415259:
+		for i in range(10):
+			var pid := int(b13.decode_u32(4 + i * 4))
+			if pid > 0 and pid < 40:
+				members.append(pid)
+	out["members"] = members
 	out["fight_index"] = progress[0] if progress.size() > 0 else 0
 	out["score_total"] = progress[1] if progress.size() > 1 else 0
 	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
