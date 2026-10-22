@@ -146,14 +146,14 @@ python3 tools/verify_m5_media.py    # 1292 项检查，RESULT: PASS
   击杀经验 + 战后经验，100 经验/级，等级上限 99。
 - **自动验收**：`M6Test` 覆盖库存→战斗→消耗→写回、技能、物品、装备、升级、存档。
   `M7Test` 用目标感知 bot（99 级/10 人/平衡层）跑 47 关，当前 **47/47**；
-  `M8Test` 从新游戏连续 36 关，目前 C00–C04 过、C05 失败。缺口见 [GAPS.md](GAPS.md) §9。
+  `M8Test` 从新游戏连续 36 主线，当前 **36/36**。两者均为 bot + 平衡层结果，
+  不等于人工全通或原版触发器；缺口见 [GAPS.md](GAPS.md) §9。
 
 ```bash
 ./verify_m6.sh          # M6 战斗系统回归
 ./verify_all.sh         # M1-M6 全量无头回归
 # M7/M8 是自动全通/连续战役验收，当前作为诊断入口，未加入 verify_all：
-# godot --headless --path godot --script res://tests/M7Test.gd
-# godot --headless --path godot --script res://tests/M8Test.gd
+./verify_play.sh        # M7 47/47 + M8 36/36（较慢）
 ```
 
 ## 里程碑总览
@@ -454,6 +454,7 @@ python3 verify.py          # 17,453 条断言，逐条校验格式结论与产�
 ./verify_m4.sh             # M4 47 关
 ./verify_m5.sh             # M5 剧情/结局
 ./verify_m6.sh             # M6 战斗系统
+./verify_play.sh           # M7 47/47 + M8 36/36（较慢）
 python3 tools/prepare_m5_media.py   # 首次/需要时：MPEG/FLC/ANM → godot/assets/m5
 ```
 

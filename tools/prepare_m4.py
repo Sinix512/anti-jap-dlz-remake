@@ -47,13 +47,13 @@ ALLY_WAVES = {
 }
 # 后期/彩蛋关的敌军数量与静态 Fighter 槽不一致（原版靠脚本分批投入）；
 # 这里给可玩性上限，超出部分不进入首发，避免 5-10 人面对 30-58 个同时行动。
-ENEMY_CAP = {20: 20, 27: 20, 31: 18, 32: 20, 33: 20, 34: 20,
+ENEMY_CAP = {20: 20, 25: 20, 27: 20, 31: 18, 32: 20, 33: 20, 34: 20,
              35: 12, 36: 10, 37: 10, 38: 10, 39: 10, 40: 10,
              41: 10, 42: 10, 43: 10, 46: 12}
-ENEMY_LEVEL_CAP = {20: 20, 27: 20, 31: 20, 32: 20, 33: 20, 34: 20,
+ENEMY_LEVEL_CAP = {20: 20, 25: 20, 27: 20, 31: 20, 32: 20, 33: 20, 34: 20,
                    35: 20, 36: 20, 37: 20, 38: 20, 39: 20, 40: 20,
                    41: 20, 42: 20, 43: 20}
-ENEMY_HP_CAP = {20: 600, 27: 600, 31: 600, 32: 600, 33: 600, 34: 600,
+ENEMY_HP_CAP = {20: 600, 25: 600, 27: 600, 31: 600, 32: 600, 33: 600, 34: 600,
                 35: 600, 36: 600, 37: 600, 38: 600, 39: 600, 40: 600,
                 41: 600, 42: 600, 43: 600}
 ENEMY_WAVE_DISABLE = set(range(36, 44))
@@ -143,6 +143,7 @@ MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
 PARTY_DEPLOY = {**{i: True for i in MAIN_LEVELS}}
 PARTY_DEPLOY[46] = True  # 鬼子进村：张嘎 + 村民 + 队伍 + 八路军增援
 PROTECT_ALL = {36, 40}  # 狼牙山：五壮士全部阵亡才失败
+TURN_LIMIT_OVERRIDE = {i: 60 for i in range(36)}  # 主线至少 60 回合；原版 20-40 回合对低等级队伍过紧
 
 # 每关推荐剧情 TXT n（M5 再细化；这里只放关键的开场/收尾）
 STORY_IDS = {
@@ -364,6 +365,31 @@ def make_ally(pid: int, people: list, units: dict, x: int, y: int) -> dict:
     }
 
 
+def snap_unit_to_reach(x: int, y: int, reach: set, occupied: set,
+                       w: int, h: int) -> tuple[int, int]:
+    if (x, y) in reach and (x, y) not in occupied:
+        return x, y
+    best = None
+    bestd = 10 ** 9
+    for r in range(1, 10):
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if abs(dx) != r and abs(dy) != r:
+                    continue
+                nx, ny = x + dx, y + dy
+                if not (0 <= nx < w and 0 <= ny < h):
+                    continue
+                if (nx, ny) not in reach or (nx, ny) in occupied:
+                    continue
+                d = abs(dx) + abs(dy)
+                if d < bestd:
+                    bestd = d
+                    best = (nx, ny)
+        if best is not None:
+            return best
+    return x, y
+
+
 def level_kind(idx: int) -> tuple[str, str, int]:
     if idx in MAIN_LEVELS:
         return "main", "", idx
@@ -538,6 +564,17 @@ def main() -> None:
         if not reach:
             reach = {(x, y) for y in range(h) for x in range(w)
                      if walkable(move3, terrain[y * w + x])}
+        # 敌军必须在玩家可达域内，否则“全歼”永远无法完成。
+        occupied = {(r["x"], r["y"]) for r in active}
+        for r in active + reserves:
+            if r["side"] != "enemy":
+                continue
+            nx, ny = snap_unit_to_reach(int(r["x"]), int(r["y"]), reach,
+                                        occupied, w, h)
+            if (nx, ny) != (int(r["x"]), int(r["y"])):
+                occupied.discard((int(r["x"]), int(r["y"])))
+                r["x"], r["y"] = nx, ny
+                occupied.add((nx, ny))
         # 目标必须由指定单位/任意我方走到；按单位单独算可达域再吸附
         target_reach = reach
         if obj_raw.get("unit_keys"):
@@ -637,7 +674,7 @@ def main() -> None:
             "town": TOWN_OF_LEVEL[idx],
             "success": lv["success"].strip().strip("\u3000"),
             "failure": lv["failure"].strip().strip("\u3000"),
-            "turn_limit": turn_limit(lv["failure"]),
+            "turn_limit": TURN_LIMIT_OVERRIDE.get(idx, turn_limit(lv["failure"])),
             "difficulty": int(lv["intro"]["difficulty_raw"]),
             "stars": stars,
             "score_base": score,

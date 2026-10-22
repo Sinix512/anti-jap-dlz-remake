@@ -35,26 +35,34 @@ static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
 			if fixed_keys.has(k):
 				continue
 			var spawn := _pick_deploy(deploy, added, lv, units)
-			var d := member_unit(m2, m, spawn)
+			# 战役等级同步：低等级队伍在后期主线会被原版高等级敌军压死。
+			# 这是可玩性补足，不改变存档等级；隐藏/彩蛋关不启用。
+			var floor := mini(60, 5 + idx * 2) if idx < 36 else 0
+			var d := member_unit(m2, m, spawn, floor)
 			units.append(d)
 			fixed_keys[k] = true
 			added += 1
 	# 兜底：没有任何玩家单位时，放一个队伍成员到部署点/地图边缘
 	if not _has_side(units, "player") and not party.is_empty():
 		var spawn := _pick_deploy(deploy, 0, lv, units)
-		units.append(member_unit(m2, party[0], spawn))
+		var floor0 := mini(60, 5 + idx * 2) if idx < 36 else 0
+		units.append(member_unit(m2, party[0], spawn, floor0))
 	lv["units"] = units
 	lv["players"] = _count_side(units, "player")
 	lv["enemies"] = _count_side(units, "enemy")
 	return lv
 
 
-static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary) -> Dictionary:
+static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary,
+		level_floor: int = 0) -> Dictionary:
 	var people: Array = m2.get("people", [])
 	var pid := int(m.get("pid", -1))
 	var p: Dictionary = people[pid] if pid >= 0 and pid < people.size() else {}
 	var u: Dictionary = p.get("unit", {})
+	var lv := maxi(int(m.get("level", 1)), int(level_floor))
 	var max_hp := int(m.get("max_hp", max(1, int(u.get("tili", 50)))))
+	if lv > int(m.get("level", 1)):
+		max_hp = max(1, int(u.get("tili", 50)) + (lv - 1) * int(u.get("tili_plus", 0)))
 	var equip_id := int(m.get("equip", -1))
 	var equip_item: Dictionary = {}
 	var equip_bonus := {"attack": 0, "defense": 0}
@@ -71,7 +79,7 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary) -> Dic
 		"key": _key(m.get("name", "")),
 		"unit_name": str(m.get("unit_name", u.get("name", ""))),
 		"bingzhong": int(m.get("bingzhong", p.get("bingzhong", 0))),
-		"level": int(m.get("level", 1)),
+		"level": lv,
 		"wuli": int(m.get("wuli", 0)),
 		"zhili": int(m.get("zhili", 0)),
 		"xp": int(m.get("xp", 0)),
@@ -84,7 +92,7 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary) -> Dic
 		"equip_name": str(equip_item.get("name", "")),
 		"attack_bonus": int(equip_bonus["attack"]),
 		"defense_bonus": int(equip_bonus["defense"]),
-		"hp": max(1, int(m.get("hp", max_hp))),
+		"hp": max_hp if lv > int(m.get("level", 1)) else max(1, int(m.get("hp", max_hp))),
 		"max_hp": max_hp,
 		"raw_hp": int(m.get("hp", max_hp)),
 		"hp_source": "party",
