@@ -112,8 +112,8 @@ M3 只改表现，不改玩法/数值；M1/M2 回归保持通过。
 
 - **对话**：`scripts/m5/StoryPlayer.gd`，逐字显示、说话人/头像、点击/空格推进、Esc 跳过；
   `GG` 替换为主角名，`AA/BB/CC/DD/TT` 去标记；`剧情回顾` 可读全部 478 条。
-- **事件层**：`m5.json.scenes[*].events` 45 条（turn/unit_died/chest）；
-  478 条记录全部带 `trigger`，188 条非 archive，274 条带 `level` 归属；
+- **事件层**：`m5.json.scenes[*].events` 88 条（turn/unit_died/chest）；
+  478 条记录全部带 `trigger`，227 条非 archive，274 条带 `level` 归属；
   `Battle.story_event` → `Campaign` 队列 → 战斗内暂停播放。
 - **角色创建**：`MENU01` 原版界面用于“新的战役”姓名与难度输入；
   简单/普通/困难=敌军 HP 0.75/1.0/1.15、攻击 -8/0/+4；

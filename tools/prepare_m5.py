@@ -130,8 +130,9 @@ def main() -> None:
                 unit_names.append(str(u["key"]))
         events = []
         used = set()
+        # 第一遍：优先保留宝箱/增援/死亡/到达等明确关键词事件。
         for n in mid:
-            if len(events) >= 3:
+            if len(events) >= 4:
                 break
             rec = by_n.get(n)
             if rec is None:
@@ -141,9 +142,12 @@ def main() -> None:
             if ("宝箱" in text or "武器" in text or "弹药" in text) and \
                     not any(e["trigger"] == "chest" for e in events):
                 ev = {"trigger": "chest", "ids": [n]}
-            elif ("增援" in text or "援兵" in text or "援军" in text) and \
-                    not any(e["trigger"] == "turn" for e in events):
-                ev = {"trigger": "turn", "turn": 2, "ids": [n]}
+            elif ("增援" in text or "援兵" in text or "援军" in text):
+                for tt in (2, 3, 4, 5):
+                    if not any(e["trigger"] == "turn" and int(e.get("turn", 0)) == tt
+                            for e in events):
+                        ev = {"trigger": "turn", "turn": tt, "ids": [n]}
+                        break
             else:
                 for name in unit_names:
                     if name and name in text:
@@ -152,11 +156,21 @@ def main() -> None:
             if ev is None and ("到达" in text or "山神庙" in text) and \
                     not any(e["trigger"] == "reach" for e in events):
                 ev = {"trigger": "reach", "ids": [n]}
-            if ev is None and not any(e["trigger"] == "turn" for e in events):
-                ev = {"trigger": "turn", "turn": 3, "ids": [n]}
             if ev is not None and n not in used:
                 used.add(n)
                 events.append(ev)
+        # 第二遍：剩余 mid 记录填入未占用的回合事件，最多 4 个事件/关。
+        for n in mid:
+            if len(events) >= 4:
+                break
+            if n in used or n not in by_n:
+                continue
+            for tt in (3, 4, 5, 2):
+                if not any(e["trigger"] == "turn" and int(e.get("turn", 0)) == tt
+                        for e in events):
+                    events.append({"trigger": "turn", "turn": tt, "ids": [n]})
+                    used.add(n)
+                    break
         scenes[str(lv["index"])] = {
             "intro": intro,
             "outro": outro,
