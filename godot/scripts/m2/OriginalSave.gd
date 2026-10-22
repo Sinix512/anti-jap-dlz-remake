@@ -73,9 +73,9 @@ static func _people_bytes(state) -> PackedByteArray:
 static func encode(state, level: Dictionary) -> PackedByteArray:
 	var b := StreamPeerBuffer.new()
 	b.big_endian = false
-	b.put_u32(2)  # game mode: strategic
-	b.put_u32(int(state.campaign_index))
-	b.put_u32(1)  # difficulty
+	b.put_u32(2)  # block0（用途未完全确认）
+	b.put_u32(0x28)  # block1 game state：战略界面
+	b.put_u32(1)  # block2 difficulty
 	b.put_u32(100)  # terrain modifier
 	# Intro 700 B: 只写难度/固定字段；关卡字符串保持 0，避免 UTF-8/GBK 混写。
 	var intro := PackedByteArray(); intro.resize(700)
@@ -131,8 +131,8 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	var b := StreamPeerBuffer.new()
 	b.data_array = data
 	b.big_endian = false
-	b.get_u32()  # block0 game mode
-	var out := {"fight_index": int(b.get_u32()), "difficulty": int(b.get_u32())}
+	b.get_u32()  # block0
+	var out := {"game_state": int(b.get_u32()), "difficulty": int(b.get_u32())}
 	b.get_u32()  # block3 terrain
 	_skip(b, 700)  # intro
 	out["map_width"] = int(b.get_u32())
@@ -173,6 +173,7 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	for i in range(10):
 		ext.append(int(b.get_u32()))
 	out["money"] = ext[1] if ext[0] == 0x4D4F4E59 else 0
+	out["fight_index"] = progress[0] if progress.size() > 0 else 0
 	out["score_total"] = progress[1] if progress.size() > 1 else 0
 	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
 	out["ending_id"] = progress[3] if progress.size() > 3 else 0
