@@ -145,12 +145,15 @@ python3 tools/verify_m5_media.py    # 1292 项检查，RESULT: PASS
 - **数值**：攻击/防御/伤害走 `CombatRules`，士气、装备完整度、地形、反击、AoE 地雷；
   击杀经验 + 战后经验，100 经验/级，等级上限 99。
 - **自动验收**：`M6Test` 覆盖库存→战斗→消耗→写回、技能、物品、装备、升级、存档。
-  `M7Test` 用目标感知 bot 跑 47 关，当前代表关通过，**尚未 47/47**；失败列表见
-  [GAPS.md](GAPS.md) §9。
+  `M7Test` 用目标感知 bot（99 级/10 人/平衡层）跑 47 关，当前 **47/47**；
+  `M8Test` 从新游戏连续 36 关，目前 C00–C04 过、C05 失败。缺口见 [GAPS.md](GAPS.md) §9。
 
 ```bash
 ./verify_m6.sh          # M6 战斗系统回归
 ./verify_all.sh         # M1-M6 全量无头回归
+# M7/M8 是自动全通/连续战役验收，当前作为诊断入口，未加入 verify_all：
+# godot --headless --path godot --script res://tests/M7Test.gd
+# godot --headless --path godot --script res://tests/M8Test.gd
 ```
 
 ## 里程碑总览

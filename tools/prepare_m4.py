@@ -36,16 +36,27 @@ EASTER = list(range(44, 47))
 # 可玩性补足：原版过场/触发器里的友军增援与个别 Easter 单位的实际 HP
 # 不在 FIGHT.DAT 的静态槽里，这里显式建模，避免“目标存在但不可完成”。
 ALLY_WAVES = {
+    32: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27, 28, 29]},
+    33: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27, 28, 29]},
+    34: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27, 28, 29]},
     35: {"turn": 1, "side": "player",
          "pids": [33, 30, 31, 32, 26, 27, 28, 29, 24, 25, 22, 23]},
+    40: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27]},
     46: {"turn": 1, "side": "player",
          "pids": [33, 4, 8, 9, 5, 7, 6, 10, 11, 12]},
 }
 # 后期/彩蛋关的敌军数量与静态 Fighter 槽不一致（原版靠脚本分批投入）；
 # 这里给可玩性上限，超出部分不进入首发，避免 5-10 人面对 30-58 个同时行动。
-ENEMY_CAP = {35: 12, 46: 12}
-ENEMY_LEVEL_CAP = {35: 20}
-ENEMY_HP_CAP = {35: 600}
+ENEMY_CAP = {20: 20, 27: 20, 31: 18, 32: 20, 33: 20, 34: 20,
+             35: 12, 36: 10, 37: 10, 38: 10, 39: 10, 40: 10,
+             41: 10, 42: 10, 43: 10, 46: 12}
+ENEMY_LEVEL_CAP = {20: 20, 27: 20, 31: 20, 32: 20, 33: 20, 34: 20,
+                   35: 20, 36: 20, 37: 20, 38: 20, 39: 20, 40: 20,
+                   41: 20, 42: 20, 43: 20}
+ENEMY_HP_CAP = {20: 600, 27: 600, 31: 600, 32: 600, 33: 600, 34: 600,
+                35: 600, 36: 600, 37: 600, 38: 600, 39: 600, 40: 600,
+                41: 600, 42: 600, 43: 600}
+ENEMY_WAVE_DISABLE = set(range(36, 44))
 HP_OVERRIDES = {
     45: {"柳忻": 1376},   # 与 L44 的柳忻一致，避免赛跑关被高等级敌军一击秒杀
     46: {"张嘎": 662},
@@ -131,7 +142,7 @@ PROTECT = {
 MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
 PARTY_DEPLOY = {**{i: True for i in MAIN_LEVELS}}
 PARTY_DEPLOY[46] = True  # 鬼子进村：张嘎 + 村民 + 队伍 + 八路军增援
-PROTECT_ALL = {36}  # 狼牙山：五壮士全部阵亡才失败
+PROTECT_ALL = {36, 40}  # 狼牙山：五壮士全部阵亡才失败
 
 # 每关推荐剧情 TXT n（M5 再细化；这里只放关键的开场/收尾）
 STORY_IDS = {
@@ -572,6 +583,8 @@ def main() -> None:
                 waves.append({"turn": 2, "side": "enemy", "units": first})
                 if rest:
                     waves.append({"turn": 5, "side": "enemy", "units": rest})
+        if idx in ENEMY_WAVE_DISABLE:
+            waves = [w for w in waves if str(w.get("side", "")) != "enemy"]
         if idx in ALLY_WAVES:
             aw = ALLY_WAVES[idx]
             ally_units = []

@@ -2076,7 +2076,7 @@ func _bot_unit(u: Node2D) -> void:
 	var goal := {"kind": "hold", "tile": Vector2i(u.x, u.y)}
 	if scenario != null:
 		goal = scenario.bot_goal(u)
-	if _bot_is_protected(u) and obj_type != "race":
+	if _bot_is_protected(u) and obj_type in ["kill", "annihilate", "survive"]:
 		_bot_retreat(u)
 		return
 	# 目标关先赶路；只有目标本身或挡路敌人值得停下来打。
