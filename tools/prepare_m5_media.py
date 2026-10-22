@@ -68,6 +68,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SRC = PROJECT_ROOT.parent / "dlz" / "ANTI-JAP"
@@ -872,6 +873,35 @@ def anm_frames(parsed: dict):
         yield idx, bytes(prev)
 
 
+def encode_anm_alpha_sheet(parsed: dict, dst: Path) -> int:
+    """把 ANM 帧导出为 RGBA 横排 sprite sheet；调色板 index 0 视为透明。"""
+    w, h = parsed["width"], parsed["height"]
+    palette = parsed["palette"]
+    rgb = []
+    for i in range(256):
+        b, g, r, _ = palette[i * 4 : i * 4 + 4]
+        rgb.append((r, g, b))
+    frames = []
+    for _, frame in anm_frames(parsed):
+        data = bytearray(w * h * 4)
+        for j, v in enumerate(frame):
+            r, g, b = rgb[v]
+            o = j * 4
+            data[o] = r
+            data[o + 1] = g
+            data[o + 2] = b
+            data[o + 3] = 0 if v == 0 else 255
+        frames.append(Image.frombytes("RGBA", (w, h), bytes(data)))
+    if not frames:
+        return 0
+    sheet = Image.new("RGBA", (w * len(frames), h), (0, 0, 0, 0))
+    for i, im in enumerate(frames):
+        sheet.paste(im, (i * w, 0))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(dst)
+    return len(frames)
+
+
 def encode_anm(ffmpeg: Path, ffprobe: Path, parsed: dict, dst: Path) -> dict:
     dst.parent.mkdir(parents=True, exist_ok=True)
     part = dst.with_name(dst.name + ".part")
@@ -1041,6 +1071,15 @@ def convert_anm(
             duration=out_info["duration"],
         )
         skipped = False
+    if video_id.startswith("mine"):
+        sheet = dest / "anm" / f"{video_id}_sheet.png"
+        if force or not sheet.exists():
+            try:
+                n = encode_anm_alpha_sheet(parsed, sheet)
+                decode_info["sheet_path"] = f"res://assets/m5/anm/{sheet.name}"
+                decode_info["sheet_frames"] = n
+            except Exception as exc:
+                decode_info["sheet_error"] = str(exc)
     return {
         "id": video_id,
         "source": src.name,

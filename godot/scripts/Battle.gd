@@ -1149,6 +1149,31 @@ func _place_mine() -> void:
 
 
 func _play_mine_effect(mine_id: int, tile: Vector2i) -> void:
+	var sheet := "res://assets/m5/anm/mine%02d_sheet.png" % mine_id
+	if ResourceLoader.exists(sheet):
+		var tex: Texture2D = load(sheet)
+		if tex != null:
+			var frames := SpriteFrames.new()
+			frames.remove_animation("default")
+			frames.add_animation("default")
+			frames.set_animation_speed("default", 12.0)
+			frames.set_animation_loop("default", false)
+			var n := int(tex.get_width() / 320)
+			for i in range(n):
+				var at := AtlasTexture.new()
+				at.atlas = tex
+				at.region = Rect2(i * 320, 0, 320, 200)
+				frames.add_frame("default", at)
+			var anim := AnimatedSprite2D.new()
+			anim.sprite_frames = frames
+			anim.position = Vector2(tile.x * TILE + TILE / 2.0,
+					tile.y * TILE + TILE / 2.0)
+			anim.scale = Vector2(0.6, 0.6)
+			anim.z_index = 0
+			anim.animation_finished.connect(anim.queue_free)
+			fx_root.add_child(anim)
+			anim.play("default")
+			return
 	var path := "res://assets/m5/anm/mine%02d.ogv" % mine_id
 	if not ResourceLoader.exists(path):
 		return
