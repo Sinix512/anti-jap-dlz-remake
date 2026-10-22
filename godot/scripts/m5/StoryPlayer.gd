@@ -28,6 +28,7 @@ var _indicator: Label
 var _panel: Control
 var _archive_root: Control
 var _preview_name: Label
+var archive_levels_only := false
 var _preview_text: Label
 var _preview_portrait: TextureRect
 var _selected_record := 0
@@ -244,7 +245,23 @@ func _build_archive() -> void:
 	bg.color = Color(0.035, 0.03, 0.025, 0.98)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	add_child(OriginalUI.header("剧情回顾 / 478 条", font, Rect2(0, 0, 640, 30)))
+	var recs: Array = data.get("records", [])
+	var shown := 0
+	for r in recs:
+		if not archive_levels_only or int(r.get("level", -1)) >= 0:
+			shown += 1
+	add_child(OriginalUI.header("剧情回顾 / %d 条" % shown, font, Rect2(0, 0, 640, 30)))
+	var toggle := CheckButton.new()
+	toggle.text = "只看关卡剧情"
+	toggle.button_pressed = archive_levels_only
+	toggle.position = Vector2(390, 2)
+	toggle.size = Vector2(150, 26)
+	toggle.add_theme_font_override("font", font)
+	toggle.add_theme_font_size_override("font_size", 14)
+	toggle.toggled.connect(func(v: bool):
+		archive_levels_only = v
+		_rebuild_archive())
+	add_child(toggle)
 	var left := ScrollContainer.new()
 	left.position = Vector2(14, 42)
 	left.size = Vector2(268, 392)
@@ -254,8 +271,9 @@ func _build_archive() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 1)
 	left.add_child(list)
-	var records: Array = data.get("records", [])
-	for r in records:
+	for r in recs:
+		if archive_levels_only and int(r.get("level", -1)) < 0:
+			continue
 		var first := ""
 		if not (r.get("lines", []) as Array).is_empty():
 			first = str(r["lines"][0].get("text", ""))
@@ -297,8 +315,18 @@ func _build_archive() -> void:
 			_finish, 16)
 	back.position = Vector2(208, 348)
 	right.add_child(back)
-	if not records.is_empty():
-		_preview(int(records[0]["n"]))
+	for r in recs:
+		if archive_levels_only and int(r.get("level", -1)) < 0:
+			continue
+		_preview(int(r["n"]))
+		break
+
+
+func _rebuild_archive() -> void:
+	for c in get_children():
+		remove_child(c)
+		c.queue_free()
+	_build_archive()
 
 
 func _preview(n: int) -> void:
