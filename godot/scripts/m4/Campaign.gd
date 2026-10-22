@@ -22,6 +22,7 @@ var _last_report: Dictionary = {}
 var battle_story_queue: Array = []
 var battle_story_seen: Dictionary = {}
 var story_layer: CanvasLayer
+var credits_layer: CanvasLayer
 
 
 func setup(font_ref: Font) -> void:
@@ -802,11 +803,15 @@ func _show_ending(forced := -1) -> void:
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(body)
 	var row := HBoxContainer.new()
-	row.position = Vector2(170, 438)
+	row.position = Vector2(120, 438)
 	row.add_theme_constant_override("separation", 14)
 	var back := _button("返回标题", Vector2.ZERO, Vector2(120, 28),
 			func(): exit_requested.emit(), 14)
 	row.add_child(back)
+	if ResourceLoader.exists("res://assets/ui/credits.png"):
+		var cr := _button("片 尾", Vector2.ZERO, Vector2(80, 28),
+				_show_credits, 14)
+		row.add_child(cr)
 	if state.hidden_unlocked:
 		var sim := _button("模拟", Vector2.ZERO, Vector2(90, 28),
 				_start_hidden.bind("simulation"), 14)
@@ -821,6 +826,43 @@ func _show_ending(forced := -1) -> void:
 	state_l.size = Vector2(640, 18)
 	state_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(state_l)
+
+
+func _show_credits() -> void:
+	if is_instance_valid(credits_layer):
+		credits_layer.queue_free()
+	credits_layer = CanvasLayer.new()
+	credits_layer.layer = 95
+	add_child(credits_layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.theme = ui_theme
+	credits_layer.add_child(root)
+	var bg := ColorRect.new()
+	bg.color = Color.BLACK
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(bg)
+	var tex := TextureRect.new()
+	tex.texture = load("res://assets/ui/credits.png")
+	tex.position = Vector2(0, 480)
+	tex.size = Vector2(640, 7562)
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_SCALE
+	tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	root.add_child(tex)
+	var skip := _button("跳过片尾", Vector2(520, 446), Vector2(100, 26),
+			_close_credits, 14)
+	root.add_child(skip)
+	var tw := create_tween()
+	tw.tween_property(tex, "position:y", -7562.0, 45.0)
+	tw.tween_callback(_close_credits)
+
+
+func _close_credits() -> void:
+	if is_instance_valid(credits_layer):
+		credits_layer.queue_free()
+	credits_layer = null
+	exit_requested.emit()
 
 
 func _open_story_archive() -> void:
