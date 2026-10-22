@@ -270,9 +270,47 @@ func _show_town(index: int) -> void:
 
 
 func _service_heal() -> void:
+	_show_house()
+
+
+func _show_house() -> void:
+	_new_ui()
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/bg02.png") \
+			if ResourceLoader.exists("res://assets/ui/bg02.png") else null
+	bg.position = Vector2.ZERO
+	bg.size = Vector2(640, 480)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ui_root.add_child(bg)
+	ui_root.add_child(OriginalUI.header("民 房 / 队 伍 休 整", font,
+			Rect2(0, 0, 640, 30)))
+	var info := _label("在老乡家里休整。选择休息可恢复全队体力。", Vector2(40, 70),
+			Vector2(560, 24), 16, Color("#f0e4c8"))
+	ui_root.add_child(info)
+	var y := 106
+	for m in state.party:
+		var l := _label("%s  %s  HP %d/%d" % [m.get("name", ""),
+				m.get("unit_name", ""), int(m.get("hp", 0)),
+				int(m.get("max_hp", 0))], Vector2(60, y), Vector2(520, 22), 14,
+				Color("#f0e4c8"))
+		ui_root.add_child(l)
+		y += 22
+		if y > 320:
+			break
+	var rest := _button("休 息（恢复全队）", Vector2(80, 350), Vector2(180, 34),
+			_do_house_rest, 16)
+	ui_root.add_child(rest)
+	var back := _button("返 回 城 镇", Vector2(290, 350), Vector2(150, 34),
+			func(): _close_panel(); _show_town(selected_town), 16)
+	ui_root.add_child(back)
+
+
+func _do_house_rest() -> void:
 	state.heal_all()
-	_toast("民房：队伍体力已恢复")
-	_show_town(selected_town)
+	_toast("队伍体力已恢复")
+	_show_house()
 
 
 func _service_junxie() -> void:
