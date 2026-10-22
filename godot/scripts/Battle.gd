@@ -1117,6 +1117,22 @@ func _place_mine() -> void:
 	update_hud()
 
 
+func _play_mine_effect(mine_id: int, tile: Vector2i) -> void:
+	var path := "res://assets/m5/anm/mine%02d.ogv" % mine_id
+	if not ResourceLoader.exists(path):
+		return
+	var vp := VideoStreamPlayer.new()
+	vp.stream = load(path)
+	vp.expand = true
+	vp.position = Vector2(tile.x * TILE - 72, tile.y * TILE - 36)
+	vp.size = Vector2(192, 120)
+	vp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vp.z_index = 5000
+	vp.finished.connect(vp.queue_free)
+	fx_root.add_child(vp)
+	vp.play()
+
+
 func _mine_area(t: Vector2i, apply_fw: int) -> Array:
 	var ranges: Dictionary = data.get("apply_ranges", {})
 	var mat = ranges.get(str(apply_fw), null)
@@ -1150,6 +1166,7 @@ func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
 			node.queue_free()
 		mine_nodes.erase(t)
 	_play_sfx(int(m.get("audio_index", -1)), -2.0)
+	_play_mine_effect(int(rec.get("mine_id", 0)), t)
 	var area := _mine_area(t, int(rec.get("apply_fw", m.get("apply_fw", 0))))
 	var total := 0
 	var deaths: Array = []
