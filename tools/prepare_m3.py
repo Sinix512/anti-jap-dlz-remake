@@ -270,6 +270,12 @@ def main() -> None:
         if p.exists():
             shutil.copyfile(p, UI / f"{src.lower()}.png")
             manifest[f"{src.lower()}.png"] = f"res://assets/ui/{src.lower()}.png"
+    for num in (1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 21, 22, 25, 29):
+        src = OUT / "img" / f"NPIC{num:02d}.png"
+        if src.exists():
+            dst = UI / f"npic_{num:02d}.png"
+            shutil.copyfile(src, dst)
+            manifest[dst.name] = "res://assets/ui/" + dst.name
 
     (GODOT_DATA / "m3.json").write_text(json.dumps({
         "meta": {

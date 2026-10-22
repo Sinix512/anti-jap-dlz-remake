@@ -56,9 +56,20 @@ func setup(f: Font, m5: Dictionary, scene_ids: Array = [],
 
 
 func _build_scene() -> void:
+	var lv := -1
+	for n in ids:
+		var rec: Dictionary = _records.get(int(n), {})
+		if not rec.is_empty() and int(rec.get("level", -1)) >= 0:
+			lv = int(rec["level"])
+			break
+	var npic_ids := [1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 21, 22, 25, 29]
+	var bg_path := "res://assets/ui/story_bg.png"
+	if lv >= 0 and lv < npic_ids.size():
+		var np := "res://assets/ui/npic_%02d.png" % int(npic_ids[lv])
+		if ResourceLoader.exists(np):
+			bg_path = np
 	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/story_bg.png") \
-			if ResourceLoader.exists("res://assets/ui/story_bg.png") else null
+	bg.texture = load(bg_path) if ResourceLoader.exists(bg_path) else null
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
