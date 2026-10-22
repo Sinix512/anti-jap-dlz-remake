@@ -44,6 +44,7 @@ func setup(font_ref: Font) -> void:
 	var vcfg := ConfigFile.new()
 	if vcfg.load("user://dlz_config.cfg") == OK:
 		state.story_variant = bool(vcfg.get_value("video", "story_variant", false))
+		state.difficulty = int(vcfg.get_value("gameplay", "difficulty", 1))
 	selected_town = state.level_town(state.campaign_index)
 	state.current_town = selected_town
 	_show_world()
@@ -557,6 +558,7 @@ func _launch_level(idx: int, standalone: bool) -> void:
 	if level.is_empty():
 		_toast("关卡数据缺失")
 		return
+	state.apply_difficulty(level)
 	_close_panel()
 	current_battle_index = idx
 	current_battle_standalone = standalone

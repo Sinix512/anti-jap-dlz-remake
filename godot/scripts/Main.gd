@@ -26,6 +26,8 @@ var result_canvas: CanvasLayer
 var result_layer: Control
 var free_level := -1
 var bgm: AudioStreamPlayer
+var creation_difficulty := 1
+var _diff_buttons: Array = []
 
 
 func _ready() -> void:
@@ -340,8 +342,17 @@ func _show_character_create() -> void:
 	tip.position = Vector2(52, 168)
 	tip.size = Vector2(260, 20)
 	menu_root.add_child(tip)
+	creation_difficulty = int(cfg.get_value("gameplay", "difficulty", 1))
+	_diff_buttons.clear()
+	for i in range(3):
+		var b := OriginalUI.button(["简 单", "普 通", "困 难"][i], font,
+				Vector2(76, 28), _pick_difficulty.bind(i), 14)
+		b.position = Vector2(260 + i * 82, 394)
+		menu_root.add_child(b)
+		_diff_buttons.append(b)
+	_refresh_difficulty_buttons()
 	var start := OriginalUI.button("开始战役", font, Vector2(120, 30),
-			func(): _save_player_name(edit.text); _start_campaign(), 16)
+			func(): _save_player_name(edit.text, creation_difficulty); _start_campaign(), 16)
 	start.position = Vector2(240, 438)
 	menu_root.add_child(start)
 	var back := OriginalUI.button("返回", font, Vector2(90, 30),
@@ -350,11 +361,23 @@ func _show_character_create() -> void:
 	menu_root.add_child(back)
 
 
-func _save_player_name(text: String) -> void:
+func _pick_difficulty(v: int) -> void:
+	creation_difficulty = v
+	_refresh_difficulty_buttons()
+
+
+func _refresh_difficulty_buttons() -> void:
+	for i in range(_diff_buttons.size()):
+		var b: Button = _diff_buttons[i]
+		b.modulate = Color(1.25, 1.1, 0.65) if i == creation_difficulty else Color.WHITE
+
+
+func _save_player_name(text: String, diff: int = 1) -> void:
 	var c := ConfigFile.new()
 	c.load("user://dlz_config.cfg")
 	var nm := text.strip_edges()
 	c.set_value("player", "name", nm if nm != "" else "李勇")
+	c.set_value("gameplay", "difficulty", diff)
 	c.save("user://dlz_config.cfg")
 
 

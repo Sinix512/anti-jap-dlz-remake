@@ -3,7 +3,7 @@ extends RefCounted
 ## M2 战役状态：金钱、天数、队伍、库存、解放城镇、存档。
 ## 纯逻辑，不依赖场景；Campaign/面板调用。
 
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
 const CombatRules = preload("res://scripts/battle/CombatRules.gd")
 const OriginalSave = preload("res://scripts/m2/OriginalSave.gd")
 
@@ -28,6 +28,7 @@ var hidden_done: Array = []
 var ending_id := 0
 var player_name := "李勇"
 var story_variant := false
+var difficulty := 1
 var m4_data: Dictionary = {}
 
 
@@ -682,12 +683,13 @@ func to_dict() -> Dictionary:
 		"hidden_done": hidden_done.duplicate(),
 		"ending_id": ending_id,
 		"player_name": player_name,
+		"difficulty": difficulty,
 		"saved_at": Time.get_datetime_string_from_system(),
 	}
 
 
 func from_dict(d: Dictionary) -> bool:
-	if int(d.get("version", 0)) not in [1, 2, SAVE_VERSION]:
+	if int(d.get("version", 0)) not in [1, 2, 3, SAVE_VERSION]:
 		return false
 	money = int(d.get("money", 0))
 	day = int(d.get("day", 1))
@@ -713,6 +715,7 @@ func from_dict(d: Dictionary) -> bool:
 	hidden_done = (d.get("hidden_done", []) as Array).duplicate()
 	ending_id = int(d.get("ending_id", 0))
 	player_name = str(d.get("player_name", "李勇"))
+	difficulty = int(d.get("difficulty", 1))
 	saved_at = str(d.get("saved_at", ""))
 	return true
 
@@ -751,6 +754,27 @@ func original_info(path: String = "user://dlz_original.dat") -> Dictionary:
 	var bytes := f.get_buffer(OriginalSave.SIZE)
 	f.close()
 	return OriginalSave.decode(bytes)
+
+
+func difficulty_scale() -> float:
+	match difficulty:
+		0: return 0.75
+		2: return 1.30
+		_: return 1.0
+
+
+func apply_difficulty(level: Dictionary) -> void:
+	var scale := difficulty_scale()
+	if is_equal_approx(scale, 1.0):
+		return
+	for u in level.get("units", []):
+		if str(u.get("side", "")) != "enemy":
+			continue
+		var hp := maxi(1, int(ceil(float(u.get("hp", 1)) * scale)))
+		u["hp"] = hp
+		u["max_hp"] = hp
+		u["raw_hp"] = hp
+		u["hp_source"] = str(u.get("hp_source", "")) + "+difficulty"
 
 
 func save_checkpoint() -> bool:
