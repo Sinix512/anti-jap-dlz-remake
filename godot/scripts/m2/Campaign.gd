@@ -21,6 +21,7 @@ var result_canvas: CanvasLayer
 var mode := "world"
 var selected_town := 0
 var party_selected := -1
+var k03_selected := 0
 var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
@@ -574,6 +575,9 @@ func _forge(mid: int) -> void:
 
 func _open_party() -> void:
 	var content := _panel_shell("队伍 / 转职", 560, 390)
+	var k3 := _button("K03 队伍状态", Vector2.ZERO, Vector2(140, 28),
+			_show_k03_roster, 14)
+	content.add_child(k3)
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -739,6 +743,80 @@ func _auto_equip_all() -> void:
 	state.auto_equip_party()
 	_toast("已按库存自动装备")
 	_open_party()
+
+
+func _show_k03_roster() -> void:
+	_new_ui()
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/k03.png") \
+			if ResourceLoader.exists("res://assets/ui/k03.png") else null
+	bg.position = Vector2.ZERO
+	bg.size = Vector2(640, 480)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ui_root.add_child(bg)
+	ui_root.add_child(OriginalUI.header("队 伍 状 态 / K03", font,
+			Rect2(0, 0, 640, 30)))
+	var shown := mini(4, state.party.size())
+	if k03_selected >= shown:
+		k03_selected = 0
+	for i in range(shown):
+		var m: Dictionary = state.party[i]
+		var slot := Vector2(28 + (i % 2) * 80, 126 + int(i / 2) * 80)
+		var portrait := TextureRect.new()
+		portrait.position = slot
+		portrait.size = Vector2(64, 52)
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		if ResourceLoader.exists(str(m.get("face_png", ""))):
+			portrait.texture = load(m["face_png"])
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ui_root.add_child(portrait)
+		var b := _button("", slot, Vector2(64, 76), _k03_select.bind(i), 14)
+		b.flat = true
+		ui_root.add_child(b)
+		var name_l := OriginalUI.label("%s Lv%d" % [m.get("name", ""),
+				int(m.get("level", 1))], font, 12,
+				OriginalUI.GOLD_LIGHT if i == k03_selected else Color("#e8dcc2"))
+		name_l.position = slot + Vector2(0, 54)
+		name_l.size = Vector2(74, 18)
+		ui_root.add_child(name_l)
+	var m = state.party[k03_selected] if k03_selected < state.party.size() else null
+	if m != null:
+		var info_bg := ColorRect.new()
+		info_bg.color = Color(0, 0, 0, 0.58)
+		info_bg.position = Vector2(276, 78)
+		info_bg.size = Vector2(316, 252)
+		info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ui_root.add_child(info_bg)
+		var info := "姓名：%s
+兵种：%s  Lv%d
+HP：%d/%d
+武力：%d  智力：%d
+武器：%s
+技能：%s" % [
+			m.get("name", ""), m.get("unit_name", ""), int(m.get("level", 1)),
+			int(m.get("hp", 0)), int(m.get("max_hp", 0)),
+			int(m.get("wuli", 0)), int(m.get("zhili", 0)),
+			m.get("equip_name", "无"), m.get("skill_text", "—")]
+		var info_l := OriginalUI.label(info, font, 14, Color("#f0e4c8"))
+		info_l.position = Vector2(286, 92)
+		info_l.size = Vector2(320, 250)
+		ui_root.add_child(info_l)
+	var back := _button("返 回 队 伍", Vector2(450, 400), Vector2(140, 30),
+			_open_party, 14)
+	ui_root.add_child(back)
+	var note := OriginalUI.label("K03 原版队伍状态 / 显示前 4 人", font, 12,
+			Color("#c8b88f"))
+	note.position = Vector2(40, 440)
+	ui_root.add_child(note)
+
+
+func _k03_select(i: int) -> void:
+	k03_selected = i
+	_show_k03_roster()
 
 
 func _party_select(pid: int) -> void:

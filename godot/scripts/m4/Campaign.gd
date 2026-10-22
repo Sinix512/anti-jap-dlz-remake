@@ -731,15 +731,13 @@ func _show_levelups(levelups: Array) -> void:
 	layer.theme = ui_theme
 	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	levelup_layer.add_child(layer)
-	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/k03.png") \
-			if ResourceLoader.exists("res://assets/ui/k03.png") else null
+	var bg := ColorRect.new()
+	bg.color = Color(0.045, 0.03, 0.02, 0.96)
 	bg.position = Vector2.ZERO
 	bg.size = Vector2(640, 480)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	layer.add_child(bg)
+	layer.add_child(OriginalUI.nine_patch(OriginalUI.PANEL_BLUE,
+			Rect2(28, 46, 584, 360), 12))
 	layer.add_child(OriginalUI.header("升 级 / 战 斗 结 算", font,
 			Rect2(0, 0, 640, 30)))
 	var list_bg := ColorRect.new()
@@ -763,8 +761,7 @@ func _show_levelups(levelups: Array) -> void:
 	var go := _button("继 续", Vector2(250, 390), Vector2(140, 34),
 			_close_levelups, 16)
 	layer.add_child(go)
-	var note := OriginalUI.label("K03 升级结算（映射未反汇编确认）", font,
-			12, Color("#9a8a6a"))
+	var note := OriginalUI.label("战斗经验结算", font, 12, Color("#9a8a6a"))
 	note.position = Vector2(56, 440)
 	layer.add_child(note)
 
