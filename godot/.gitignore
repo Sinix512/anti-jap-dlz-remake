@@ -1,0 +1,5 @@
+# 由 tools/prepare_m1.py 生成，体积/版权原因不入库
+assets/
+data/
+.godot/
+*.import

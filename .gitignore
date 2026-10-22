@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 .DS_Store
 .godot/
+# Godot M1 生成物
+godot/data/
+godot/assets/
+godot/.godot/
+godot/**/*.import

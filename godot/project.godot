@@ -1,0 +1,29 @@
+; Engine configuration file.
+; M1 vertical slice for 抗日：地雷战.
+config_version=5
+
+[application]
+
+config/name="抗日：地雷战 · M1"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/show_image=false
+
+[display]
+
+window/size/viewport_width=640
+window/size/viewport_height=480
+window/size/window_width_override=1280
+window/size/window_height_override=960
+window/stretch/mode="viewport"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+
+[gui]
+
+theme/default_font_multichannel_signed_distance_field=false
