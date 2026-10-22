@@ -3,7 +3,7 @@ extends RefCounted
 ## M2 战役状态：金钱、天数、队伍、库存、解放城镇、存档。
 ## 纯逻辑，不依赖场景；Campaign/面板调用。
 
-const SAVE_VERSION := 4
+const SAVE_VERSION := 5
 const CombatRules = preload("res://scripts/battle/CombatRules.gd")
 const OriginalSave = preload("res://scripts/m2/OriginalSave.gd")
 
@@ -26,6 +26,7 @@ var score_total := 0
 var hidden_unlocked := false
 var hidden_done: Array = []
 var ending_id := 0
+var endings_seen: Array = []
 var player_name := "李勇"
 var story_variant := false
 var difficulty := 1
@@ -689,6 +690,7 @@ func to_dict() -> Dictionary:
 		"hidden_unlocked": hidden_unlocked,
 		"hidden_done": hidden_done.duplicate(),
 		"ending_id": ending_id,
+		"endings_seen": endings_seen.duplicate(),
 		"player_name": player_name,
 		"difficulty": difficulty,
 		"saved_at": Time.get_datetime_string_from_system(),
@@ -696,7 +698,7 @@ func to_dict() -> Dictionary:
 
 
 func from_dict(d: Dictionary) -> bool:
-	if int(d.get("version", 0)) not in [1, 2, 3, SAVE_VERSION]:
+	if int(d.get("version", 0)) not in [1, 2, 3, 4, SAVE_VERSION]:
 		return false
 	money = int(d.get("money", 0))
 	day = int(d.get("day", 1))
@@ -721,6 +723,9 @@ func from_dict(d: Dictionary) -> bool:
 	hidden_unlocked = bool(d.get("hidden_unlocked", false))
 	hidden_done = (d.get("hidden_done", []) as Array).duplicate()
 	ending_id = int(d.get("ending_id", 0))
+	endings_seen = []
+	for v in d.get("endings_seen", []):
+		endings_seen.append(int(v))
 	player_name = str(d.get("player_name", "李勇"))
 	difficulty = int(d.get("difficulty", 1))
 	saved_at = str(d.get("saved_at", ""))

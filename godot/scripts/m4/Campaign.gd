@@ -1087,10 +1087,13 @@ func _show_ending_gallery() -> void:
 	var endings: Array = m5.get("endings", [])
 	for i in range(endings.size()):
 		var e: Dictionary = endings[i]
-		var b := _button("%s  %d" % [e.get("title", "结局"), int(e.get("score", 0))],
-				Vector2(310, 74 + i * 56), Vector2(260, 40),
-				_show_ending.bind(int(e.get("id", i))), 16)
+		var eid := int(e.get("id", i))
+		var unlocked: bool = state.endings_seen.has(eid)
+		var b := _button("%s  %d" % [e.get("title", "结局") if unlocked else "未解锁",
+				int(e.get("score", 0))], Vector2(310, 74 + i * 56), Vector2(260, 40),
+				_show_ending.bind(eid), 16)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.disabled = not unlocked
 		root.add_child(b)
 	var back := _button("返 回", Vector2(520, 438), Vector2(90, 26),
 			func(): _show_ending(state.ending_id), 14)

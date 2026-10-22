@@ -222,6 +222,7 @@ func _capture(mode: String) -> void:
 				await get_tree().process_frame
 			if is_instance_valid(campaign):
 				campaign.state.ending_id = 2
+				campaign.state.endings_seen = [0, 1, 2, 3, 4, 5]
 				campaign._show_ending_gallery()
 		"m5-ending-hidden":
 			_start_campaign()
