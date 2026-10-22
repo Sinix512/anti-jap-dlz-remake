@@ -889,6 +889,8 @@ func compute_damage(attacker: Node2D, defender: Node2D) -> int:
 func _attack_anim(attacker: Node2D, defender: Node2D) -> void:
 	if fast_sim:
 		return
+	if attacker.has_method("play_attack"):
+		attacker.play_attack()
 	var from: Vector2 = attacker.position
 	var dir: Vector2 = (defender.position - from).normalized()
 	var tw := create_tween()

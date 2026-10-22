@@ -51,6 +51,13 @@ var status_disarm := 0
 
 var sprite: Sprite2D
 var _flash_tween: Tween
+var frame_count := 1
+var _anim_active := false
+var _anim_from := 0
+var _anim_to := 0
+var _anim_fps := 10.0
+var _anim_t := 0.0
+var _anim_loop := false
 
 
 func setup(d: Dictionary, b: Node) -> void:
@@ -100,6 +107,7 @@ func setup(d: Dictionary, b: Node) -> void:
 		sprite.texture = load(p)
 	else:
 		sprite.texture = _fallback_texture()
+	frame_count = maxi(1, int(sprite.texture.get_width() / TILE))
 	add_child(sprite)
 	sprite.flip_h = direction == 2
 	refresh()
@@ -117,6 +125,47 @@ func _tile_center(tx: int, ty: int) -> Vector2:
 
 func is_player() -> bool:
 	return side == "player"
+
+
+func _process(delta: float) -> void:
+	if not _anim_active:
+		return
+	_anim_t += delta * _anim_fps
+	var f := int(_anim_t)
+	if f > _anim_to:
+		if _anim_loop:
+			_anim_t = 0.0
+			f = _anim_from
+		else:
+			_anim_active = false
+			f = _anim_from
+	sprite.region_rect = Rect2(f * TILE, 0, TILE, TILE)
+
+
+func play_anim(from_frame: int, to_frame: int, fps: float = 10.0,
+		loop: bool = false) -> void:
+	if battle != null and bool(battle.fast_sim):
+		return
+	_anim_from = clampi(from_frame, 0, frame_count - 1)
+	_anim_to = clampi(to_frame, _anim_from, frame_count - 1)
+	_anim_fps = fps
+	_anim_loop = loop
+	_anim_t = 0.0
+	_anim_active = _anim_to > _anim_from
+	sprite.region_rect = Rect2(_anim_from * TILE, 0, TILE, TILE)
+
+
+func play_attack() -> void:
+	play_anim(0, frame_count - 1, 16.0, false)
+
+
+func play_walk() -> void:
+	play_anim(0, mini(4, frame_count - 1), 9.0, true)
+
+
+func stop_anim() -> void:
+	_anim_active = false
+	sprite.region_rect = Rect2(0, 0, TILE, TILE)
 
 
 func refresh() -> void:
@@ -148,10 +197,12 @@ func move_visual(tx: int, ty: int, dur: float = 0.10) -> void:
 	if battle != null and bool(battle.fast_sim):
 		set_tile(tx, ty)
 		return
+	play_walk()
 	var tw := create_tween()
 	tw.tween_property(self, "position", _tile_center(tx, ty), dur)
 	tw.parallel().tween_property(self, "z_index", int(_tile_center(tx, ty).y), dur)
 	await tw.finished
+	stop_anim()
 
 
 func take_damage(amount: int) -> bool:
