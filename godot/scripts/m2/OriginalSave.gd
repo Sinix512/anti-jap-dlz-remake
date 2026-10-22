@@ -82,8 +82,8 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	intro.encode_u32(0x20, 1)
 	intro.encode_u32(0x2B4, 99)
 	b.put_data(intro)
-	b.put_u32(128)  # map width
-	b.put_u32(int(state.current_town))
+	b.put_u32(int(state.current_town))  # block5 town
+	b.put_u32(mini(0xFFFFFFFF, int(state.money)))  # block6 money
 	_pad(b, 12)
 	_pad(b, 64)
 	for i in range(19):
@@ -108,11 +108,7 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	_pad(b, 320)
 	for i in range(40):
 		b.put_u16(1 if state.has_member(i) else 0)
-	# block21：原版 10×u32 的用途未完全确认；这里用私有 magic 存 money，
-	# 不用 cangku[0] 覆盖蟠桃数量。
-	b.put_u32(0x4D4F4E59)  # MONY
-	b.put_u32(mini(0xFFFFFFFF, int(state.money)))
-	_pad(b, 32)
+	_pad(b, 40)  # block21 原版用途未完全确认
 	_pad(b, 32768)
 	_pad(b, 8)
 	_pad(b, 28)
@@ -135,8 +131,9 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	var out := {"game_state": int(b.get_u32()), "difficulty": int(b.get_u32())}
 	b.get_u32()  # block3 terrain
 	_skip(b, 700)  # intro
-	out["map_width"] = int(b.get_u32())
 	out["town"] = int(b.get_u32())
+	out["money"] = int(b.get_u32())
+	out["map_width"] = 128
 	_skip(b, 12)
 	_skip(b, 64)
 	var liberated: Array = []
@@ -169,10 +166,7 @@ static func decode(data: PackedByteArray) -> Dictionary:
 		if int(b.get_u16()) != 0:
 			members.append(i)
 	out["members"] = members
-	var ext: Array = []
-	for i in range(10):
-		ext.append(int(b.get_u32()))
-	out["money"] = ext[1] if ext[0] == 0x4D4F4E59 else 0
+	_skip(b, 40)
 	out["fight_index"] = progress[0] if progress.size() > 0 else 0
 	out["score_total"] = progress[1] if progress.size() > 1 else 0
 	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
