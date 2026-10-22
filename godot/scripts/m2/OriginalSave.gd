@@ -99,9 +99,10 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 		b.put_u32(v)
 	# block13 用途未确认；尾部写私有 PARY 扩展保存队伍，供本工具回读。
 	var b13 := PackedByteArray(); b13.resize(380)
-	b13.encode_u32(0, 0x50415259)  # PARY
+	# block13 开头是原版 0/1/2 状态机，保持 0；PARY 放到尾部 40 B。
+	b13.encode_u32(340, 0x50415259)  # PARY
 	for i in range(10):
-		b13.encode_u32(4 + i * 4, int(state.party[i]["pid"]) if i < state.party.size() else 0)
+		b13.encode_u32(344 + i * 4, int(state.party[i]["pid"]) if i < state.party.size() else 0)
 	b.put_data(b13)
 	_pad(b, 8192)
 	_pad(b, 8192)
@@ -183,9 +184,9 @@ static func decode(data: PackedByteArray) -> Dictionary:
 		grid_ids.append(int(b.get_u32()))
 	out["item_grid"] = {"ids": grid_ids, "counts": grid_counts.slice(0, 10)}
 	var members: Array = []
-	if b13.size() >= 44 and b13.decode_u32(0) == 0x50415259:
+	if b13.size() >= 380 and b13.decode_u32(340) == 0x50415259:
 		for i in range(10):
-			var pid := int(b13.decode_u32(4 + i * 4))
+			var pid := int(b13.decode_u32(344 + i * 4))
 			if pid > 0 and pid < 40:
 				members.append(pid)
 	out["members"] = members
