@@ -99,6 +99,15 @@ func _capture(mode: String) -> void:
 				await get_tree().process_frame
 			if is_instance_valid(campaign):
 				campaign._show_deployment(0)
+		"m5-levelup":
+			_start_campaign()
+			for i in range(3):
+				await get_tree().process_frame
+			if is_instance_valid(campaign):
+				campaign._show_levelups([
+					{"name": "张嘎", "from": 3, "to": 5, "hp": 130, "max_hp": 130},
+					{"name": "赵虎", "from": 3, "to": 4, "hp": 129, "max_hp": 129},
+				])
 		"m2-house", "m4-house":
 			_start_campaign()
 			for i in range(3):

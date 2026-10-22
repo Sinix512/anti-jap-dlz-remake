@@ -24,6 +24,8 @@ var battle_story_seen: Dictionary = {}
 var story_layer: CanvasLayer
 var deploy_selected: Array = []
 var current_deploy_pids: Array = []
+var levelup_layer: CanvasLayer
+var pending_report: Dictionary = {}
 var credits_layer: CanvasLayer
 
 
@@ -658,6 +660,7 @@ func _on_battle_finished(result: String, message: String) -> void:
 	battle_story_queue.clear()
 	var victory := result == "victory"
 	var stats: Dictionary = {}
+	var levelups: Array = []
 	if is_instance_valid(battle):
 		stats = (battle.stats as Dictionary).duplicate(true)
 		stats["turn"] = battle.turn
@@ -670,7 +673,7 @@ func _on_battle_finished(result: String, message: String) -> void:
 		state.apply_battle_health(units)
 		state.apply_battle_context(battle.battle_context)
 		state.grant_battle_experience(battle.player_units, victory)
-		state.apply_battle_progress(battle.player_units)
+		levelups = state.apply_battle_progress(battle.player_units)
 	var idx := current_battle_index
 	var score := _score_for(stats, victory, idx)
 	var info: Dictionary = {}
@@ -687,6 +690,11 @@ func _on_battle_finished(result: String, message: String) -> void:
 				if not state.campaign_finished() else state.current_town
 		if victory:
 			selected_town = state.current_town
+	if victory and not current_battle_standalone and not levelups.is_empty():
+		pending_report = {"victory": victory, "message": message, "idx": idx,
+				"score": score, "info": info, "standalone": current_battle_standalone}
+		_show_levelups(levelups)
+		return
 	_show_report(victory, message, idx, score, info, current_battle_standalone)
 
 
@@ -711,6 +719,67 @@ func _score_for(stats: Dictionary, victory: bool, idx: int) -> int:
 	if idx >= 36:
 		score += 4.0
 	return clampi(int(round(score)), 0, 100)
+
+
+func _show_levelups(levelups: Array) -> void:
+	if is_instance_valid(levelup_layer):
+		levelup_layer.queue_free()
+	levelup_layer = CanvasLayer.new()
+	levelup_layer.layer = 101
+	add_child(levelup_layer)
+	var layer := Control.new()
+	layer.theme = ui_theme
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	levelup_layer.add_child(layer)
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/k03.png") \
+			if ResourceLoader.exists("res://assets/ui/k03.png") else null
+	bg.position = Vector2.ZERO
+	bg.size = Vector2(640, 480)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	layer.add_child(bg)
+	layer.add_child(OriginalUI.header("升 级 / 战 斗 结 算", font,
+			Rect2(0, 0, 640, 30)))
+	var list_bg := ColorRect.new()
+	list_bg.color = Color(0, 0, 0, 0.58)
+	list_bg.position = Vector2(40, 62)
+	list_bg.size = Vector2(376, 132)
+	list_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(list_bg)
+	var y := 76
+	for lu in levelups:
+		var l := OriginalUI.label("%s  Lv%d → Lv%d   HP %d/%d" % [
+			lu.get("name", ""), int(lu.get("from", 1)), int(lu.get("to", 1)),
+			int(lu.get("hp", 0)), int(lu.get("max_hp", 0))], font, 15,
+			Color("#f0e4c8"))
+		l.position = Vector2(56, y)
+		l.size = Vector2(360, 24)
+		layer.add_child(l)
+		y += 30
+		if y > 330:
+			break
+	var go := _button("继 续", Vector2(250, 390), Vector2(140, 34),
+			_close_levelups, 16)
+	layer.add_child(go)
+	var note := OriginalUI.label("K03 升级结算（映射未反汇编确认）", font,
+			12, Color("#9a8a6a"))
+	note.position = Vector2(56, 440)
+	layer.add_child(note)
+
+
+func _close_levelups() -> void:
+	if is_instance_valid(levelup_layer):
+		levelup_layer.queue_free()
+		levelup_layer = null
+	if pending_report.is_empty():
+		return
+	var r := pending_report
+	pending_report = {}
+	_show_report(bool(r.get("victory", false)), str(r.get("message", "")),
+			int(r.get("idx", 0)), int(r.get("score", 0)),
+			r.get("info", {}), bool(r.get("standalone", false)))
 
 
 func _show_report(victory: bool, message: String, idx: int, score: int,

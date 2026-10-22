@@ -335,8 +335,9 @@ func grant_battle_experience(units: Array, victory: bool) -> void:
 			u.gained_xp += CombatRules.battle_experience(int(u.data.get("level", 1)), avg)
 
 
-func apply_battle_progress(units: Array) -> void:
-	"""把战斗内获得的经验/等级/技能使用次数写回队伍。"""
+func apply_battle_progress(units: Array) -> Array:
+	"""把战斗内获得的经验/等级/技能使用次数写回队伍，返回升级列表。"""
+	var levelups: Array = []
 	for u in units:
 		var pid := int(u.pid)
 		if pid < 0:
@@ -349,7 +350,8 @@ func apply_battle_progress(units: Array) -> void:
 		var xp := int(member.get("xp", 0)) + gained
 		var levels := int(xp / 100)
 		xp = xp % 100
-		var lv := mini(99, int(member.get("level", 1)) + levels)
+		var old_level := int(member.get("level", 1))
+		var lv := mini(99, old_level + levels)
 		member["level"] = lv
 		member["xp"] = xp
 		var old_max := int(member.get("max_hp", 1))
@@ -359,6 +361,11 @@ func apply_battle_progress(units: Array) -> void:
 				0, new_max)
 		member["skills"] = (u.skill_counts as Dictionary).duplicate(true)
 		member["attack_count"] = int(u.attack_count)
+		if lv > old_level:
+			levelups.append({"pid": pid, "name": str(member.get("name", "")),
+					"from": old_level, "to": lv, "hp": int(member["hp"]),
+					"max_hp": int(member["max_hp"])})
+	return levelups
 
 
 func material_count(mid: int) -> int:
