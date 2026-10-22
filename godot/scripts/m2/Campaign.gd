@@ -818,11 +818,20 @@ func _show_k04_status() -> void:
 		mine_total += int(state.mines[k])
 	var eq: Dictionary = state.item(int(m.get("equip", -1)))
 	var equip_name := str(eq.get("name", "无"))
-	var info := "姓名：%s\n兵种：%s\n等级：%d\nHP：%d/%d\n武力：%d  智力：%d\n地雷库存：%d\n武器：%s" % [
+	var skill_keys := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
+			"weishe", "saorao", "pohuai", "lueduo", "fanjian", "yibing",
+			"duzhan", "ansha", "shidu", "kongxi"]
+	var learned: Array = []
+	var counts: Dictionary = m.get("skills", {})
+	for i in range(skill_keys.size()):
+		if int(counts.get(skill_keys[i], 0)) > 0:
+			learned.append(str((m2.get("skills", []) as Array)[i].get("name", skill_keys[i])))
+	var skill_text := "、".join(learned) if not learned.is_empty() else "未学"
+	var info := "姓名：%s\n兵种：%s\n等级：%d\nHP：%d/%d\n武力：%d  智力：%d\n地雷库存：%d\n武器：%s\n技能：%s" % [
 		m.get("name", ""), m.get("unit_name", ""), int(m.get("level", 1)),
 		int(m.get("hp", 0)), int(m.get("max_hp", 0)),
 		int(m.get("wuli", 0)), int(m.get("zhili", 0)),
-		mine_total, equip_name]
+		mine_total, equip_name, skill_text]
 	var info_l := OriginalUI.label(info, font, 15, Color("#f0e4c8"))
 	info_l.position = Vector2(310, 70)
 	info_l.size = Vector2(220, 290)
