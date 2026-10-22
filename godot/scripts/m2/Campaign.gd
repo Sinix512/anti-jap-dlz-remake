@@ -21,6 +21,7 @@ var result_canvas: CanvasLayer
 var mode := "world"
 var selected_town := 0
 var party_selected := -1
+var k04_page := 0
 var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
@@ -577,6 +578,9 @@ func _forge(mid: int) -> void:
 
 func _open_party() -> void:
 	var content := _panel_shell("队伍 / 转职", 560, 390)
+	var k4 := _button("K04 人物状态", Vector2.ZERO, Vector2(130, 28),
+			_show_k04_status, 14)
+	content.add_child(k4)
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -742,6 +746,65 @@ func _auto_equip_all() -> void:
 	state.auto_equip_party()
 	_toast("已按库存自动装备")
 	_open_party()
+
+
+func _show_k04_status() -> void:
+	_new_ui()
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/k04.png") \
+			if ResourceLoader.exists("res://assets/ui/k04.png") else null
+	bg.position = Vector2.ZERO
+	bg.size = Vector2(640, 480)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ui_root.add_child(bg)
+	ui_root.add_child(OriginalUI.header("人 物 状 态 / K04", font,
+			Rect2(0, 0, 640, 30)))
+	if state.party.is_empty():
+		ui_root.add_child(OriginalUI.label("队伍为空", font, 16, Color("#f0e4c8")))
+		return
+	k04_page = clampi(k04_page, 0, state.party.size() - 1)
+	var m: Dictionary = state.party[k04_page]
+	var portrait := TextureRect.new()
+	portrait.position = Vector2(552, 150)
+	portrait.size = Vector2(56, 154)
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if ResourceLoader.exists(str(m.get("face_png", ""))):
+		portrait.texture = load(m["face_png"])
+	ui_root.add_child(portrait)
+	var info := "姓名：%s\n兵种：%s\n等级：%d\nHP：%d/%d\n武力：%d  智力：%d\n地雷数：%d\n武器：%s" % [
+		m.get("name", ""), m.get("unit_name", ""), int(m.get("level", 1)),
+		int(m.get("hp", 0)), int(m.get("max_hp", 0)),
+		int(m.get("wuli", 0)), int(m.get("zhili", 0)),
+		state.mine_count(int(m.get("mine_id", 0))), m.get("equip_name", "无")]
+	var info_l := OriginalUI.label(info, font, 15, Color("#f0e4c8"))
+	info_l.position = Vector2(310, 70)
+	info_l.size = Vector2(220, 290)
+	ui_root.add_child(info_l)
+	var prev := _button("上 页", Vector2(40, 400), Vector2(80, 30),
+			_k04_page.bind(-1), 14)
+	prev.disabled = k04_page <= 0
+	ui_root.add_child(prev)
+	var next := _button("下 页", Vector2(130, 400), Vector2(80, 30),
+			_k04_page.bind(1), 14)
+	next.disabled = k04_page >= state.party.size() - 1
+	ui_root.add_child(next)
+	var pg := OriginalUI.label("%d / %d" % [k04_page + 1, state.party.size()],
+			font, 12, Color("#e8dcc2"))
+	pg.position = Vector2(220, 406)
+	pg.size = Vector2(60, 20)
+	ui_root.add_child(pg)
+	var back := _button("返 回 队 伍", Vector2(450, 400), Vector2(140, 30),
+			_open_party, 14)
+	ui_root.add_child(back)
+
+
+func _k04_page(delta: int) -> void:
+	k04_page = clampi(k04_page + delta, 0, maxi(0, state.party.size() - 1))
+	_show_k04_status()
 
 
 func _show_k03_workshop() -> void:
