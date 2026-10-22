@@ -33,6 +33,24 @@ HIDDEN_SIM = list(range(36, 40))
 HIDDEN_FICTION = list(range(40, 44))
 EASTER = list(range(44, 47))
 
+# 可玩性补足：原版过场/触发器里的友军增援与个别 Easter 单位的实际 HP
+# 不在 FIGHT.DAT 的静态槽里，这里显式建模，避免“目标存在但不可完成”。
+ALLY_WAVES = {
+    35: {"turn": 1, "side": "player",
+         "pids": [33, 30, 31, 32, 26, 27, 28, 29, 24, 25, 22, 23]},
+    46: {"turn": 1, "side": "player",
+         "pids": [33, 4, 8, 9, 5, 7, 6, 10, 11, 12]},
+}
+# 后期/彩蛋关的敌军数量与静态 Fighter 槽不一致（原版靠脚本分批投入）；
+# 这里给可玩性上限，超出部分不进入首发，避免 5-10 人面对 30-58 个同时行动。
+ENEMY_CAP = {35: 12, 46: 12}
+ENEMY_LEVEL_CAP = {35: 20}
+ENEMY_HP_CAP = {35: 600}
+HP_OVERRIDES = {
+    45: {"柳忻": 1376},   # 与 L44 的柳忻一致，避免赛跑关被高等级敌军一击秒杀
+    46: {"张嘎": 662},
+}
+
 TOWN_OF_LEVEL = {
     0: 0, 1: 0, 2: 1, 3: 2, 4: 1, 5: 3, 6: 6, 7: 4, 8: 5, 9: 5,
     10: 6, 11: 6, 12: 7, 13: 7, 14: 7, 15: 8, 16: 8, 17: 8,
@@ -112,6 +130,8 @@ PROTECT = {
 
 MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
 PARTY_DEPLOY = {**{i: True for i in MAIN_LEVELS}}
+PARTY_DEPLOY[46] = True  # 鬼子进村：张嘎 + 村民 + 队伍 + 八路军增援
+PROTECT_ALL = {36}  # 狼牙山：五壮士全部阵亡才失败
 
 # 每关推荐剧情 TXT n（M5 再细化；这里只放关键的开场/收尾）
 STORY_IDS = {
@@ -286,6 +306,53 @@ def unit_hp(f: dict, p: dict, u: dict) -> tuple[int, str]:
     return max(1, raw), "explicit"
 
 
+def make_ally(pid: int, people: list, units: dict, x: int, y: int) -> dict:
+    p = people[pid]
+    u = units[int(p["bingzhong"])]
+    hp = max(1, int(u["tili"]) + (int(p["level"]) - 1) * int(u["tili_plus"]))
+    return {
+        "slot": 100 + pid,
+        "side": "player",
+        "name": str(p["name"]),
+        "key": norm(str(p["name"])),
+        "unit_name": str(u["name"]),
+        "bingzhong": int(p["bingzhong"]),
+        "level": int(p["level"]),
+        "wuli": int(p["wuli"]),
+        "zhili": int(p["zhili"]),
+        "hp": hp,
+        "raw_hp": hp,
+        "hp_source": "ally",
+        "x": int(x),
+        "y": int(y),
+        "direction": 1,
+        "behavior": 1,
+        "target_slot": 0,
+        "target_x": 0,
+        "target_y": 0,
+        "face": int(p["face"]),
+        "face_png": f"res://assets/face/face_{int(p['face']):03d}.png",
+        "army_png": f"res://assets/army/army_{int(u['img_index']):03d}.png",
+        "select": int(u["select"]),
+        "apply": int(u["apply"]),
+        "move": int(u["yidong"]),
+        "gongji": int(u["gongji"]),
+        "fangyu": int(u["fangyu"]),
+        "tili": int(u["tili"]),
+        "tili_plus": int(u["tili_plus"]),
+        "jingyan": int(p.get("jingyan", 0)),
+        "skills": u.get("skills", {}),
+        "skill_counts": p.get("skills", {}),
+        "attack_count": int(p.get("gongji", 0)),
+        "items": p.get("wupin", []),
+        "mines": p.get("dilei", []),
+        "is_boss": False,
+        "protected": False,
+        "control": False,
+        "auto": True,
+    }
+
+
 def level_kind(idx: int) -> tuple[str, str, int]:
     if idx in MAIN_LEVELS:
         return "main", "", idx
@@ -376,12 +443,29 @@ def main() -> None:
                 "fangyu": int(u["fangyu"]),
                 "tili": int(u["tili"]),
                 "tili_plus": int(u["tili_plus"]),
+                "jingyan": int(p.get("jingyan", 0)),
+                "skills": u.get("skills", {}),
+                "skill_counts": p.get("skills", {}),
+                "attack_count": int(p.get("gongji", 0)),
+                "items": p.get("wupin", []),
+                "mines": p.get("dilei", []),
                 "is_boss": hp >= 1000,
                 "protected": False,
                 "control": True,
                 "auto": side == "player" and str(f["unit"]).replace("\u3000", "") in
                         ("国军", "八路军", "村民", "老百姓", "游击队员", "自卫队"),
             }
+            if idx in ENEMY_LEVEL_CAP and rec["side"] == "enemy":
+                rec["level"] = min(int(rec["level"]), int(ENEMY_LEVEL_CAP[idx]))
+            if idx in ENEMY_HP_CAP and rec["side"] == "enemy":
+                rec["hp"] = min(int(rec["hp"]), int(ENEMY_HP_CAP[idx]))
+                rec["raw_hp"] = rec["hp"]
+                rec["hp_source"] = "balance_cap"
+            if idx in HP_OVERRIDES and rec["key"] in {
+                    norm(k) for k in HP_OVERRIDES[idx]}:
+                rec["hp"] = int(HP_OVERRIDES[idx][rec["key"]])
+                rec["raw_hp"] = rec["hp"]
+                rec["hp_source"] = "override"
             if idx == 19 and f["slot"] == 22:
                 rec["side"] = "enemy"
                 rec["auto"] = False
@@ -398,6 +482,10 @@ def main() -> None:
             elif str(f["unit"]) != "孙悟空" and 0 <= rec["x"] < w and 0 <= rec["y"] < h:
                 reserves.append(rec)
 
+        if idx in ENEMY_CAP:
+            cap = int(ENEMY_CAP[idx])
+            kept = [r for r in active if r["side"] == "enemy"][:cap]
+            active = [r for r in active if r["side"] != "enemy"] + kept
         # 保护名单
         protect_names = PROTECT.get(idx, [])
         for r in active + reserves:
@@ -484,6 +572,15 @@ def main() -> None:
                 waves.append({"turn": 2, "side": "enemy", "units": first})
                 if rest:
                     waves.append({"turn": 5, "side": "enemy", "units": rest})
+        if idx in ALLY_WAVES:
+            aw = ALLY_WAVES[idx]
+            ally_units = []
+            for j, pid in enumerate(aw["pids"]):
+                ax = 2 + (j % 5) * 3
+                ay = max(1, h - 2)
+                ally_units.append(make_ally(int(pid), people, units, ax, ay))
+            waves.append({"turn": int(aw["turn"]), "side": "player",
+                          "units": ally_units})
         reserve_out = []
         for wave in waves:
             reserve_out.extend(wave["units"])
@@ -551,6 +648,7 @@ def main() -> None:
             "max_deploy": max_deploy,
             "objective": obj_raw,
             "protect": protect_names,
+            "protect_all": idx in PROTECT_ALL,
             "chests": chests,
             "specials": [s for s in specials if not s["empty"]],
             "story_ids": STORY_IDS.get(idx, []),
@@ -580,6 +678,9 @@ def main() -> None:
         "unit_types": units,
         "unit_move": move_rows,
         "select_ranges": {str(i): game["select_ranges"][i] for i in range(16)},
+        "apply_ranges": {str(i): game["apply_ranges"][i] for i in range(48)},
+        "skills": game["skills"],
+        "item_valid": game["item_valid"],
         "terrain_modifiers": game["terrain_modifiers"],
         "mines": game["mines"],
         "mine_terrain": game["mine_terrain"],

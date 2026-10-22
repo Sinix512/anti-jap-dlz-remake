@@ -17,6 +17,7 @@ var select := 1
 var bingzhong := 0
 var direction := 1
 var slot := -1
+var pid := -1
 var key := ""
 var behavior := 1
 var target_slot := 0
@@ -30,6 +31,23 @@ var acted := false
 var moved := false
 var alive := true
 var selected := false
+# 战斗数值（M6）：士气/装备完整度/技能次数/装备加成/状态
+var morale := 100
+var integrity := 100
+var attack_count := 0
+var skill_counts: Dictionary = {}
+var skills: Dictionary = {}
+var attack_bonus := 0
+var defense_bonus := 0
+var equip := -1
+var equip_name := ""
+var item_slots: Array = []
+var mine_slots: Array = []
+var gained_xp := 0
+var status_def_down := 0
+var status_atk_down := 0
+var status_stun := 0
+var status_disarm := 0
 
 var sprite: Sprite2D
 var _flash_tween: Tween
@@ -50,6 +68,7 @@ func setup(d: Dictionary, b: Node) -> void:
 	bingzhong = int(d.get("bingzhong", 0))
 	direction = int(d.get("direction", 1))
 	slot = int(d.get("slot", -1))
+	pid = int(d.get("pid", -1))
 	behavior = int(d.get("behavior", 1))
 	target_slot = int(d.get("target_slot", 0))
 	target_x = int(d.get("target_x", 0))
@@ -58,6 +77,17 @@ func setup(d: Dictionary, b: Node) -> void:
 	auto = bool(d.get("auto", false))
 	protected = bool(d.get("protected", false))
 	is_boss = bool(d.get("is_boss", false))
+	morale = int(d.get("morale", 100))
+	integrity = int(d.get("integrity", 100))
+	attack_count = int(d.get("attack_count", 0))
+	skill_counts = (d.get("skill_counts", {}) as Dictionary).duplicate(true)
+	skills = (d.get("skills", {}) as Dictionary).duplicate(true)
+	attack_bonus = int(d.get("attack_bonus", 0))
+	defense_bonus = int(d.get("defense_bonus", 0))
+	equip = int(d.get("equip", -1))
+	equip_name = str(d.get("equip_name", ""))
+	item_slots = (d.get("item_slots", []) as Array).duplicate()
+	mine_slots = (d.get("mine_slots", []) as Array).duplicate()
 	position = _tile_center(x, y)
 	z_index = int(position.y)
 
@@ -115,6 +145,9 @@ func set_tile(tx: int, ty: int) -> void:
 func move_visual(tx: int, ty: int, dur: float = 0.10) -> void:
 	x = tx
 	y = ty
+	if battle != null and bool(battle.fast_sim):
+		set_tile(tx, ty)
+		return
 	var tw := create_tween()
 	tw.tween_property(self, "position", _tile_center(tx, ty), dur)
 	tw.parallel().tween_property(self, "z_index", int(_tile_center(tx, ty).y), dur)

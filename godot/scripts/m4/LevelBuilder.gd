@@ -55,6 +55,14 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary) -> Dic
 	var p: Dictionary = people[pid] if pid >= 0 and pid < people.size() else {}
 	var u: Dictionary = p.get("unit", {})
 	var max_hp := int(m.get("max_hp", max(1, int(u.get("tili", 50)))))
+	var equip_id := int(m.get("equip", -1))
+	var equip_item: Dictionary = {}
+	var equip_bonus := {"attack": 0, "defense": 0}
+	if equip_id >= 0:
+		equip_item = (m2.get("items", {}) as Dictionary).get(str(equip_id), {})
+		if not equip_item.is_empty():
+			equip_bonus = {"attack": max(0, int(equip_item.get("para3", 0))),
+					"defense": max(0, int(equip_item.get("para4", 0)))}
 	return {
 		"pid": pid,
 		"slot": -1,
@@ -66,6 +74,16 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary) -> Dic
 		"level": int(m.get("level", 1)),
 		"wuli": int(m.get("wuli", 0)),
 		"zhili": int(m.get("zhili", 0)),
+		"xp": int(m.get("xp", 0)),
+		"skills": (u.get("skills", {}) as Dictionary).duplicate(true),
+		"skill_counts": (m.get("skills", {}) as Dictionary).duplicate(true),
+		"attack_count": int(m.get("attack_count", 0)),
+		"item_slots": (m.get("item_slots", []) as Array).duplicate(),
+		"mine_slots": (m.get("mine_slots", []) as Array).duplicate(),
+		"equip": equip_id,
+		"equip_name": str(equip_item.get("name", "")),
+		"attack_bonus": int(equip_bonus["attack"]),
+		"defense_bonus": int(equip_bonus["defense"]),
 		"hp": max(1, int(m.get("hp", max_hp))),
 		"max_hp": max_hp,
 		"raw_hp": int(m.get("hp", max_hp)),

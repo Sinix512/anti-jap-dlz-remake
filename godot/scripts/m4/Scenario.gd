@@ -62,6 +62,25 @@ func _key(text: String) -> String:
 
 func on_start() -> void:
 	started = true
+	# 赛跑关：柳忻获得兔子速度，龟田按乌龟速度走。原版赛跑关的脚本
+	# 不在 FIGHT.DAT 里，这里是可玩性补足，不是已确认数值。
+	if objective.get("type", "") == "race":
+		for u in battle.player_units:
+			if _key(u.unit_name) in unit_keys:
+				u.move += 8
+		for e in battle.enemy_units:
+			if _key(e.unit_name) == rival_key:
+				e.move = maxi(1, int(e.move) - 2)
+			else:
+				# 赛跑关只保留龟田作为对手；其他静态敌军在原版脚本里并未
+				# 参与赛跑，当前数据无法还原其脚本，直接退场避免堵死路线。
+				e.alive = false
+				e.visible = false
+				e.behavior = 0
+				e.target_slot = 0
+				e.target_x = 0
+				e.target_y = 0
+				e.status_stun = 999
 	# 目标点/搜索点标记
 	if objective.get("type", "") in ["reach", "capture_or_annihilate", "race"]:
 		for t in targets:
@@ -205,8 +224,18 @@ func on_unit_died(u) -> void:
 				_finish("victory", "击毙 " + "、".join(objective.get("names", [])))
 				return
 	if u.side == "player" and k in protected_keys:
-		_finish("defeat", "%s 阵亡" % u.unit_name)
-		return
+		if bool(level.get("protect_all", false)):
+			var any_alive := false
+			for p in battle.player_units:
+				if p.alive and _key(p.unit_name) in protected_keys:
+					any_alive = true
+					break
+			if not any_alive:
+				_finish("defeat", "五壮士全部阵亡")
+				return
+		else:
+			_finish("defeat", "%s 阵亡" % u.unit_name)
+			return
 	_update_status()
 
 
@@ -268,6 +297,66 @@ func check_end() -> bool:
 	return false
 
 
+func bot_goal(u) -> Dictionary:
+	"""给无头全通 bot 的目标：返回 {kind:"tile"|"unit"|"hold", tile, unit}。"""
+	var t := str(objective.get("type", "annihilate"))
+	if t == "reach":
+		var best_tile := Vector2i(-1, -1)
+		var bestd := 999999
+		for i in range(targets.size()):
+			if reached.has(i):
+				continue
+			var tt: Array = targets[i]
+			var d: int = absi(int(tt[0]) - u.x) + absi(int(tt[1]) - u.y)
+			if d < bestd:
+				bestd = d
+				best_tile = Vector2i(int(tt[0]), int(tt[1]))
+		if best_tile.x >= 0:
+			return {"kind": "tile", "tile": best_tile}
+	if t == "capture_or_annihilate":
+		if not targets.is_empty() and reached.is_empty():
+			var tt0: Array = targets[0]
+			return {"kind": "tile", "tile": Vector2i(int(tt0[0]), int(tt0[1]))}
+	if t == "collect":
+		var bestc := Vector2i(-1, -1)
+		var bestcd := 999999
+		for i in range(targets.size()):
+			if searched.has(i):
+				continue
+			var tt: Array = targets[i]
+			var d: int = absi(int(tt[0]) - u.x) + absi(int(tt[1]) - u.y)
+			if d < bestcd:
+				bestcd = d
+				bestc = Vector2i(int(tt[0]), int(tt[1]))
+		if bestc.x >= 0:
+			return {"kind": "tile", "tile": bestc}
+	if t == "kill":
+		for e in battle.enemy_units:
+			if e.alive and _key(e.unit_name) in name_keys:
+				return {"kind": "unit", "unit": e}
+	if t == "race" and _key(u.unit_name) in unit_keys:
+		if not targets.is_empty():
+			var tr: Array = targets[0]
+			return {"kind": "tile", "tile": Vector2i(int(tr[0]), int(tr[1]))}
+	if t == "reach_unit":
+		for tu in target_units:
+			if is_instance_valid(tu) and tu.alive and tu != u:
+				return {"kind": "unit", "unit": tu}
+	# 默认：最近敌人
+	var best_enemy: Node2D = null
+	var bd := 999999
+	for e in battle.enemy_units:
+		if not e.alive:
+			continue
+		var d: int = absi(e.x - u.x) + absi(e.y - u.y)
+		if d < bd:
+			bd = d
+			best_enemy = e
+	if best_enemy != null:
+		return {"kind": "unit", "unit": best_enemy}
+	return {"kind": "hold", "tile": Vector2i(u.x, u.y)}
+
+
 func ai_goal(u) -> Vector2i:
 	"""敌方/友军 AI 的显式目标点；返回 (-1,-1) 表示按最近敌人。"""
 	if objective.get("type", "") == "race" and _key(u.unit_name) == rival_key \
@@ -278,7 +367,7 @@ func ai_goal(u) -> Vector2i:
 			if o.alive and o.slot == u.target_slot and o.side != u.side:
 				return Vector2i(o.x, o.y)
 	if u.target_x != 0 or u.target_y != 0:
-		if 0 <= u.target_x < battle.map_w and 0 <= u.target_y < battle.map_h:
+		if u.target_x >= 0 and u.target_x < battle.map_w 				and u.target_y >= 0 and u.target_y < battle.map_h:
 			return Vector2i(u.target_x, u.target_y)
 	return Vector2i(-1, -1)
 

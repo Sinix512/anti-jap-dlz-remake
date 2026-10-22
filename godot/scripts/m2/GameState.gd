@@ -3,7 +3,8 @@ extends RefCounted
 ## M2 战役状态：金钱、天数、队伍、库存、解放城镇、存档。
 ## 纯逻辑，不依赖场景；Campaign/面板调用。
 
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
+const CombatRules = preload("res://scripts/battle/CombatRules.gd")
 
 var data: Dictionary = {}
 var money := 0
@@ -57,6 +58,7 @@ func new_game(m2: Dictionary) -> void:
 		materials[str(k)] = int(start["materials"][k])
 	for k in start.get("mines", {}):
 		mines[str(k)] = int(start["mines"][k])
+	auto_equip_party()
 
 
 func _add_member(pid: int) -> void:
@@ -66,6 +68,11 @@ func _add_member(pid: int) -> void:
 	var p: Dictionary = people[pid]
 	var u: Dictionary = p.get("unit", {})
 	var max_hp := int(p.get("max_hp", 1))
+	var start_equip := -1
+	for v in p.get("wupin", []):
+		if int(v) > 0 and item_kind(int(v)) == "equip":
+			start_equip = int(v)
+			break
 	party.append({
 		"pid": pid,
 		"name": p.get("name", "?"),
@@ -76,7 +83,13 @@ func _add_member(pid: int) -> void:
 		"level": int(p.get("level", 1)),
 		"wuli": int(p.get("wuli", 0)),
 		"zhili": int(p.get("zhili", 0)),
-		"xp": 0,
+		"xp": int(p.get("jingyan", 0)),
+		"level_cap": 99,
+		"skills": (p.get("skills", {}) as Dictionary).duplicate(true),
+		"attack_count": int(p.get("gongji", 0)),
+		"item_slots": (p.get("wupin", []) as Array).duplicate(),
+		"mine_slots": (p.get("dilei", []) as Array).duplicate(),
+		"equip": start_equip,
 		"hp": max_hp,
 		"max_hp": max_hp,
 	})
@@ -197,6 +210,143 @@ func promote(member: Dictionary) -> Dictionary:
 
 func item_count(pid: int) -> int:
 	return int(items.get(str(pid), 0))
+
+
+func item_kind(item_id: int) -> String:
+	"""把 WuPin 的 para3/para4 解释成可执行类别。
+	16/17/18=体力/士气/两者；26-29=投掷/毒虫类攻击物；
+	131..155=坐骑/车辆/鞋靴装备；61..80=转职/兵书，不在战斗内使用。
+	这是按字段相关性做的可玩性解释，原版完整语义仍待反汇编确认。"""
+	if item_id >= 81 and item_id <= 155:
+		return "equip"
+	if item_id >= 61 and item_id <= 80:
+		return "manual"
+	if item_id >= 31 and item_id <= 40:
+		return "book"
+	if item_id >= 41 and item_id <= 56:
+		return "throw"
+	if item_id >= 0 and item_id <= 30:
+		return "food"
+	return "other"
+
+
+func equip_bonus(item_id: int) -> Dictionary:
+	var it := item(item_id)
+	if it.is_empty() or item_kind(item_id) != "equip":
+		return {"attack": 0, "defense": 0}
+	return {"attack": max(0, int(it.get("para3", 0))),
+			"defense": max(0, int(it.get("para4", 0)))}
+
+
+func can_equip(member: Dictionary, item_id: int) -> Dictionary:
+	if member == null or item(item_id).is_empty():
+		return {"ok": false, "msg": "没有这件装备"}
+	if item_kind(item_id) != "equip":
+		return {"ok": false, "msg": "这不是可装备物品"}
+	if item_count(item_id) <= 0:
+		return {"ok": false, "msg": "库存没有这件装备"}
+	return {"ok": true, "msg": ""}
+
+
+func equip_item(member: Dictionary, item_id: int) -> Dictionary:
+	var c := can_equip(member, item_id)
+	if not bool(c.get("ok", false)):
+		return c
+	member["equip"] = item_id
+	return {"ok": true, "msg": "%s 装备 %s" % [
+			member.get("name", ""), item(item_id).get("name", "")]}
+
+
+func unequip_item(member: Dictionary) -> Dictionary:
+	if member == null or int(member.get("equip", -1)) < 0:
+		return {"ok": false, "msg": "没有装备"}
+	var old: String = str(item(int(member["equip"])).get("name", ""))
+	member["equip"] = -1
+	return {"ok": true, "msg": "卸下 %s" % old}
+
+
+func auto_equip_party() -> void:
+	"""把库存里最好的装备分配给未装备的队员；同一件装备按库存数量限用。"""
+	var used := {}
+	for m in party:
+		var e := int(m.get("equip", -1))
+		if e >= 0:
+			used[str(e)] = int(used.get(str(e), 0)) + 1
+	for m in party:
+		if int(m.get("equip", -1)) >= 0:
+			continue
+		var best := -1
+		var best_score := -1
+		for k in items:
+			var iid := int(k)
+			if item_kind(iid) != "equip":
+				continue
+			if int(used.get(k, 0)) >= item_count(iid):
+				continue
+			var b := equip_bonus(iid)
+			var score := int(b["attack"]) + int(b["defense"])
+			if score > best_score:
+				best_score = score
+				best = iid
+		if best >= 0:
+			m["equip"] = best
+			used[str(best)] = int(used.get(str(best), 0)) + 1
+
+
+func battle_context() -> Dictionary:
+	"""进入战斗时的只读/消耗快照。Battle 只改 consumed_*，战后由本对象写回。"""
+	return {
+		"mines": mines.duplicate(true),
+		"items": items.duplicate(true),
+		"consumed_mines": {},
+		"consumed_items": {},
+	}
+
+
+func apply_battle_context(ctx: Dictionary) -> void:
+	for k in ctx.get("consumed_mines", {}):
+		add_mine(int(k), -int(ctx["consumed_mines"][k]))
+	for k in ctx.get("consumed_items", {}):
+		add_item(int(k), -int(ctx["consumed_items"][k]))
+
+
+func grant_battle_experience(units: Array, victory: bool) -> void:
+	if not victory:
+		return
+	var avg := 0
+	if not party.is_empty():
+		for m in party:
+			avg += int(m.get("level", 1))
+		avg = int(round(float(avg) / party.size()))
+	for u in units:
+		if int(u.pid) >= 0:
+			u.gained_xp += CombatRules.battle_experience(int(u.data.get("level", 1)), avg)
+
+
+func apply_battle_progress(units: Array) -> void:
+	"""把战斗内获得的经验/等级/技能使用次数写回队伍。"""
+	for u in units:
+		var pid := int(u.pid)
+		if pid < 0:
+			continue
+		var m = get_member(pid)
+		if m == null or not (m is Dictionary):
+			continue
+		var member: Dictionary = m
+		var gained := int(u.gained_xp)
+		var xp := int(member.get("xp", 0)) + gained
+		var levels := int(xp / 100)
+		xp = xp % 100
+		var lv := mini(99, int(member.get("level", 1)) + levels)
+		member["level"] = lv
+		member["xp"] = xp
+		var old_max := int(member.get("max_hp", 1))
+		var new_max := max_hp_for(int(member.get("bingzhong", 0)), lv)
+		member["max_hp"] = new_max
+		member["hp"] = clampi(int(member.get("hp", new_max)) + max(0, new_max - old_max),
+				0, new_max)
+		member["skills"] = (u.skill_counts as Dictionary).duplicate(true)
+		member["attack_count"] = int(u.attack_count)
 
 
 func material_count(mid: int) -> int:
@@ -526,7 +676,7 @@ func to_dict() -> Dictionary:
 
 
 func from_dict(d: Dictionary) -> bool:
-	if int(d.get("version", 0)) not in [1, SAVE_VERSION]:
+	if int(d.get("version", 0)) not in [1, 2, SAVE_VERSION]:
 		return false
 	money = int(d.get("money", 0))
 	day = int(d.get("day", 1))

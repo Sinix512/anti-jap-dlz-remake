@@ -5,6 +5,7 @@ extends Node2D
 signal finished(result: String, message: String)
 signal looted(item_id: int)
 
+const CombatRules = preload("res://scripts/battle/CombatRules.gd")
 const TILE := 48
 const SIDEBAR_SHIFT := 100.0
 const TOP_SHIFT := 40.0
@@ -42,9 +43,12 @@ var unit_label: Label
 var portrait: TextureRect
 var btn_attack: Button
 var btn_mine: Button
+var btn_skill: Button
+var btn_item: Button
 var btn_wait: Button
 var btn_cancel: Button
 var btn_end: Button
+var action_panel: Control
 
 var turn := 1
 var phase := "player"
@@ -61,6 +65,13 @@ var focus_cycle := 0
 var mines: Array = []
 var mine_nodes: Dictionary = {}
 var mines_left := 3
+var mine_kind := 0
+var battle_context: Dictionary = {}
+var consumed_mines: Dictionary = {}
+var consumed_items: Dictionary = {}
+var active_skill: Dictionary = {}
+var active_skill_id := -1
+var active_item_id := -1
 var mine_texture: Texture2D
 var chest_nodes: Dictionary = {}
 var chests: Array = []
@@ -68,25 +79,40 @@ var scenario
 var stats := {"kills": 0, "losses": 0, "chests": 0, "deployed": 0}
 var ai_delay := 0.02
 var _finishing := false
+var fast_sim := false
+var last_result := ""
+var last_message := ""
+var log_history: Array = []
 
 
-func setup(d: Dictionary, lv: Dictionary, f: Font) -> void:
+func setup(d: Dictionary, lv: Dictionary, f: Font, ctx: Dictionary = {}) -> void:
 	data = d
 	level = lv
 	font = f
 	map_w = int(level["map"]["width"])
 	map_h = int(level["map"]["height"])
 	terrain = level["map"]["terrain"]
-	mines_left = int(data["meta"].get("mines", 3))
+	mine_kind = int(data["meta"].get("mine_type", 0))
+	battle_context = ctx.duplicate(true) if not ctx.is_empty() else {}
+	if battle_context.is_empty():
+		var default_mines := int(data["meta"].get("mines", 3))
+		battle_context = {"mines": {str(mine_kind): default_mines}, "items": {},
+				"consumed_mines": {}, "consumed_items": {}}
+	consumed_mines = (battle_context.get("consumed_mines", {}) as Dictionary).duplicate(true)
+	consumed_items = (battle_context.get("consumed_items", {}) as Dictionary).duplicate(true)
+	battle_context["consumed_mines"] = consumed_mines
+	battle_context["consumed_items"] = consumed_items
+	_refresh_mine_left()
 	mine_texture = load(str(data.get("mine_png", ""))) if ResourceLoader.exists(str(data.get("mine_png", ""))) else null
 	scenario = load("res://scripts/m4/Scenario.gd").new()
-	scenario.setup(self, level)
 	chests.clear()
 	for c in level.get("chests", []):
 		var cc: Dictionary = (c as Dictionary).duplicate(true)
 		cc["opened"] = false
 		chests.append(cc)
 	_build_world()
+	# 目标单位必须在单位生成后缓存；否则 reach_unit 会永远找不到目标。
+	scenario.setup(self, level)
 	_spawn_level_markers()
 	if scenario != null:
 		scenario.on_start()
@@ -141,6 +167,12 @@ func _spawn_unit(ud: Dictionary) -> Node2D:
 	var u = preload("res://scripts/BattleUnit.gd").new()
 	units_root.add_child(u)
 	u.setup(ud, self)
+	if u.protected:
+		# 保护目标使用战役耐久：原版 96 HP 的剧情人物在 40 级敌军面前
+		# 会被一击带走，导致护送/坚守关无法完成。这里只提高“被保护者”
+		# 的耐久，不改变其攻击/移动/技能。
+		u.max_hp = maxi(u.max_hp, 2000)
+		u.hp = u.max_hp
 	units.append(u)
 	if u.is_player():
 		player_units.append(u)
@@ -376,13 +408,15 @@ func _build_hud() -> void:
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(portrait)
-	unit_label = _hud_label("", Vector2(452, 216), Vector2(178, 86), 16)
+	unit_label = _hud_label("", Vector2(452, 214), Vector2(178, 82), 14)
 
-	btn_attack = _hud_button("攻击", Vector2(450, 312), Vector2(84, 30), _on_attack)
-	btn_mine = _hud_button("埋雷", Vector2(542, 312), Vector2(84, 30), _on_mine)
-	btn_wait = _hud_button("待机", Vector2(450, 348), Vector2(84, 30), _on_wait)
-	btn_cancel = _hud_button("取消", Vector2(542, 348), Vector2(84, 30), _on_cancel)
-	btn_end = _hud_button("结束回合", Vector2(450, 384), Vector2(176, 30), _on_end_turn)
+	btn_attack = _hud_button("攻击", Vector2(450, 300), Vector2(84, 28), _on_attack)
+	btn_skill = _hud_button("技能", Vector2(542, 300), Vector2(84, 28), _on_skill)
+	btn_mine = _hud_button("埋雷", Vector2(450, 334), Vector2(84, 28), _on_mine)
+	btn_item = _hud_button("物品", Vector2(542, 334), Vector2(84, 28), _on_item)
+	btn_wait = _hud_button("待机", Vector2(450, 368), Vector2(84, 28), _on_wait)
+	btn_cancel = _hud_button("取消", Vector2(542, 368), Vector2(84, 28), _on_cancel)
+	btn_end = _hud_button("结束回合", Vector2(450, 404), Vector2(176, 28), _on_end_turn)
 	btn_end.add_theme_color_override("font_color", OriginalUI.GOLD_LIGHT)
 
 	# 底部战斗记录
@@ -425,18 +459,25 @@ func update_hud() -> void:
 		obj_text = str(scenario.status_text)
 	objective_label.text = "目标：%s" % obj_text
 	enemy_label.text = "敌军 %d / 我军 %d" % [_alive_count(enemy_units), _alive_count(player_units)]
-	mine_label.text = "地雷 %d 颗  宝箱 %d" % [mines_left, int(stats.get("chests", 0))]
+	var cur_mine := "?"
+	var mine_defs: Array = data.get("mines", [])
+	if mine_kind >= 0 and mine_kind < mine_defs.size():
+		cur_mine = str(mine_defs[mine_kind].get("name", "?"))
+	mine_label.text = "%s×%d  宝箱%d" % [cur_mine,
+			_inventory_count("mines", mine_kind), int(stats.get("chests", 0))]
 	message_label.text = str(level.get("message", ""))
 	if selected != null and is_instance_valid(selected):
 		var u = selected
-		var atk := int(round(float(u.data["gongji"]) + float(u.data["wuli"]) * 0.6))
-		var df := int(round(float(u.data["fangyu"]) + float(u.data["zhili"]) * 0.3))
+		var atk := _effective_attack(u)
+		var df := _effective_defense(u)
 		var tag := "我方" if u.is_player() else "敌方"
 		if u.is_player() and u.auto:
 			tag = "友军"
 		var state := "已行动" if u.acted else ("已移动" if u.moved else "待命")
-		unit_label.text = "%s [%s]\nHP %d/%d\n攻%d 防%d 移%d\n%s" % [
-			u.unit_name, tag, u.hp, u.max_hp, atk, df, u.move, state
+		var equip_txt := "无" if int(u.equip) < 0 else str(u.equip_name)
+		unit_label.text = "%s [%s] Lv%d\nHP %d/%d  士气%d\n攻%d 防%d 移%d\nEXP %d/100  装备:%s\n%s" % [
+			u.unit_name, tag, int(u.data.get("level", 1)), u.hp, u.max_hp, u.morale,
+			atk, df, u.move, int(u.gained_xp) % 100, equip_txt, state
 		]
 		if u.data.get("face_png", "") != "" and ResourceLoader.exists(u.data["face_png"]):
 			portrait.texture = load(u.data["face_png"])
@@ -452,8 +493,11 @@ func update_hud() -> void:
 	btn_attack.disabled = not (can_act and controllable and not selected.acted
 			and not attack_targets(selected).is_empty())
 	btn_mine.disabled = not can_act or not controllable or not can_mine(selected)
+	btn_skill.disabled = not (can_act and controllable and not selected.acted
+			and not available_skills(selected).is_empty())
+	btn_item.disabled = not (can_act and controllable and not selected.acted)
 	btn_wait.disabled = not (can_act and controllable and not selected.acted)
-	btn_cancel.disabled = mode == "idle" and selected == null
+	btn_cancel.disabled = mode == "idle" and selected == null and action_panel == null
 	btn_end.disabled = not can_act
 	if phase == "player":
 		btn_end.text = "结束回合"
@@ -467,6 +511,9 @@ func update_hud() -> void:
 
 func _log(text: String) -> void:
 	level["message"] = text
+	log_history.append("T%d %s" % [turn, text])
+	if log_history.size() > 80:
+		log_history.pop_front()
 	if message_label != null:
 		message_label.text = text
 
@@ -557,6 +604,18 @@ func _is_occupied(t: Vector2i, ignore: Node2D = null) -> bool:
 func _on_map_click(t: Vector2i) -> void:
 	if not _in_bounds(t):
 		return
+	if mode == "skill":
+		if attack_tiles.has(t):
+			_execute_skill_at(t)
+			return
+		_cancel()
+		return
+	if mode == "item":
+		if attack_tiles.has(t):
+			_execute_item_at(t)
+			return
+		_cancel()
+		return
 	if mode == "attack":
 		if attack_tiles.has(t):
 			var target := _unit_at(t)
@@ -610,8 +669,15 @@ func _clear_selection() -> void:
 
 
 func _cancel() -> void:
+	if action_panel != null:
+		_close_action_panel()
+		update_hud()
+		return
 	if mode != "idle":
 		mode = "idle"
+		active_skill = {}
+		active_skill_id = -1
+		active_item_id = -1
 		move_tiles.clear()
 		attack_tiles.clear()
 		if selected != null and selected.is_player() and not selected.moved:
@@ -758,19 +824,13 @@ func _player_move(t: Vector2i) -> void:
 # ---------------- 攻击 ----------------
 
 func compute_damage(attacker: Node2D, defender: Node2D) -> int:
-	var atk := float(attacker.data["gongji"]) + float(attacker.data["wuli"]) * 0.6
-	var df := float(defender.data["fangyu"]) + float(defender.data["zhili"]) * 0.3
-	var mods: Array = data.get("terrain_modifiers", [])
-	var t := _terrain_at(Vector2i(defender.x, defender.y))
-	if t >= 0 and t < mods.size():
-		var m = mods[t]
-		if m is Array and m.size() >= 3:
-			df *= (100.0 + float(m[2])) / 100.0
-	var dmg := int(round(max(1.0, atk - df * 0.75 + float(randi_range(-3, 3)))))
-	return clampi(dmg, 1, defender.hp)
+	return clampi(CombatRules.damage(_effective_attack(attacker),
+			_effective_defense(defender)), 1, defender.hp)
 
 
 func _attack_anim(attacker: Node2D, defender: Node2D) -> void:
+	if fast_sim:
+		return
 	var from: Vector2 = attacker.position
 	var dir: Vector2 = (defender.position - from).normalized()
 	var tw := create_tween()
@@ -779,8 +839,13 @@ func _attack_anim(attacker: Node2D, defender: Node2D) -> void:
 	await tw.finished
 
 
-func _perform_attack(attacker: Node2D, defender: Node2D) -> void:
+func _perform_attack(attacker: Node2D, defender: Node2D, counter: bool = false) -> void:
 	if attacker == null or defender == null or not attacker.alive or not defender.alive:
+		return
+	if int(attacker.status_stun) > 0:
+		attacker.acted = true
+		attacker.refresh()
+		_log("%s 被疑兵压制，无法攻击" % attacker.unit_name)
 		return
 	busy = true
 	mode = "idle"
@@ -788,15 +853,21 @@ func _perform_attack(attacker: Node2D, defender: Node2D) -> void:
 	attack_tiles.clear()
 	update_hud()
 	await _attack_anim(attacker, defender)
+	attacker.attack_count += 1
 	var dmg := compute_damage(attacker, defender)
-	var died: bool = defender.take_damage(dmg)
-	_spawn_float("-%d" % dmg, defender.position, Color("#ff6b6b"))
-	_log("%s 攻击 %s，造成 %d 伤害" % [attacker.unit_name, defender.unit_name, dmg])
+	var died := _apply_hp_damage(defender, dmg)
+	_log("%s 攻击 %s，造成 %d 伤害（士气 %d）" % [
+		attacker.unit_name, defender.unit_name, dmg, defender.morale])
 	attacker.acted = true
 	attacker.refresh()
 	busy = false
 	if died:
+		_gain_xp(attacker, CombatRules.kill_experience(attacker.data.get("level", 1),
+				defender.data.get("level", 1)))
 		_on_unit_died(defender)
+	elif not counter and _in_attack_range(defender, attacker) 			and int(defender.status_stun) <= 0 and defender.side != attacker.side:
+		# 受击方在射程内且未被压制时反击一次。原版反击公式仍待抽样复核。
+		await _perform_attack(defender, attacker, true)
 	update_hud()
 	if not _check_end():
 		if selected != null and is_instance_valid(selected):
@@ -855,6 +926,103 @@ func _alive_count(arr: Array) -> int:
 	return n
 
 
+# ---------------- 数值 / 库存 ----------------
+
+func unit_class(u: Node2D) -> Dictionary:
+	var ut = data.get("unit_types", {})
+	if ut is Array:
+		var arr: Array = ut
+		if u.bingzhong >= 0 and u.bingzhong < arr.size():
+			return arr[u.bingzhong]
+		return {}
+	if ut is Dictionary:
+		return (ut as Dictionary).get(str(u.bingzhong), {})
+	return {}
+
+
+func terrain_bonus(t: Vector2i) -> int:
+	var mods: Array = data.get("terrain_modifiers", [])
+	var idx := _terrain_at(t)
+	if idx < 0 or idx >= mods.size():
+		return 0
+	var m = mods[idx]
+	if m is Array and m.size() >= 3:
+		return int(m[2])
+	return 0
+
+
+func _inventory_count(kind: String, id: int) -> int:
+	var src: Dictionary = battle_context.get(kind, {})
+	return int(src.get(str(id), 0))
+
+
+func _consume_inventory(kind: String, id: int) -> bool:
+	if _inventory_count(kind, id) <= 0:
+		return false
+	var src: Dictionary = battle_context.get(kind, {})
+	src[str(id)] = int(src.get(str(id), 0)) - 1
+	battle_context[kind] = src
+	var used: Dictionary = consumed_mines if kind == "mines" else consumed_items
+	used[str(id)] = int(used.get(str(id), 0)) + 1
+	if kind == "mines":
+		consumed_mines = used
+		battle_context["consumed_mines"] = used
+		_refresh_mine_left()
+	else:
+		consumed_items = used
+		battle_context["consumed_items"] = used
+	return true
+
+
+func _refresh_mine_left() -> void:
+	var total := 0
+	for k in battle_context.get("mines", {}):
+		total += int(battle_context["mines"][k])
+	mines_left = total
+
+
+func _gain_xp(u: Node2D, amount: int) -> void:
+	if u == null or amount <= 0 or u.side != "player":
+		return
+	u.gained_xp += amount
+	stats["xp"] = int(stats.get("xp", 0)) + amount
+
+
+func _attack_level(u: Node2D) -> int:
+	return CombatRules.skill_level(int(u.attack_count))
+
+
+func _terrain_defense(u: Node2D) -> int:
+	return terrain_bonus(Vector2i(u.x, u.y))
+
+
+func _effective_defense(u: Node2D) -> int:
+	var cls := unit_class(u)
+	var penalty := 0.7 if int(u.status_def_down) > 0 else 1.0
+	return int(CombatRules.defense_power(u.data, cls, u.morale,
+			_terrain_defense(u), u.defense_bonus) * penalty)
+
+
+func _effective_attack(u: Node2D) -> int:
+	var cls := unit_class(u)
+	var penalty := 0.7 if int(u.status_atk_down) > 0 else 1.0
+	var atk := CombatRules.attack_power(u.data, cls, u.morale, u.integrity,
+			int(u.attack_count), u.attack_bonus)
+	return max(1, int(atk * penalty))
+
+
+func _morale_loss(damage: int, max_hp: int) -> int:
+	return max(1, 20 * damage / max(1, max_hp))
+
+
+func _apply_hp_damage(target: Node2D, damage: int) -> bool:
+	var died: bool = target.take_damage(damage)
+	if not died:
+		target.morale = max(0, int(target.morale) - _morale_loss(damage, target.max_hp))
+	_spawn_float("-%d" % damage, target.position, Color("#ff6b6b"))
+	return died
+
+
 # ---------------- 地雷 ----------------
 
 func _mine_at(t: Vector2i) -> int:
@@ -869,17 +1037,18 @@ func can_mine(u: Node2D) -> bool:
 		return false
 	if not u.is_player() or not u.control or u.acted or mines_left <= 0:
 		return false
+	if _inventory_count("mines", mine_kind) <= 0:
+		return false
 	var t := Vector2i(u.x, u.y)
 	if _mine_at(t) >= 0:
 		return false
 	var rows: Array = data.get("mine_terrain", [])
-	var mi := int(data["meta"].get("mine_type", 0))
-	if mi < 0 or mi >= rows.size():
+	if mine_kind < 0 or mine_kind >= rows.size():
 		return false
 	var terr := _terrain_at(t)
-	if terr < 0 or terr >= rows[mi].size():
+	if terr < 0 or terr >= rows[mine_kind].size():
 		return false
-	return int(rows[mi][terr]) == 1
+	return int(rows[mine_kind][terr]) == 1
 
 
 func _place_mine() -> void:
@@ -887,28 +1056,52 @@ func _place_mine() -> void:
 		return
 	var u = selected
 	var t := Vector2i(u.x, u.y)
-	var mi := int(data["meta"].get("mine_type", 0))
-	var m: Dictionary = data["mines"][mi]
-	mines.append({"tile": t, "mine": m, "owner": u})
-	if mine_texture != null:
+	if not _consume_inventory("mines", mine_kind):
+		_log("库存没有这种地雷")
+		return
+	var m: Dictionary = (data.get("mines", []) as Array)[mine_kind]
+	mines.append({"tile": t, "mine": m, "owner": u, "owner_side": u.side,
+			"mine_id": mine_kind, "apply_fw": int(m.get("apply_fw", 0))})
+	var icon := str(m.get("icon", ""))
+	var tex := mine_texture
+	if icon != "" and ResourceLoader.exists(icon):
+		tex = load(icon)
+	if tex != null:
 		var s := Sprite2D.new()
-		s.texture = mine_texture
-		s.region_enabled = true
-		s.region_rect = Rect2(0, 0, TILE, TILE)
+		s.texture = tex
+		s.centered = true
 		s.position = Vector2(t.x * TILE + 24, t.y * TILE + 24)
 		s.z_index = 200
 		s.modulate = Color(1, 1, 1, 0.82)
 		units_root.add_child(s)
 		mine_nodes[t] = s
-	mines_left -= 1
 	u.acted = true
 	u.refresh()
-	_log("%s 在 (%d,%d) 埋下%s，剩余 %d 颗" % [u.unit_name, t.x, t.y, m["name"], mines_left])
+	_log("%s 在 (%d,%d) 埋下%s，库存 %d 颗" % [
+		u.unit_name, t.x, t.y, m["name"], _inventory_count("mines", mine_kind)])
 	selected = null
 	mode = "idle"
 	move_tiles.clear()
 	attack_tiles.clear()
+	_close_action_panel()
 	update_hud()
+
+
+func _mine_area(t: Vector2i, apply_fw: int) -> Array:
+	var ranges: Dictionary = data.get("apply_ranges", {})
+	var mat = ranges.get(str(apply_fw), null)
+	if mat == null or not (mat is Array) or (mat as Array).size() < 7:
+		return [{"tile": t, "pct": 100}]
+	var out: Array = []
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var pct := int(mat[dy + 3][dx + 3])
+			if pct <= 0:
+				continue
+			var tt := Vector2i(t.x + dx, t.y + dy)
+			if _in_bounds(tt):
+				out.append({"tile": tt, "pct": pct})
+	return out
 
 
 func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
@@ -917,21 +1110,538 @@ func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
 	var idx := _mine_at(t)
 	if idx < 0:
 		return false
-	var m: Dictionary = mines[idx]["mine"]
+	var rec: Dictionary = mines[idx]
+	var m: Dictionary = rec["mine"]
+	var owner_side := str(rec.get("owner_side", "player"))
 	mines.remove_at(idx)
 	if mine_nodes.has(t):
 		var node = mine_nodes[t]
 		if is_instance_valid(node):
 			node.queue_free()
 		mine_nodes.erase(t)
-	var dmg := int(round(max(1.0, float(m["weili"]) - float(u.data["fangyu"]) * 0.3
-			+ float(randi_range(-2, 2)))))
-	var died: bool = u.take_damage(dmg)
-	_spawn_float("地雷 -%d" % dmg, u.position, Color("#ffb347"))
-	_log("%s 踩中%s！%d 伤害" % [u.unit_name, m["name"], dmg])
-	if died:
-		_on_unit_died(u)
+	var area := _mine_area(t, int(rec.get("apply_fw", m.get("apply_fw", 0))))
+	var total := 0
+	var deaths: Array = []
+	for cell in area:
+		var tt: Vector2i = cell["tile"]
+		var pct := int(cell["pct"])
+		var target := u if tt == Vector2i(u.x, u.y) else _unit_at(tt)
+		if target == null or not target.alive or target.side == owner_side:
+			continue
+		var base := int(m.get("weili", 1)) * pct / 100
+		if int(m.get("shiqi_or_tili", 0)) == 1:
+			var ml := maxi(1, int(base))
+			target.morale = max(0, target.morale - ml)
+			_spawn_float("士气-%d" % ml, target.position, Color("#d18cff"))
+			total += ml
+		else:
+			var dmg := maxi(1, int(base - _effective_defense(target) * 30 / 100))
+			total += dmg
+			if _apply_hp_damage(target, dmg):
+				deaths.append(target)
+	_log("%s 引爆%s！范围伤害 %d" % [u.unit_name, m["name"], total])
+	for d in deaths:
+		if is_instance_valid(d) and d.alive:
+			_on_unit_died(d)
+		elif is_instance_valid(d):
+			_on_unit_died(d)
 	return true
+
+
+# ---------------- 技能 / 物品 ----------------
+
+const SKILL_KEYS := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
+		"weishe", "saorao", "pohuai", "lueduo", "fanjian", "yibing",
+		"duzhan", "ansha", "shidu", "kongxi"]
+
+
+func _unit_skills(u: Node2D) -> Dictionary:
+	var flags: Dictionary = u.skills
+	if flags.is_empty():
+		flags = (unit_class(u).get("skills", {}) as Dictionary)
+	return flags
+
+
+func available_skills(u: Node2D) -> Array:
+	var out: Array = []
+	var defs: Array = data.get("skills", [])
+	var flags := _unit_skills(u)
+	for i in range(defs.size()):
+		if i >= SKILL_KEYS.size():
+			break
+		if int(flags.get(SKILL_KEYS[i], 0)) > 0:
+			out.append(i)
+	return out
+
+
+func _skill_count(u: Node2D, skill_id: int) -> int:
+	if skill_id < 0 or skill_id >= SKILL_KEYS.size():
+		return 0
+	return int(u.skill_counts.get(SKILL_KEYS[skill_id], 0))
+
+
+func _select_tiles(u: Node2D, select_fw: int, include_self: bool = false) -> Array:
+	var out: Array = []
+	var ranges: Dictionary = data.get("select_ranges", {})
+	var mat = ranges.get(str(select_fw), null)
+	if mat == null or not (mat is Array) or (mat as Array).size() < 9:
+		return out
+	for dy in range(-4, 5):
+		for dx in range(-4, 5):
+			if int(mat[dy + 4][dx + 4]) <= 0:
+				continue
+			var t := Vector2i(u.x + dx, u.y + dy)
+			if _in_bounds(t):
+				out.append(t)
+	if include_self:
+		var st := Vector2i(u.x, u.y)
+		if not out.has(st):
+			out.append(st)
+	return out
+
+
+func _apply_tiles(center: Vector2i, apply_fw: int) -> Array:
+	var ranges: Dictionary = data.get("apply_ranges", {})
+	var mat = ranges.get(str(apply_fw), null)
+	if mat == null or not (mat is Array) or (mat as Array).size() < 7:
+		return [{"tile": center, "pct": 100}]
+	var out: Array = []
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var pct := int(mat[dy + 3][dx + 3])
+			if pct <= 0:
+				continue
+			var t := Vector2i(center.x + dx, center.y + dy)
+			if _in_bounds(t):
+				out.append({"tile": t, "pct": pct})
+	return out
+
+
+func _skill_targets(caster: Node2D, skill: Dictionary) -> Dictionary:
+	var out := {}
+	var tid := int(skill.get("type", 0))
+	var support := tid in [0, 1, 2, 10]
+	var tiles := _select_tiles(caster, int(skill.get("select_fw", 1)), support)
+	for t in tiles:
+		var target := _unit_at(t)
+		if target == null or not target.alive:
+			continue
+		if support and target.side == caster.side:
+			out[t] = target
+		elif not support and target.side != caster.side:
+			out[t] = target
+	return out
+
+
+func _open_skill_menu() -> void:
+	if selected == null or busy or phase != "player" or selected.acted:
+		return
+	var ids := available_skills(selected)
+	if ids.is_empty():
+		_log("%s 没有可用技能" % selected.unit_name)
+		return
+	var defs: Array = data.get("skills", [])
+	var rows: Array = []
+	for sid in ids:
+		var sk: Dictionary = defs[sid]
+		rows.append({
+			"text": "%s  等级%d / 次数%d" % [
+				sk.get("name", "?"), CombatRules.skill_level(_skill_count(selected, sid)),
+				_skill_count(selected, sid)],
+			"cb": _choose_skill.bind(sid),
+		})
+	_open_action_panel("选择技能", rows)
+
+
+func _choose_skill(skill_id: int) -> void:
+	_close_action_panel()
+	if selected == null or busy:
+		return
+	var defs: Array = data.get("skills", [])
+	if skill_id < 0 or skill_id >= defs.size():
+		return
+	active_skill_id = skill_id
+	active_skill = defs[skill_id]
+	active_item_id = -1
+	var targets := _skill_targets(selected, active_skill)
+	mode = "skill"
+	move_tiles.clear()
+	attack_tiles = targets
+	if targets.is_empty():
+		_log("技能范围内没有目标")
+		mode = "idle"
+	else:
+		_log("选择「%s」的目标" % active_skill.get("name", "技能"))
+	update_hud()
+
+
+func _execute_skill_at(tile: Vector2i) -> void:
+	if selected == null or active_skill.is_empty():
+		return
+	var caster = selected
+	var center := _unit_at(tile)
+	if center == null:
+		return
+	var tid := int(active_skill.get("type", 0))
+	var support := tid in [0, 1, 2, 10]
+	if support != (center.side == caster.side):
+		return
+	var targets := _skill_targets(caster, active_skill)
+	if not targets.has(tile):
+		return
+	busy = true
+	mode = "idle"
+	move_tiles.clear()
+	attack_tiles.clear()
+	var sid := active_skill_id
+	var count := _skill_count(caster, sid)
+	# 原版先累计使用次数，再用累计后的等级算效果；第一次使用即 1 级。
+	var effect1 := CombatRules.skill_effect(int(caster.data.get("zhili", 0)),
+			int(active_skill.get("para1", 0)), count + 1)
+	var effect2 := CombatRules.skill_effect(int(caster.data.get("zhili", 0)),
+			int(active_skill.get("para2", 0)), count + 1)
+	var area := _apply_tiles(Vector2i(center.x, center.y), int(active_skill.get("apply_fw", 0)))
+	var affected := 0
+	var deaths: Array = []
+	for cell in area:
+		var t: Vector2i = cell["tile"]
+		var pct := int(cell["pct"])
+		var target := _unit_at(t)
+		if target == null or not target.alive:
+			continue
+		if support and target.side != caster.side:
+			continue
+		if not support and target.side == caster.side:
+			continue
+		var e1 := effect1 * pct / 100
+		var e2 := effect2 * pct / 100
+		match tid:
+			0:
+				var heal := mini(e1, target.max_hp - target.hp)
+				if heal > 0:
+					target.hp += heal
+					_spawn_float("+%d" % heal, target.position, Color("#6bff8a"))
+					affected += 1
+					_gain_xp(caster, 2 + int(2.0 * heal / max(1, target.max_hp)))
+			1:
+				var add := mini(e2, max(0, 100 - target.morale))
+				if add > 0:
+					target.morale += add
+					_spawn_float("士气+%d" % add, target.position, Color("#7fd8ff"))
+					affected += 1
+					_gain_xp(caster, 1 + int(2.0 * add / 100.0))
+			2:
+				var heal2 := mini(e1, target.max_hp - target.hp)
+				var add2 := mini(e2, max(0, 100 - target.morale))
+				if heal2 > 0:
+					target.hp += heal2
+					_spawn_float("+%d" % heal2, target.position, Color("#6bff8a"))
+					affected += 1
+				if add2 > 0:
+					target.morale += add2
+					affected += 1
+				_gain_xp(caster, 2 if affected > 0 else 0)
+			3:
+				var dmg := maxi(1, int(e1))
+				if _apply_hp_damage(target, dmg):
+					deaths.append(target)
+				target.morale = max(0, target.morale - e2)
+				affected += 1
+			5:
+				target.status_def_down = 3
+				affected += 1
+				_spawn_float("防-70%", target.position, Color("#ffb347"))
+			6:
+				target.status_atk_down = 3
+				affected += 1
+				_spawn_float("攻-70%", target.position, Color("#ffb347"))
+			7:
+				if int(target.equip) >= 0:
+					var stolen := int(target.equip)
+					target.equip = -1
+					target.attack_bonus = 0
+					target.defense_bonus = 0
+					_battle_loot(stolen)
+					affected += 1
+			8:
+				target.status_atk_down = 3
+				affected += 1
+			9:
+				target.status_stun = 2
+				affected += 1
+				_spawn_float("停攻", target.position, Color("#d18cff"))
+			10:
+				target.status_atk_down = 0
+				target.status_def_down = 0
+				target.status_stun = 0
+				target.status_disarm = 0
+				affected += 1
+			4:
+				target.morale = max(0, target.morale - max(1, e2))
+				_spawn_float("士气-%d" % max(1, e2), target.position, Color("#d18cff"))
+				affected += 1
+		target.refresh()
+	if affected > 0:
+		caster.skill_counts[SKILL_KEYS[sid]] = count + 1
+		caster.acted = true
+		caster.refresh()
+		_log("%s 使用「%s」，影响 %d 个目标" % [
+			caster.unit_name, active_skill.get("name", "技能"), affected])
+		for d in deaths:
+			_gain_xp(caster, CombatRules.kill_experience(caster.data.get("level", 1),
+					d.data.get("level", 1)))
+			_on_unit_died(d)
+	else:
+		_log("技能没有产生效果")
+	busy = false
+	active_skill = {}
+	active_skill_id = -1
+	selected = null
+	update_hud()
+	_check_end()
+
+
+func _battle_loot(item_id: int) -> void:
+	if item_id < 0:
+		return
+	var items: Dictionary = battle_context.get("items", {})
+	items[str(item_id)] = int(items.get(str(item_id), 0)) + 1
+	battle_context["items"] = items
+	looted.emit(item_id)
+
+
+func _open_item_menu() -> void:
+	if selected == null or busy or phase != "player" or selected.acted:
+		return
+	var rows: Array = []
+	var inv: Dictionary = battle_context.get("items", {})
+	var keys: Array = inv.keys()
+	keys.sort_custom(func(a, b): return int(a) < int(b))
+	for k in keys:
+		if int(inv[k]) <= 0:
+			continue
+		var iid := int(k)
+		var kind := _item_kind(iid)
+		if kind in ["equip", "manual", "book", "other"]:
+			continue
+		var it: Dictionary = (data.get("items", {}) as Dictionary).get(str(iid), {})
+		rows.append({
+			"text": "%s ×%d%s" % [it.get("name", "?"), int(inv[k]),
+					"（投掷）" if kind == "throw" else ""],
+			"cb": _choose_item.bind(iid),
+		})
+	if rows.is_empty():
+		_log("没有可在战斗内使用的物品")
+		return
+	_open_action_panel("选择物品", rows)
+
+
+func _item_kind(item_id: int) -> String:
+	if item_id >= 81 and item_id <= 155:
+		return "equip"
+	if item_id >= 61 and item_id <= 80:
+		return "manual"
+	if item_id >= 31 and item_id <= 40:
+		return "book"
+	if item_id >= 41 and item_id <= 56:
+		return "throw"
+	if item_id >= 0 and item_id <= 30:
+		return "food"
+	return "other"
+
+
+func _choose_item(item_id: int) -> void:
+	_close_action_panel()
+	if selected == null or busy:
+		return
+	var it: Dictionary = (data.get("items", {}) as Dictionary).get(str(item_id), {})
+	if it.is_empty() or _inventory_count("items", item_id) <= 0:
+		return
+	active_item_id = item_id
+	active_skill = {}
+	active_skill_id = -1
+	var kind := _item_kind(item_id)
+	var targets := _item_targets(selected, it, kind)
+	mode = "item"
+	move_tiles.clear()
+	attack_tiles = targets
+	if targets.is_empty():
+		_log("物品范围内没有目标")
+		mode = "idle"
+	else:
+		_log("选择「%s」的目标" % it.get("name", "物品"))
+	update_hud()
+
+
+func _item_targets(caster: Node2D, it: Dictionary, kind: String) -> Dictionary:
+	var out := {}
+	var support := kind == "food"
+	var tiles := _select_tiles(caster, int(it.get("select_fw", 1)), support)
+	for t in tiles:
+		var target := _unit_at(t)
+		if target == null or not target.alive:
+			continue
+		if support and target.side == caster.side:
+			out[t] = target
+		elif not support and target.side != caster.side:
+			out[t] = target
+	return out
+
+
+func _execute_item_at(tile: Vector2i) -> void:
+	if selected == null or active_item_id < 0:
+		return
+	var caster = selected
+	var it: Dictionary = (data.get("items", {}) as Dictionary).get(str(active_item_id), {})
+	if it.is_empty() or _inventory_count("items", active_item_id) <= 0:
+		return
+	var kind := _item_kind(active_item_id)
+	var support := kind == "food"
+	var center := _unit_at(tile)
+	if center == null or (support and center.side != caster.side) \
+			or (not support and center.side == caster.side):
+		return
+	var targets := _item_targets(caster, it, kind)
+	if not targets.has(tile):
+		return
+	busy = true
+	mode = "idle"
+	move_tiles.clear()
+	attack_tiles.clear()
+	var area := _apply_tiles(tile, int(it.get("apply_fw", 0)))
+	var affected := 0
+	var deaths: Array = []
+	for cell in area:
+		var t: Vector2i = cell["tile"]
+		var pct := int(cell["pct"])
+		var target := _unit_at(t)
+		if target == null or not target.alive:
+			continue
+		if support and target.side != caster.side:
+			continue
+		if not support and target.side == caster.side:
+			continue
+		var p1 := int(it.get("para1", 0)) * pct / 100
+		var p2 := int(it.get("para2", 0)) * pct / 100
+		if kind == "food":
+			var p4 := int(it.get("para4", 16))
+			if p4 in [16, 18] and p1 > 0:
+				var heal := mini(p1, target.max_hp - target.hp)
+				target.hp += heal
+				_spawn_float("+%d" % heal, target.position, Color("#6bff8a"))
+				affected += 1
+			if p4 in [17, 18] and p2 > 0:
+				var add := mini(p2, max(0, 100 - target.morale))
+				target.morale += add
+				_spawn_float("士气+%d" % add, target.position, Color("#7fd8ff"))
+				affected += 1
+			_gain_xp(caster, 1)
+		elif kind == "throw":
+			var dmg := maxi(1, int(p1))
+			if _apply_hp_damage(target, dmg):
+				deaths.append(target)
+			target.morale = max(0, target.morale - p2)
+			affected += 1
+		target.refresh()
+	_consume_inventory("items", active_item_id)
+	caster.acted = true
+	caster.refresh()
+	_log("%s 使用「%s」，影响 %d 个目标" % [caster.unit_name, it.get("name", ""), affected])
+	for d in deaths:
+		_gain_xp(caster, CombatRules.kill_experience(caster.data.get("level", 1),
+				d.data.get("level", 1)))
+		_on_unit_died(d)
+	busy = false
+	active_item_id = -1
+	selected = null
+	update_hud()
+	_check_end()
+
+
+func _open_action_panel(title: String, rows: Array) -> void:
+	_close_action_panel()
+	action_panel = Control.new()
+	action_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	action_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	hud_root.add_child(action_panel)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	action_panel.add_child(dim)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(170, 110)
+	panel.size = Vector2(300, 260)
+	panel.add_theme_stylebox_override("panel", OriginalUI._style("panel_red.png"))
+	action_panel.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	panel.add_child(margin)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	margin.add_child(v)
+	var head := HBoxContainer.new()
+	var tl := OriginalUI.label(title, font, 16, OriginalUI.GOLD_LIGHT)
+	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(tl)
+	var close := OriginalUI.button("关闭", font, Vector2(58, 24),
+			_close_action_panel, 14)
+	close.custom_minimum_size = Vector2(58, 24)
+	head.add_child(close)
+	v.add_child(head)
+	v.add_child(HSeparator.new())
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 200)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 2)
+	scroll.add_child(list)
+	for row in rows:
+		var b := OriginalUI.button(str(row.get("text", "")), font,
+				Vector2(270, 28), row.get("cb", Callable()), 14)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		list.add_child(b)
+
+
+func _close_action_panel() -> void:
+	if action_panel != null and is_instance_valid(action_panel):
+		action_panel.queue_free()
+	action_panel = null
+
+
+func _open_mine_menu() -> void:
+	if selected == null or busy or phase != "player" or selected.acted:
+		return
+	var rows: Array = []
+	var inv: Dictionary = battle_context.get("mines", {})
+	for i in range((data.get("mines", []) as Array).size()):
+		var n := int(inv.get(str(i), 0))
+		if n <= 0:
+			continue
+		var m: Dictionary = data["mines"][i]
+		rows.append({
+			"text": "%s ×%d" % [m.get("name", "?"), n],
+			"cb": _choose_mine.bind(i),
+		})
+	if rows.is_empty():
+		_log("地雷库存为空")
+		return
+	_open_action_panel("选择地雷（库存）", rows)
+
+
+func _choose_mine(mid: int) -> void:
+	_close_action_panel()
+	mine_kind = mid
+	if not can_mine(selected):
+		var m: Dictionary = (data.get("mines", []) as Array)[mid]
+		_log("%s 不能在当前地形埋设（或库存不足）" % m.get("name", "地雷"))
+		return
+	_place_mine()
 
 
 # ---------------- 回合 / AI ----------------
@@ -939,6 +1649,13 @@ func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
 func _begin_player_phase(log_text: String = "") -> void:
 	phase = "player"
 	busy = false
+	for u in units:
+		if not u.alive:
+			continue
+		u.status_def_down = max(0, int(u.status_def_down) - 1)
+		u.status_atk_down = max(0, int(u.status_atk_down) - 1)
+		u.status_stun = max(0, int(u.status_stun) - 1)
+		u.status_disarm = max(0, int(u.status_disarm) - 1)
 	for u in player_units:
 		if u.alive:
 			if u.auto:
@@ -964,6 +1681,7 @@ func _begin_player_phase(log_text: String = "") -> void:
 func _on_end_turn() -> void:
 	if phase != "player" or busy or finished_flag:
 		return
+	_close_action_panel()
 	if _check_end():
 		return
 	# 友军 AI
@@ -975,7 +1693,8 @@ func _on_end_turn() -> void:
 		attack_tiles.clear()
 		_log("友军行动…")
 		update_hud()
-		await get_tree().create_timer(0.12).timeout
+		if not fast_sim:
+			await get_tree().create_timer(0.12).timeout
 		await _run_ally_turn()
 		if finished_flag:
 			return
@@ -991,7 +1710,8 @@ func _on_end_turn() -> void:
 			u.refresh()
 	_log("敌方行动…")
 	update_hud()
-	await get_tree().create_timer(0.18).timeout
+	if not fast_sim:
+		await get_tree().create_timer(0.18).timeout
 	await _run_enemy_turn()
 
 
@@ -1011,7 +1731,8 @@ func _run_ally_turn() -> void:
 		await _ai_act(p, "enemy")
 		if finished_flag:
 			return
-		await get_tree().create_timer(ai_delay).timeout
+		if not fast_sim:
+			await get_tree().create_timer(ai_delay).timeout
 
 
 func _run_enemy_turn() -> void:
@@ -1023,7 +1744,8 @@ func _run_enemy_turn() -> void:
 		await _ai_act(e, "player")
 		if finished_flag:
 			return
-		await get_tree().create_timer(ai_delay + 0.03).timeout
+		if not fast_sim:
+			await get_tree().create_timer(ai_delay + 0.03).timeout
 	if finished_flag:
 		return
 	turn += 1
@@ -1038,14 +1760,21 @@ func _nearest_side(u: Node2D, side: String) -> Node2D:
 	var arr: Array = player_units if side == "player" else enemy_units
 	var best: Node2D = null
 	var bestd := 99999
+	var fallback: Node2D = null
+	var fallbackd := 99999
 	for p in arr:
 		if not p.alive:
 			continue
 		var d: int = abs(p.x - u.x) + abs(p.y - u.y)
+		if d < fallbackd:
+			fallbackd = d
+			fallback = p
+		if p.protected:
+			continue
 		if d < bestd:
 			bestd = d
 			best = p
-	return best
+	return best if best != null else fallback
 
 
 func _nearest_player(u: Node2D) -> Node2D:
@@ -1061,11 +1790,23 @@ func _ai_act(u, enemy_side: String) -> void:
 		return
 	u.acted = false
 	u.moved = false
+	if int(u.status_stun) > 0:
+		u.acted = true
+		u.refresh()
+		return
 	var target = _nearest_side(u, enemy_side)
 	var goal := Vector2i(-1, -1)
 	if u.side == "enemy" and scenario != null:
 		goal = scenario.ai_goal(u)
-	if u.auto and (u.behavior == 8 or u.key in ["村民", "老百姓"]):
+	var peaceful: bool = u.auto and u.protected and int(u.data.get("gongji", 0)) <= 0
+	if peaceful:
+		# 非战斗人员：只躲，不主动攻击，避免被反击致死。
+		if target != null:
+			var dx := int(sign(u.x - target.x))
+			var dy := int(sign(u.y - target.y))
+			goal = Vector2i(clampi(u.x + dx * 4, 0, map_w - 1),
+					clampi(u.y + dy * 4, 0, map_h - 1))
+	elif u.auto and (u.behavior == 8 or u.key in ["村民", "老百姓"]):
 		# 村民/百姓：往远离敌人的方向躲
 		if target != null:
 			var dx := int(sign(u.x - target.x))
@@ -1086,7 +1827,7 @@ func _ai_act(u, enemy_side: String) -> void:
 			u.acted = true
 			u.refresh()
 		return
-	if target != null and _in_attack_range(u, target):
+	if not peaceful and target != null and _in_attack_range(u, target):
 		await _perform_attack(u, target)
 		return
 	var goal_tile := goal
@@ -1122,7 +1863,7 @@ func _ai_act(u, enemy_side: String) -> void:
 			return
 	u.moved = not steps.is_empty()
 	u.refresh()
-	if target != null and _in_attack_range(u, target):
+	if not peaceful and target != null and _in_attack_range(u, target):
 		await _perform_attack(u, target)
 	else:
 		u.acted = true
@@ -1210,6 +1951,206 @@ func _in_attack_range(attacker: Node2D, defender: Node2D) -> bool:
 	return targets.has(Vector2i(defender.x, defender.y))
 
 
+# ---------------- 无头全通 bot ----------------
+
+func _bot_pick_target(u: Node2D, targets: Dictionary):
+	if targets.is_empty():
+		return null
+	var obj: Dictionary = level.get("objective", {})
+	var wanted: Array = obj.get("name_keys", [])
+	for t in targets:
+		var e = targets[t]
+		if str(e.key) in wanted:
+			return e
+	var best = null
+	var bd := 999999
+	for t in targets:
+		var e = targets[t]
+		var d: int = absi(e.x - u.x) + absi(e.y - u.y)
+		if d < bd:
+			bd = d
+			best = e
+	return best
+
+
+func _bot_move_to(u: Node2D, goal: Vector2i) -> bool:
+	if not _in_bounds(goal):
+		return false
+	var dest := goal
+	if _is_occupied(dest, u):
+		dest = _adjacent_free(dest, u)
+	if dest.x < 0:
+		dest = _approach_tile(goal, u, 4)
+	if dest.x < 0:
+		return false
+	var path := _astar(Vector2i(u.x, u.y), dest, u)
+	if path.is_empty():
+		var step := _greedy_step(u, dest)
+		if step.x < 0:
+			return false
+		path = [step]
+	var budget := int(u.move)
+	var spent := 0
+	for t in path:
+		var c := move_cost(u.bingzhong, _terrain_at(t))
+		if c >= 99 or spent + c > budget:
+			break
+		spent += c
+		u.set_tile(t.x, t.y)
+		u.moved = true
+		u.refresh()
+		if finished_flag:
+			return true
+		if scenario != null:
+			scenario.on_unit_moved(u)
+		if finished_flag:
+			return true
+		if u.is_player():
+			var ci := _chest_at(t)
+			if ci >= 0:
+				_open_chest(u, ci)
+		if not u.alive:
+			return true
+	return spent > 0
+
+
+func _approach_tile(goal: Vector2i, u: Node2D, radius: int) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var bestd := 999999
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			if dx == 0 and dy == 0:
+				continue
+			var t := goal + Vector2i(dx, dy)
+			if not _in_bounds(t) or _is_occupied(t, u):
+				continue
+			if move_cost(u.bingzhong, _terrain_at(t)) >= 99:
+				continue
+			var d: int = absi(t.x - goal.x) + absi(t.y - goal.y)
+			if d < bestd:
+				bestd = d
+				best = t
+	return best
+
+
+func _bot_norm(text: String) -> String:
+	return str(text).replace("\u3000", "").replace(" ", "")
+
+
+func _bot_is_protected(u: Node2D) -> bool:
+	for n in level.get("protect", []):
+		if _bot_norm(str(n)) == _bot_norm(u.unit_name) \
+				or _bot_norm(str(n)) == _bot_norm(u.key):
+			return true
+	return u.protected
+
+
+func _bot_retreat(u: Node2D) -> void:
+	var nearest := _nearest_side(u, "enemy")
+	if nearest == null:
+		u.acted = true
+		return
+	var best := Vector2i(u.x, u.y)
+	var bestd := -1
+	for d in [Vector2i(8, 0), Vector2i(-8, 0), Vector2i(0, 8), Vector2i(0, -8),
+			Vector2i(6, 6), Vector2i(-6, 6), Vector2i(6, -6), Vector2i(-6, -6)]:
+		var t: Vector2i = Vector2i(clampi(u.x + d.x, 0, map_w - 1),
+				clampi(u.y + d.y, 0, map_h - 1))
+		var dd: int = absi(t.x - nearest.x) + absi(t.y - nearest.y)
+		if dd > bestd and not _is_occupied(t, u) \
+				and move_cost(u.bingzhong, _terrain_at(t)) < 99:
+			bestd = dd
+			best = t
+	if best != Vector2i(u.x, u.y):
+		_bot_move_to(u, best)
+	u.acted = true
+	u.refresh()
+
+
+func _bot_unit(u: Node2D) -> void:
+	if u == null or not u.alive or finished_flag:
+		return
+	var obj_type := str(level.get("objective", {}).get("type", "annihilate"))
+	var focused := obj_type in ["reach", "reach_unit", "kill", "collect", "race",
+			"capture_or_annihilate"]
+	var goal := {"kind": "hold", "tile": Vector2i(u.x, u.y)}
+	if scenario != null:
+		goal = scenario.bot_goal(u)
+	if _bot_is_protected(u) and obj_type != "race":
+		_bot_retreat(u)
+		return
+	# 目标关先赶路；只有目标本身或挡路敌人值得停下来打。
+	if not focused:
+		var targets0 := attack_targets(u)
+		var target0 = _bot_pick_target(u, targets0)
+		if target0 != null:
+			await _perform_attack(u, target0)
+			return
+	var moved := false
+	if str(goal.get("kind", "")) == "unit":
+		var tu = goal.get("unit", null)
+		if tu != null and is_instance_valid(tu) and tu.alive:
+			var dist := absi(tu.x - u.x) + absi(tu.y - u.y)
+			if dist <= 1:
+				if scenario != null:
+					scenario.on_unit_moved(u)
+					scenario.check_end()
+				u.acted = true
+				return
+			moved = _bot_move_to(u, Vector2i(tu.x, tu.y))
+	elif str(goal.get("kind", "")) == "tile":
+		var tt: Vector2i = goal.get("tile", Vector2i(-1, -1))
+		moved = _bot_move_to(u, tt)
+	if finished_flag or not u.alive:
+		return
+	var after := attack_targets(u)
+	var target2 = _bot_pick_target(u, after)
+	if target2 != null and (not focused or moved or _bot_is_goal_target(target2, goal)):
+		await _perform_attack(u, target2)
+		return
+	u.acted = true
+	u.refresh()
+
+
+func _bot_is_goal_target(target: Node2D, goal: Dictionary) -> bool:
+	if str(goal.get("kind", "")) != "unit":
+		return false
+	var gu = goal.get("unit", null)
+	return gu != null and target == gu
+
+func _bot_player_turn() -> void:
+	for u in player_units:
+		if finished_flag:
+			return
+		if not u.alive or u.auto or u.acted:
+			continue
+		await _bot_unit(u)
+
+
+func autoplay(max_turns: int = 80) -> Dictionary:
+	fast_sim = true
+	ai_delay = 0.0
+	stats["bot_trace"] = []
+	while not finished_flag and turn <= max_turns:
+		if turn % 5 == 1:
+			var tr := {"turn": turn, "players": [], "enemies": _alive_count(enemy_units)}
+			for pu in player_units:
+				if pu.alive:
+					tr["players"].append([pu.unit_name, pu.x, pu.y])
+			stats["bot_trace"].append(tr)
+		await _bot_player_turn()
+		if finished_flag:
+			break
+		await _on_end_turn()
+		if finished_flag:
+			break
+	var out := {"result": last_result, "message": last_message, "turn": turn,
+			"stats": stats.duplicate(true),
+			"finished": finished_flag, "phase": phase}
+	fast_sim = false
+	return out
+
+
 # ---------------- 按钮 ----------------
 
 func _on_attack() -> void:
@@ -1228,7 +2169,24 @@ func _on_attack() -> void:
 
 
 func _on_mine() -> void:
-	_place_mine()
+	if selected == null or busy or phase != "player":
+		return
+	var types := 0
+	for k in battle_context.get("mines", {}):
+		if int(battle_context["mines"][k]) > 0:
+			types += 1
+	if types > 1:
+		_open_mine_menu()
+	else:
+		_place_mine()
+
+
+func _on_skill() -> void:
+	_open_skill_menu()
+
+
+func _on_item() -> void:
+	_open_item_menu()
 
 
 func _on_wait() -> void:
@@ -1294,6 +2252,8 @@ func _finish(result: String, message: String) -> void:
 		return
 	_finishing = true
 	finished_flag = true
+	last_result = result
+	last_message = message
 	phase = "done"
 	busy = true
 	selected = null
@@ -1302,5 +2262,6 @@ func _finish(result: String, message: String) -> void:
 	stats["turns"] = turn
 	stats["enemies_left"] = _alive_count(enemy_units)
 	stats["players_left"] = _alive_count(player_units)
+	stats["log"] = log_history.duplicate()
 	update_hud()
 	finished.emit(result, message)

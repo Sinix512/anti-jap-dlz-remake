@@ -33,7 +33,8 @@ RECRUIT_PER_LEVEL = 80
 BATTLE_REWARD = 800
 BATTLE_LEVELS = [14, 8]
 
-STARTING_ITEMS = {68: 1, 69: 1, 71: 1, 79: 1}   # 武功/野战/战术/红巾
+STARTING_ITEMS = {68: 1, 69: 1, 71: 1, 79: 1, 1: 2, 14: 2, 21: 1, 81: 1}
+# 武功/野战/战术/红巾 + 复刻初始补给（核桃/干粮/米酒）+ 钢刀
 STARTING_MATERIALS = {0: 30, 1: 30, 2: 20, 3: 15, 4: 15,
                       5: 15, 6: 15, 7: 6, 8: 6, 9: 3}
 STARTING_MINES = {0: 1}

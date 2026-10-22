@@ -482,7 +482,8 @@ func _launch_level(idx: int, standalone: bool) -> void:
 	add_child(battle)
 	battle.finished.connect(_on_battle_finished)
 	battle.looted.connect(_on_loot)
-	battle.setup(m4, level, font)
+	var ctx: Dictionary = state.battle_context()
+	battle.setup(m4, level, font, ctx)
 	battle_start_stats = {"enemies": battle.enemy_units.size(),
 			"players": battle.player_units.size()}
 
@@ -505,6 +506,9 @@ func _on_battle_finished(result: String, message: String) -> void:
 			if int(u.data.get("pid", -1)) >= 0:
 				units.append({"pid": int(u.data.get("pid", -1)), "hp": int(u.hp)})
 		state.apply_battle_health(units)
+		state.apply_battle_context(battle.battle_context)
+		state.grant_battle_experience(battle.player_units, victory)
+		state.apply_battle_progress(battle.player_units)
 	var idx := current_battle_index
 	var score := _score_for(stats, victory, idx)
 	var info: Dictionary = {}

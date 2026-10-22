@@ -591,6 +591,26 @@ func _open_party() -> void:
 	right.add_child(_label("攻击 %d   防御 %d   移动 %d" % [
 		atk, df, int(u.get("yidong", 0))],
 		Vector2.ZERO, Vector2(300, 24), 16))
+	var eq_id := int(m.get("equip", -1))
+	var eq_text := "未装备"
+	if eq_id >= 0:
+		var eq_b: Dictionary = state.equip_bonus(eq_id)
+		eq_text = "%s  攻+%d 防+%d" % [state.item(eq_id).get("name", "?"),
+				int(eq_b["attack"]), int(eq_b["defense"])]
+	right.add_child(_label("装备：" + eq_text, Vector2.ZERO, Vector2(300, 22), 14,
+			Color("#e8ba4c") if eq_id >= 0 else Color("#b8c4d4")))
+	var eq_row := HBoxContainer.new()
+	eq_row.add_theme_constant_override("separation", 6)
+	right.add_child(eq_row)
+	var eb := _button("换装备", Vector2.ZERO, Vector2(100, 28),
+			_open_equip_panel.bind(int(m["pid"])), 14)
+	eb.custom_minimum_size = Vector2(100, 28)
+	eq_row.add_child(eb)
+	if eq_id >= 0:
+		var ub := _button("卸下", Vector2.ZERO, Vector2(80, 28),
+				_unequip.bind(int(m["pid"])), 14)
+		ub.custom_minimum_size = Vector2(80, 28)
+		eq_row.add_child(ub)
 	var c: Dictionary = state.can_promote(m)
 	if bool(c.get("ok", false)):
 		right.add_child(_label("可转职：%s → %s" % [m["unit_name"], c["target_name"]],
@@ -607,6 +627,80 @@ func _open_party() -> void:
 	else:
 		right.add_child(_label(str(c.get("msg", "无转职路线")), Vector2.ZERO,
 				Vector2(300, 24), 12, Color("#b8c4d4")))
+
+
+func _open_equip_panel(pid: int) -> void:
+	var m = state.get_member(pid)
+	if m == null:
+		return
+	var content := _panel_shell("装备 / %s" % m.get("name", ""), 520, 340)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	content.add_child(top)
+	var auto := _button("一键装备", Vector2.ZERO, Vector2(100, 28),
+			_auto_equip_all, 14)
+	auto.custom_minimum_size = Vector2(100, 28)
+	top.add_child(auto)
+	var back := _button("返回队伍", Vector2.ZERO, Vector2(100, 28),
+			_open_party, 14)
+	back.custom_minimum_size = Vector2(100, 28)
+	top.add_child(back)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(490, 235)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 2)
+	scroll.add_child(list)
+	var shown := 0
+	for k in state.items:
+		var iid := int(k)
+		if state.item_kind(iid) != "equip" or state.item_count(iid) <= 0:
+			continue
+		shown += 1
+		var it: Dictionary = state.item(iid)
+		var b: Dictionary = state.equip_bonus(iid)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var name_l := _label("%s  攻+%d 防+%d  库存%d" % [
+			it.get("name", "?"), int(b["attack"]), int(b["defense"]),
+			state.item_count(iid)], Vector2.ZERO, Vector2(350, 24), 14)
+		name_l.custom_minimum_size = Vector2(350, 24)
+		row.add_child(name_l)
+		var btn := _button("已装备" if int(m.get("equip", -1)) == iid else "装备",
+				Vector2.ZERO, Vector2(80, 26), _equip_selected.bind(pid, iid), 14)
+		btn.custom_minimum_size = Vector2(80, 26)
+		btn.disabled = int(m.get("equip", -1)) == iid
+		row.add_child(btn)
+		list.add_child(row)
+	if shown == 0:
+		list.add_child(_label("库存没有可装备物品；可在军械部购买。",
+				Vector2.ZERO, Vector2(470, 30), 14, Color("#b8c4d4")))
+
+
+func _equip_selected(pid: int, item_id: int) -> void:
+	var m = state.get_member(pid)
+	if m == null:
+		return
+	var r: Dictionary = state.equip_item(m, item_id)
+	_toast(str(r.get("msg", "")))
+	_open_party()
+
+
+func _unequip(pid: int) -> void:
+	var m = state.get_member(pid)
+	if m == null:
+		return
+	var r: Dictionary = state.unequip_item(m)
+	_toast(str(r.get("msg", "")))
+	_open_party()
+
+
+func _auto_equip_all() -> void:
+	state.auto_equip_party()
+	_toast("已按库存自动装备")
+	_open_party()
 
 
 func _party_select(pid: int) -> void:

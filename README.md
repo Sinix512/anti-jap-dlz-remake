@@ -131,7 +131,27 @@ python3 tools/prepare_m5_media.py
 python3 tools/verify_m5_media.py    # 1292 项检查，RESULT: PASS
 ```
 
-无头回归：`./verify_all.sh` 依次跑 M1Test / M2Test / M3Test / M4Test / M5Test。
+无头回归：`./verify_all.sh` 依次跑 M1Test / M2Test / M3Test / M4Test / M5Test / M6Test。
+
+## M6 战斗系统
+
+**M6 完成**：把作坊/商店的库存真正接进战斗，并换成原版数值。
+
+- **库存闭环**：`GameState.battle_context()` 生成地雷/物品快照；战斗中的雷种/物品/技能菜单
+  从库存读取，消耗记到 `consumed_*`；战后 `apply_battle_context()` 写回。
+- **技能**：16 个技能入口（补给/激励/医疗/火攻/滚木/擂石/威慑/骚扰/破坏/掠夺/反间/疑兵/
+  督战/暗杀/施毒/空袭），选择范围 + 应用范围 + 智力/技能次数公式。
+- **物品/装备**：食物/投掷物/武器/鞋靴/坐骑/车辆；队伍面板可换装备、卸下、一键装备。
+- **数值**：攻击/防御/伤害走 `CombatRules`，士气、装备完整度、地形、反击、AoE 地雷；
+  击杀经验 + 战后经验，100 经验/级，等级上限 99。
+- **自动验收**：`M6Test` 覆盖库存→战斗→消耗→写回、技能、物品、装备、升级、存档。
+  `M7Test` 用目标感知 bot 跑 47 关，当前代表关通过，**尚未 47/47**；失败列表见
+  [GAPS.md](GAPS.md) §9。
+
+```bash
+./verify_m6.sh          # M6 战斗系统回归
+./verify_all.sh         # M1-M6 全量无头回归
+```
 
 ## 里程碑总览
 
@@ -140,8 +160,9 @@ python3 tools/verify_m5_media.py    # 1292 项检查，RESULT: PASS
 | **M3 原味 UI** | **完成** | 640×480/4:3、原版 IMG/光标/HZK16、标题/战斗/城镇/面板/战报 |
 | **M4 关卡战役** | **完成** | 47 关数据 + 通用目标/触发器/增援/AI + 19 镇主线 + 隐藏关 |
 | **M5 剧情过场** | **完成** | 478 条对话 + 33 MPEG + 4 FLC + 38 ANM + 多结局 + 隐藏解锁 |
+| **M6 战斗系统** | **完成** | 库存闭环 + 16 技能 + 物品/装备 + 原版数值 + 经验/士气/反击；`M7Test` 自动全通 WIP |
 
-M3 只改表现；M4 扩关卡；M5 接剧情。旧文档里的“M3 剧情过场”已废弃。
+M3 只改表现；M4 扩关卡；M5 接剧情；M6 接战斗系统。旧文档里的“M3 剧情过场”已废弃。
 M4 的“目标/保护名单/城镇映射”是可玩性复刻，原版 EXE 的逐关触发器仍可继续反汇编精修。
 
 ## 已确认格式
@@ -422,13 +443,14 @@ EXE 里也没有 `dlz-01.pal` 字面量；地图用通用调色板渲染后地�
 ```bash
 python3 extract_all.py     # → out/img、out/map、out/face…、out/wave、data/*.json
 python3 verify.py          # 17,453 条断言，逐条校验格式结论与产物
-./run_game.sh              # → M1-M5 数据/UI/剧情/字库，打开完整游戏
-./verify_all.sh            # M1-M5 全量无头回归
+./run_game.sh              # → M1-M6 数据/UI/剧情/字库，打开完整游戏
+./verify_all.sh            # M1-M6 全量无头回归
 ./run_m1.sh                # M1 纵切
 ./run_m2.sh                # 兼容入口：等同 run_game.sh
 ./verify_m3.sh             # M3 原味 UI
 ./verify_m4.sh             # M4 47 关
 ./verify_m5.sh             # M5 剧情/结局
+./verify_m6.sh             # M6 战斗系统
 python3 tools/prepare_m5_media.py   # 首次/需要时：MPEG/FLC/ANM → godot/assets/m5
 ```
 
@@ -446,6 +468,6 @@ out/    img 86、map 47、face 170、army 91、mine 10、flm 32、goods 128、
 M0 图文报告（地图图集、数据表、彩蛋清单）在 `../dlz-m0-report/`，**不在本仓库内**；
 入口：`../dlz-m0-report/index.html` 或 `../dlz-m0-report/M0_REPORT.md`。
 
-M1-M5 工程：`godot/`（项目/场景/脚本/无头测试）；运行说明见 [godot/README.md](godot/README.md)。
+M1-M6 工程：`godot/`（项目/场景/脚本/无头测试）；运行说明见 [godot/README.md](godot/README.md)。
 原版 UI/关卡/剧情管线：`tools/prepare_m3.py`、`prepare_m4.py`、`prepare_m5.py`、
 `prepare_m5_media.py`；校验：`verify_all.sh`。
