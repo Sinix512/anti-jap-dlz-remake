@@ -380,7 +380,7 @@ func _open_mission() -> void:
 		int(lv["index"]), str(lv["name"])], 560, 300)
 	content.add_child(_label("胜利：%s\n失败：%s\n回合上限：%s\n目标：%s" % [
 		str(lv.get("success", "")), str(lv.get("failure", "")),
-		str(lv.get("turn_limit", 0)) if int(lv.get("turn_limit", 0)) > 0 else "无",
+		str(int(lv.get("turn_limit", 0))) if int(lv.get("turn_limit", 0)) > 0 else "无",
 		str(lv.get("objective", {}).get("label", ""))],
 		Vector2.ZERO, Vector2(520, 96), 16, OriginalUI.INK))
 	content.add_child(_label("可出击队伍：%d 人    部署点：%d" % [
