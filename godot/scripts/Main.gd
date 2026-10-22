@@ -360,6 +360,9 @@ func _show_title() -> void:
 	title_screen.story_archive.connect(_show_story_archive)
 	title_screen.settings.connect(_show_settings)
 	title_screen.quit_game.connect(func(): get_tree().quit())
+	var intro := OriginalUI.button("片头", font, Vector2(70, 26), _play_intro, 14)
+	intro.position = Vector2(552, 404)
+	title_screen.add_child(intro)
 	# M1 回归兼容：隐藏的 L14 快速入口（不参与视觉，仅测试/调试）
 	var debug := Button.new()
 	debug.text = "L14 地道战"
@@ -371,6 +374,27 @@ func _show_title() -> void:
 	debug2.visible = false
 	debug2.pressed.connect(_start_campaign)
 	title_screen.add_child(debug2)
+
+
+func _play_intro() -> void:
+	var media = _load_json("res://data/m5_media.json")
+	if not (media is Dictionary):
+		return
+	var path := ""
+	for c in media.get("clips", []):
+		if str(c.get("id", "")) == "kingsoft":
+			path = str(c.get("ogv_path", ""))
+			break
+	if path == "" or not ResourceLoader.exists(path):
+		return
+	var cp = load("res://scripts/m5/CutscenePlayer.gd").new()
+	add_child(cp)
+	if is_instance_valid(title_screen):
+		title_screen.visible = false
+	cp.setup(path, font, func():
+		if is_instance_valid(title_screen):
+			title_screen.visible = true
+		cp.queue_free())
 
 
 func _show_character_create() -> void:
