@@ -302,7 +302,10 @@ func _preview(n: int) -> void:
 		speaker = sp
 		face = int(l.get("face", -1))
 		text += "%s：%s\n" % [sp, _fmt(str(l.get("text", "")))]
-	_preview_name.text = "n=%d  %s" % [n, speaker]
+	var lv := int(rec.get("level", -1))
+	var tag := str(rec.get("trigger", "archive"))
+	_preview_name.text = "n=%d %s %s  %s" % [n,
+			("L%02d" % lv) if lv >= 0 else "档案", tag, speaker]
 	_preview_text.text = text
 	if face >= 0 and ResourceLoader.exists("res://assets/face/face_%03d.png" % face):
 		_preview_portrait.texture = load("res://assets/face/face_%03d.png" % face)

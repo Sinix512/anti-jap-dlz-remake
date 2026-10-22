@@ -178,6 +178,16 @@ def main() -> None:
                 if n in by_n:
                     by_n[n]["trigger"] = ev["trigger"]
 
+    # 全量 478 条加上 trigger / level 元数据：未能挂事件的明确标为 archive，
+    # 不假装已接入战斗；level=-1 表示不属于任何关卡场景。
+    for r in records:
+        r.setdefault("trigger", "archive")
+        r.setdefault("level", -1)
+    for k in scenes:
+        for n in scenes[k].get("all", []):
+            if int(n) in by_n:
+                by_n[int(n)]["level"] = int(k)
+
     # 剧情档案：按 n 顺序每 20 条一组
     archive = []
     for i in range(0, len(records), 20):
