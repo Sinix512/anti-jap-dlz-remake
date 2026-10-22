@@ -557,7 +557,11 @@ func _play_sfx(wave_id: int, volume_db: float = -6.0) -> void:
 			old.queue_free()
 	var p := AudioStreamPlayer.new()
 	p.stream = load(path)
-	p.volume_db = volume_db
+	var c := ConfigFile.new()
+	var sv := 0.8
+	if c.load("user://dlz_config.cfg") == OK:
+		sv = float(c.get_value("audio", "sfx_volume", 0.8))
+	p.volume_db = volume_db + linear_to_db(clampf(sv, 0.0, 1.0))
 	add_child(p)
 	sfx_nodes.append(p)
 	p.finished.connect(p.queue_free)

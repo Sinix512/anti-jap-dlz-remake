@@ -73,6 +73,8 @@ func _capture(mode: String) -> void:
 			pass
 		"character":
 			_show_character_create()
+		"settings":
+			_show_settings()
 		"battle":
 			_start_free_level(14)
 		"battle8":
@@ -606,7 +608,11 @@ func _start_bgm() -> void:
 	bgm.stream = load(path)
 	if bgm.stream is AudioStreamOggVorbis:
 		(bgm.stream as AudioStreamOggVorbis).loop = true
-	bgm.volume_db = -14.0
+	var c := ConfigFile.new()
+	var bv := 0.8
+	if c.load("user://dlz_config.cfg") == OK:
+		bv = float(c.get_value("audio", "bgm_volume", 0.8))
+	bgm.volume_db = -14.0 + linear_to_db(clampf(bv, 0.0, 1.0))
 	add_child(bgm)
 	bgm.play()
 
@@ -622,6 +628,8 @@ func _apply_saved_audio() -> void:
 func _show_settings() -> void:
 	if is_instance_valid(menu_root):
 		menu_root.queue_free()
+	if is_instance_valid(title_screen):
+		title_screen.visible = false
 	menu_root = Control.new()
 	menu_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_root.theme = theme_ref
@@ -648,7 +656,7 @@ func _show_settings() -> void:
 	edit.add_theme_font_size_override("font_size", 16)
 	edit.max_length = 8
 	menu_root.add_child(edit)
-	var vol_l := OriginalUI.label("音量（0–100）", font, 16,
+	var vol_l := OriginalUI.label("音量（0-100）", font, 16,
 			OriginalUI.GOLD_LIGHT)
 	vol_l.position = Vector2(360, y)
 	vol_l.size = Vector2(220, 22)
@@ -675,30 +683,58 @@ func _show_settings() -> void:
 	full.add_theme_font_override("font", font)
 	full.add_theme_font_size_override("font_size", 16)
 	menu_root.add_child(full)
+	var bgm_l := OriginalUI.label("BGM 音量", font, 14, OriginalUI.GOLD_LIGHT)
+	bgm_l.position = Vector2(80, y + 112)
+	bgm_l.size = Vector2(200, 20)
+	menu_root.add_child(bgm_l)
+	var bgm_vol := HSlider.new()
+	bgm_vol.min_value = 0.0
+	bgm_vol.max_value = 1.0
+	bgm_vol.step = 0.05
+	bgm_vol.value = float(cfg.get_value("audio", "bgm_volume", 0.8))
+	bgm_vol.position = Vector2(80, y + 132)
+	bgm_vol.size = Vector2(200, 24)
+	menu_root.add_child(bgm_vol)
+	var sfx_l := OriginalUI.label("音效音量", font, 14, OriginalUI.GOLD_LIGHT)
+	sfx_l.position = Vector2(320, y + 112)
+	sfx_l.size = Vector2(200, 20)
+	menu_root.add_child(sfx_l)
+	var sfx_vol := HSlider.new()
+	sfx_vol.min_value = 0.0
+	sfx_vol.max_value = 1.0
+	sfx_vol.step = 0.05
+	sfx_vol.value = float(cfg.get_value("audio", "sfx_volume", 0.8))
+	sfx_vol.position = Vector2(320, y + 132)
+	sfx_vol.size = Vector2(200, 24)
+	menu_root.add_child(sfx_vol)
 	var save := OriginalUI.button("保存并返回", font, Vector2(160, 34),
-			_save_settings.bind(edit, full, vol, variant), 16)
-	save.position = Vector2(80, y + 140)
+			_save_settings.bind(edit, full, vol, variant, bgm_vol, sfx_vol), 16)
+	save.position = Vector2(80, y + 200)
 	menu_root.add_child(save)
 	var back := OriginalUI.button("返回", font, Vector2(100, 30), _show_title, 16)
-	back.position = Vector2(260, y + 142)
+	back.position = Vector2(260, y + 202)
 	menu_root.add_child(back)
 	var note := OriginalUI.label("窗口基准 640×480，整数倍最近邻缩放。", font, 14,
 			Color("#b9a98b"))
-	note.position = Vector2(80, y + 196)
+	note.position = Vector2(80, y + 246)
 	note.size = Vector2(480, 22)
 	menu_root.add_child(note)
 
 
 func _save_settings(edit: LineEdit, full: CheckButton, vol: HSlider,
-		variant: CheckButton) -> void:
+		variant: CheckButton, bgm_vol: HSlider, sfx_vol: HSlider) -> void:
 	var c := ConfigFile.new()
 	var nm := edit.text.strip_edges()
 	c.set_value("player", "name", nm if nm != "" else "李勇")
 	c.set_value("video", "fullscreen", full.button_pressed)
 	c.set_value("audio", "master_volume", float(vol.value))
+	c.set_value("audio", "bgm_volume", float(bgm_vol.value))
+	c.set_value("audio", "sfx_volume", float(sfx_vol.value))
 	c.set_value("video", "story_variant", variant.button_pressed)
 	c.save("user://dlz_config.cfg")
 	AudioServer.set_bus_volume_db(0, linear_to_db(clampf(float(vol.value), 0.0, 1.0)))
+	if is_instance_valid(bgm):
+		bgm.volume_db = -14.0 + linear_to_db(clampf(float(bgm_vol.value), 0.0, 1.0))
 	if full.button_pressed:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
