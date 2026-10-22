@@ -117,6 +117,12 @@ func _capture(mode: String) -> void:
 			if is_instance_valid(campaign):
 				campaign.selected_town = 1
 				campaign._open_shop("junxie")
+		"toast":
+			_start_campaign()
+			for i in range(3):
+				await get_tree().process_frame
+			if is_instance_valid(campaign):
+				campaign._toast("自动存档已写入槽 7")
 		"m4-shop-zahuo":
 			_start_campaign()
 			for i in range(3):

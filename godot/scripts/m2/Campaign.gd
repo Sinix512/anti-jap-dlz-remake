@@ -26,6 +26,7 @@ var _shop_detail: Label
 var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
+var toast_bg: NinePatchRect
 
 
 func setup(font_ref: Font) -> void:
@@ -158,15 +159,26 @@ func _top_status(title: String) -> void:
 func _toast(msg: String) -> void:
 	if is_instance_valid(toast):
 		toast.queue_free()
-	toast = _label(msg, Vector2(8, 48), Vector2(624, 24), 16, Color("#ffe08a"))
+	if is_instance_valid(toast_bg):
+		toast_bg.queue_free()
+	var parent: Control = panel_root if is_instance_valid(panel_root) else ui_root
+	toast_bg = OriginalUI.nine_patch("res://assets/ui/panel_stone_small.png",
+			Rect2(150, 64, 340, 58), 10)
+	parent.add_child(toast_bg)
+	toast = _label(msg, Vector2(162, 80), Vector2(316, 26), 16, Color("#ffe08a"))
 	toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
 	toast.add_theme_constant_override("outline_size", 4)
-	var parent: Control = panel_root if is_instance_valid(panel_root) else ui_root
+	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	parent.add_child(toast)
 	var tw := create_tween()
 	tw.tween_interval(2.0)
-	tw.tween_property(toast, "modulate:a", 0.0, 0.6)
-	tw.tween_callback(toast.queue_free)
+	tw.parallel().tween_property(toast, "modulate:a", 0.0, 0.6)
+	tw.parallel().tween_property(toast_bg, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(func():
+		if is_instance_valid(toast):
+			toast.queue_free()
+		if is_instance_valid(toast_bg):
+			toast_bg.queue_free())
 
 
 # ---------------- 世界地图 ----------------
