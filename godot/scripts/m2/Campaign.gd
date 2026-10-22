@@ -1065,6 +1065,22 @@ func _open_save_impl(load_first: bool) -> void:
 			loadb.disabled = true
 		row.add_child(loadb)
 		content.add_child(row)
+	var auto: Dictionary = state.slot_info(7)
+	if not auto.is_empty():
+		var arow := HBoxContainer.new()
+		arow.add_theme_constant_override("separation", 8)
+		var atxt := "自动存档（胜利后）：第 %d 天 / 资金 %d / %d 人" % [
+			int(auto.get("day", 0)), int(auto.get("money", 0)),
+			(auto.get("party", []) as Array).size()]
+		var al := _label(atxt, Vector2.ZERO, Vector2(390, 24), 14,
+				Color("#8fe0a8"))
+		al.custom_minimum_size = Vector2(390, 24)
+		arow.add_child(al)
+		var aload := _button("读取自动存档", Vector2.ZERO, Vector2(110, 28),
+				_load_auto_save, 14)
+		aload.custom_minimum_size = Vector2(110, 28)
+		arow.add_child(aload)
+		content.add_child(arow)
 	var cp: Dictionary = state.slot_info(8)
 	if not cp.is_empty():
 		var crow := HBoxContainer.new()
@@ -1128,6 +1144,16 @@ func _save_slot(slot: int) -> void:
 	else:
 		_toast("存档失败")
 	_open_save_impl(false)
+
+
+func _load_auto_save() -> void:
+	if state.load_slot(7):
+		selected_town = state.current_town
+		_close_panel()
+		_toast("已读取自动存档")
+		_show_town(selected_town)
+	else:
+		_toast("没有自动存档")
 
 
 func _load_checkpoint() -> void:
