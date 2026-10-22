@@ -766,12 +766,14 @@ func original_info(path: String = "user://dlz_original.dat") -> Dictionary:
 func difficulty_scale() -> float:
 	match difficulty:
 		0: return 0.75
-		2: return 1.30
+		2: return 1.15
 		_: return 1.0
 
 
 func apply_difficulty(level: Dictionary) -> void:
 	var scale := difficulty_scale()
+	if difficulty == 2:
+		level["turn_limit"] = maxi(60, int(level.get("turn_limit", 60)) + 30)
 	if is_equal_approx(scale, 1.0):
 		return
 	for u in level.get("units", []):
@@ -782,7 +784,7 @@ func apply_difficulty(level: Dictionary) -> void:
 		u["max_hp"] = hp
 		u["raw_hp"] = hp
 		u["hp_source"] = str(u.get("hp_source", "")) + "+difficulty"
-		var atk := -8 if difficulty == 0 else 8
+		var atk := -8 if difficulty == 0 else 4
 		u["attack_bonus"] = int(u.get("attack_bonus", 0)) + atk
 
 
