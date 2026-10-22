@@ -113,7 +113,7 @@ func _capture(mode: String) -> void:
 			for i in range(3):
 				await get_tree().process_frame
 			if is_instance_valid(campaign):
-				campaign._show_k03_roster()
+				campaign._show_k03_workshop()
 		"m2-house", "m4-house":
 			_start_campaign()
 			for i in range(3):

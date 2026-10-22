@@ -21,8 +21,6 @@ var result_canvas: CanvasLayer
 var mode := "world"
 var selected_town := 0
 var party_selected := -1
-var k03_selected := 0
-var k03_page := 0
 var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
@@ -487,6 +485,9 @@ func _shop_action(kind: String, id: int, selling: bool) -> void:
 
 func _open_forge() -> void:
 	var content := _panel_shell("作坊 / 锻造地雷", 560, 390)
+	var k3 := _button("K03 原版作坊", Vector2.ZERO, Vector2(130, 28),
+			_show_k03_workshop, 14)
+	content.add_child(k3)
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 8)
 	content.add_child(top)
@@ -576,9 +577,6 @@ func _forge(mid: int) -> void:
 
 func _open_party() -> void:
 	var content := _panel_shell("队伍 / 转职", 560, 390)
-	var k3 := _button("K03 队伍状态", Vector2.ZERO, Vector2(140, 28),
-			_show_k03_roster, 14)
-	content.add_child(k3)
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -746,7 +744,7 @@ func _auto_equip_all() -> void:
 	_open_party()
 
 
-func _show_k03_roster() -> void:
+func _show_k03_workshop() -> void:
 	_new_ui()
 	var bg := TextureRect.new()
 	bg.texture = load("res://assets/ui/k03.png") \
@@ -757,92 +755,60 @@ func _show_k03_roster() -> void:
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
 	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ui_root.add_child(bg)
-	ui_root.add_child(OriginalUI.header("队 伍 状 态 / K03", font,
+	ui_root.add_child(OriginalUI.header("作 坊 / 材 料 与 配 方", font,
 			Rect2(0, 0, 640, 30)))
-	var total: int = state.party.size()
-	var pages: int = maxi(1, int(ceil(float(total) / 4.0)))
-	k03_page = clampi(k03_page, 0, pages - 1)
-	var start: int = k03_page * 4
-	var shown: int = mini(4, maxi(0, total - start))
-	if k03_selected < start or k03_selected >= start + shown:
-		k03_selected = start
-	for j in range(shown):
-		var i := start + j
-		var m: Dictionary = state.party[i]
+	var mats: Dictionary = m2.get("materials", {})
+	var keys: Array = mats.keys()
+	keys.sort()
+	var shown := mini(4, keys.size())
+	for i in range(shown):
+		var mid := int(keys[i])
+		var m: Dictionary = mats[str(mid)]
 		var slot := Vector2(28 + (i % 2) * 80, 126 + int(i / 2) * 80)
-		var portrait := TextureRect.new()
-		portrait.position = slot
-		portrait.size = Vector2(64, 52)
-		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		if ResourceLoader.exists(str(m.get("face_png", ""))):
-			portrait.texture = load(m["face_png"])
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ui_root.add_child(portrait)
-		var b := _button("", slot, Vector2(64, 76), _k03_select.bind(i), 14)
-		b.flat = true
-		ui_root.add_child(b)
-		var name_l := OriginalUI.label("%s Lv%d" % [m.get("name", ""),
-				int(m.get("level", 1))], font, 12,
-				OriginalUI.GOLD_LIGHT if i == k03_selected else Color("#e8dcc2"))
-		name_l.position = slot + Vector2(0, 54)
-		name_l.size = Vector2(74, 18)
-		ui_root.add_child(name_l)
-	var m = state.party[k03_selected] if k03_selected < state.party.size() else null
-	if m != null:
-		var info_bg := ColorRect.new()
-		info_bg.color = Color(0, 0, 0, 0.58)
-		info_bg.position = Vector2(276, 78)
-		info_bg.size = Vector2(316, 252)
-		info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ui_root.add_child(info_bg)
-		var info := "姓名：%s
-兵种：%s  Lv%d
-HP：%d/%d
-武力：%d  智力：%d
-武器：%s
-技能：%s" % [
-			m.get("name", ""), m.get("unit_name", ""), int(m.get("level", 1)),
-			int(m.get("hp", 0)), int(m.get("max_hp", 0)),
-			int(m.get("wuli", 0)), int(m.get("zhili", 0)),
-			m.get("equip_name", "无"), m.get("skill_text", "—")]
-		var info_l := OriginalUI.label(info, font, 14, Color("#f0e4c8"))
-		info_l.position = Vector2(286, 92)
-		info_l.size = Vector2(320, 250)
-		ui_root.add_child(info_l)
-	var prev := _button("上 页", Vector2(40, 400), Vector2(80, 30),
-			_k03_page.bind(-1), 14)
-	prev.disabled = k03_page <= 0
-	ui_root.add_child(prev)
-	var next := _button("下 页", Vector2(130, 400), Vector2(80, 30),
-			_k03_page.bind(1), 14)
-	next.disabled = k03_page >= pages - 1
-	ui_root.add_child(next)
-	var pg := OriginalUI.label("%d / %d" % [k03_page + 1, pages], font, 12,
-			Color("#e8dcc2"))
-	pg.position = Vector2(220, 406)
-	pg.size = Vector2(60, 20)
-	ui_root.add_child(pg)
-	var back := _button("返 回 队 伍", Vector2(450, 400), Vector2(140, 30),
-			_open_party, 14)
+		var icon := TextureRect.new()
+		icon.position = slot
+		icon.size = Vector2(64, 52)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		if ResourceLoader.exists(str(m.get("icon", ""))):
+			icon.texture = load(m["icon"])
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ui_root.add_child(icon)
+		var l := OriginalUI.label("%s ×%d" % [m.get("name", ""),
+				state.material_count(mid)], font, 12, Color("#f0e4c8"))
+		l.position = slot + Vector2(0, 54)
+		l.size = Vector2(74, 18)
+		ui_root.add_child(l)
+	var info_bg := ColorRect.new()
+	info_bg.color = Color(0, 0, 0, 0.62)
+	info_bg.position = Vector2(276, 78)
+	info_bg.size = Vector2(316, 252)
+	info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(info_bg)
+	var lines := "材料库存\n"
+	for mid in keys:
+		lines += "%s：%d\n" % [mats[mid].get("name", ""),
+				state.material_count(int(mid))]
+	var info := OriginalUI.label(lines, font, 14, Color("#f0e4c8"))
+	info.position = Vector2(286, 90)
+	info.size = Vector2(300, 190)
+	ui_root.add_child(info)
+	var recip := OriginalUI.label("地雷配方：%d 种" % (m2.get("mine_recipes", []) as Array).size(),
+			font, 14, OriginalUI.GOLD_LIGHT)
+	recip.position = Vector2(286, 292)
+	recip.size = Vector2(300, 22)
+	ui_root.add_child(recip)
+	var forge := _button("打开锻造面板", Vector2(286, 326), Vector2(140, 30),
+			_open_forge, 14)
+	ui_root.add_child(forge)
+	var back := _button("返 回 城 镇", Vector2(450, 400), Vector2(140, 30),
+			func(): _close_panel(); _show_town(selected_town), 14)
 	ui_root.add_child(back)
-	var note := OriginalUI.label("K03 原版队伍状态 / 每页 4 人", font, 12,
+	var note := OriginalUI.label("K03 原版作坊 / 材料与配方", font, 12,
 			Color("#c8b88f"))
 	note.position = Vector2(40, 440)
 	ui_root.add_child(note)
-
-
-func _k03_select(i: int) -> void:
-	k03_selected = i
-	k03_page = int(i / 4)
-	_show_k03_roster()
-
-
-func _k03_page(delta: int) -> void:
-	k03_page = maxi(0, k03_page + delta)
-	k03_selected = k03_page * 4
-	_show_k03_roster()
 
 
 func _party_select(pid: int) -> void:
