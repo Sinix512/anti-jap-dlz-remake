@@ -104,16 +104,15 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	b.put_data(people)
 	b.put_data(people)
 	for i in range(160):
-		var v := 0
-		if i == 0:
-			v = mini(65535, int(state.money))
-		else:
-			v = mini(65535, state.item_count(i - 1))
-		b.put_u16(v)
+		b.put_u16(mini(65535, state.item_count(i)))
 	_pad(b, 320)
 	for i in range(40):
 		b.put_u16(1 if state.has_member(i) else 0)
-	_pad(b, 40)
+	# block21：原版 10×u32 的用途未完全确认；这里用私有 magic 存 money，
+	# 不用 cangku[0] 覆盖蟠桃数量。
+	b.put_u32(0x4D4F4E59)  # MONY
+	b.put_u32(mini(0xFFFFFFFF, int(state.money)))
+	_pad(b, 32)
 	_pad(b, 32768)
 	_pad(b, 8)
 	_pad(b, 28)
@@ -159,11 +158,10 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	var cangku: Array = []
 	for i in range(160):
 		cangku.append(int(b.get_u16()))
-	out["money"] = cangku[0]
 	var items := {}
-	for i in range(1, 160):
+	for i in range(160):
 		if cangku[i] > 0:
-			items[str(i - 1)] = cangku[i]
+			items[str(i)] = cangku[i]
 	out["items"] = items
 	_skip(b, 320)
 	var members: Array = []
@@ -171,6 +169,10 @@ static func decode(data: PackedByteArray) -> Dictionary:
 		if int(b.get_u16()) != 0:
 			members.append(i)
 	out["members"] = members
+	var ext: Array = []
+	for i in range(10):
+		ext.append(int(b.get_u32()))
+	out["money"] = ext[1] if ext[0] == 0x4D4F4E59 else 0
 	out["score_total"] = progress[1] if progress.size() > 1 else 0
 	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
 	out["ending_id"] = progress[3] if progress.size() > 3 else 0
