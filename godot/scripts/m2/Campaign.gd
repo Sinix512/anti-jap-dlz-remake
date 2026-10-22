@@ -22,6 +22,7 @@ var mode := "world"
 var selected_town := 0
 var party_selected := -1
 var k03_selected := 0
+var k03_page := 0
 var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
@@ -758,10 +759,15 @@ func _show_k03_roster() -> void:
 	ui_root.add_child(bg)
 	ui_root.add_child(OriginalUI.header("队 伍 状 态 / K03", font,
 			Rect2(0, 0, 640, 30)))
-	var shown := mini(4, state.party.size())
-	if k03_selected >= shown:
-		k03_selected = 0
-	for i in range(shown):
+	var total: int = state.party.size()
+	var pages: int = maxi(1, int(ceil(float(total) / 4.0)))
+	k03_page = clampi(k03_page, 0, pages - 1)
+	var start: int = k03_page * 4
+	var shown: int = mini(4, maxi(0, total - start))
+	if k03_selected < start or k03_selected >= start + shown:
+		k03_selected = start
+	for j in range(shown):
+		var i := start + j
 		var m: Dictionary = state.party[i]
 		var slot := Vector2(28 + (i % 2) * 80, 126 + int(i / 2) * 80)
 		var portrait := TextureRect.new()
@@ -805,10 +811,23 @@ HP：%d/%d
 		info_l.position = Vector2(286, 92)
 		info_l.size = Vector2(320, 250)
 		ui_root.add_child(info_l)
+	var prev := _button("上 页", Vector2(40, 400), Vector2(80, 30),
+			_k03_page.bind(-1), 14)
+	prev.disabled = k03_page <= 0
+	ui_root.add_child(prev)
+	var next := _button("下 页", Vector2(130, 400), Vector2(80, 30),
+			_k03_page.bind(1), 14)
+	next.disabled = k03_page >= pages - 1
+	ui_root.add_child(next)
+	var pg := OriginalUI.label("%d / %d" % [k03_page + 1, pages], font, 12,
+			Color("#e8dcc2"))
+	pg.position = Vector2(220, 406)
+	pg.size = Vector2(60, 20)
+	ui_root.add_child(pg)
 	var back := _button("返 回 队 伍", Vector2(450, 400), Vector2(140, 30),
 			_open_party, 14)
 	ui_root.add_child(back)
-	var note := OriginalUI.label("K03 原版队伍状态 / 显示前 4 人", font, 12,
+	var note := OriginalUI.label("K03 原版队伍状态 / 每页 4 人", font, 12,
 			Color("#c8b88f"))
 	note.position = Vector2(40, 440)
 	ui_root.add_child(note)
@@ -816,6 +835,13 @@ HP：%d/%d
 
 func _k03_select(i: int) -> void:
 	k03_selected = i
+	k03_page = int(i / 4)
+	_show_k03_roster()
+
+
+func _k03_page(delta: int) -> void:
+	k03_page = maxi(0, k03_page + delta)
+	k03_selected = k03_page * 4
 	_show_k03_roster()
 
 
