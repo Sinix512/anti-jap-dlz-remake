@@ -3,7 +3,7 @@ extends RefCounted
 ## M2 战役状态：金钱、天数、队伍、库存、解放城镇、存档。
 ## 纯逻辑，不依赖场景；Campaign/面板调用。
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 
 var data: Dictionary = {}
 var money := 0
@@ -15,6 +15,17 @@ var mines: Dictionary = {}
 var liberated: Array = []
 var current_town := 0
 var saved_at := ""
+
+# M4/M5 战役进度
+var campaign_index := 0
+var campaign_completed: Array = []
+var level_scores: Dictionary = {}
+var score_total := 0
+var hidden_unlocked := false
+var hidden_done: Array = []
+var ending_id := 0
+var player_name := "李勇"
+var m4_data: Dictionary = {}
 
 
 func new_game(m2: Dictionary) -> void:
@@ -28,6 +39,15 @@ func new_game(m2: Dictionary) -> void:
 	materials.clear()
 	mines.clear()
 	liberated.clear()
+	campaign_index = 0
+	campaign_completed.clear()
+	level_scores.clear()
+	score_total = 0
+	hidden_unlocked = false
+	hidden_done.clear()
+	ending_id = 0
+	if player_name == "":
+		player_name = "李勇"
 	var start: Dictionary = data.get("starting", {})
 	for pid in start.get("party", []):
 		_add_member(int(pid))
@@ -335,6 +355,153 @@ func apply_battle(victory: bool, battle_units: Array, town_index: int) -> Dictio
 	return {"reward": reward, "liberated": victory}
 
 
+func setup_m4(m4: Dictionary) -> void:
+	m4_data = m4
+
+
+func m4_levels() -> Array:
+	return m4_data.get("levels", [])
+
+
+func m4_level(index: int) -> Dictionary:
+	var arr := m4_levels()
+	if index < 0 or index >= arr.size():
+		return {}
+	return arr[index]
+
+
+func campaign_level() -> Dictionary:
+	if campaign_index >= 36:
+		return {}
+	return m4_level(campaign_index)
+
+
+func campaign_finished() -> bool:
+	return campaign_index >= 36
+
+
+func level_town(index: int) -> int:
+	var lv := m4_level(index)
+	return int(lv.get("town", 0))
+
+
+func town_unlocked(town_index: int) -> bool:
+	if campaign_finished() or hidden_unlocked:
+		return true
+	for i in range(min(campaign_index + 1, 36)):
+		if level_town(i) == town_index:
+			return true
+	for i in campaign_completed:
+		if level_town(int(i)) == town_index:
+			return true
+	return false
+
+
+func is_level_completed(index: int) -> bool:
+	return index in campaign_completed
+
+
+func level_score(index: int) -> int:
+	return int(level_scores.get(str(index), 0))
+
+
+func _add_score(index: int, score: int) -> void:
+	var old := level_score(index)
+	if score > old:
+		level_scores[str(index)] = score
+		score_total += score - old
+
+
+func complete_level(index: int, score: int, victory: bool) -> Dictionary:
+	var lv := m4_level(index)
+	if lv.is_empty():
+		return {"ok": false}
+	var reward := 0
+	if victory:
+		reward = int(lv.get("reward_money", 0)) + 600 + index * 20
+		money += reward
+		_add_score(index, clampi(score, 0, 100))
+		if not campaign_completed.has(index):
+			campaign_completed.append(index)
+		if index < 36 and index == campaign_index:
+			while campaign_index < 36 and campaign_completed.has(campaign_index):
+				campaign_index += 1
+		elif index >= 36:
+			if not hidden_done.has(index):
+				hidden_done.append(index)
+		var town := level_town(index)
+		if town >= 0 and not liberated.has(town):
+			liberated.append(town)
+		if campaign_index >= 36:
+			hidden_unlocked = score_total >= 2800 or not hidden_done.is_empty()
+			ending_id = ending_for_score(score_total)
+	day += 1
+	return {"ok": true, "reward": reward, "score": level_score(index),
+			"total": score_total, "hidden": hidden_unlocked,
+			"ending": ending_id}
+
+
+func ending_for_score(score: int) -> int:
+	if score >= 3600:
+		return 4
+	if score >= 3300:
+		return 3
+	if score >= 3000:
+		return 2
+	if score >= 2800:
+		return 1
+	return 0
+
+
+func ending_image() -> String:
+	var id := ending_id
+	if id < 0 or id > 5:
+		id = 0
+	var path := "res://assets/ui/end_%02d.png" % id
+	return path if ResourceLoader.exists(path) else ""
+
+
+func grade_for_score(score: int) -> int:
+	if score >= 95:
+		return 4
+	if score >= 80:
+		return 3
+	if score >= 60:
+		return 2
+	if score >= 30:
+		return 1
+	return 0
+
+
+func hidden_next(mode: String) -> int:
+	var lo := 36 if mode == "simulation" else 40
+	var hi := 40 if mode == "simulation" else 44
+	for i in range(lo, hi):
+		if not hidden_done.has(i):
+			return i
+	return -1
+
+
+func hidden_mode_done(mode: String) -> bool:
+	return hidden_next(mode) < 0
+
+
+func available_easter() -> Array:
+	if hidden_unlocked or not hidden_done.is_empty():
+		return [44, 45, 46]
+	return []
+
+
+func apply_battle_health(units: Array) -> void:
+	for u in units:
+		var pid := int(u.get("pid", -1))
+		if pid < 0:
+			continue
+		var m = get_member(pid)
+		if m != null and m is Dictionary:
+			(m as Dictionary)["hp"] = max(0, int(u.get("hp", 0)))
+
+
 func to_dict() -> Dictionary:
 	return {
 		"version": SAVE_VERSION,
@@ -346,12 +513,20 @@ func to_dict() -> Dictionary:
 		"mines": mines.duplicate(true),
 		"liberated": liberated.duplicate(),
 		"current_town": current_town,
+		"campaign_index": campaign_index,
+		"campaign_completed": campaign_completed.duplicate(),
+		"level_scores": level_scores.duplicate(true),
+		"score_total": score_total,
+		"hidden_unlocked": hidden_unlocked,
+		"hidden_done": hidden_done.duplicate(),
+		"ending_id": ending_id,
+		"player_name": player_name,
 		"saved_at": Time.get_datetime_string_from_system(),
 	}
 
 
 func from_dict(d: Dictionary) -> bool:
-	if int(d.get("version", 0)) != SAVE_VERSION:
+	if int(d.get("version", 0)) not in [1, SAVE_VERSION]:
 		return false
 	money = int(d.get("money", 0))
 	day = int(d.get("day", 1))
@@ -367,6 +542,16 @@ func from_dict(d: Dictionary) -> bool:
 		mines[str(k)] = int(d["mines"][k])
 	liberated = (d.get("liberated", []) as Array).duplicate()
 	current_town = int(d.get("current_town", 0))
+	campaign_index = int(d.get("campaign_index", 0))
+	campaign_completed = (d.get("campaign_completed", []) as Array).duplicate()
+	level_scores = {}
+	for k in d.get("level_scores", {}):
+		level_scores[str(k)] = int(d["level_scores"][k])
+	score_total = int(d.get("score_total", 0))
+	hidden_unlocked = bool(d.get("hidden_unlocked", false))
+	hidden_done = (d.get("hidden_done", []) as Array).duplicate()
+	ending_id = int(d.get("ending_id", 0))
+	player_name = str(d.get("player_name", "李勇"))
 	saved_at = str(d.get("saved_at", ""))
 	return true
 

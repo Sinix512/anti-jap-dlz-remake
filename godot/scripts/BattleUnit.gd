@@ -16,6 +16,16 @@ var move := 4
 var select := 1
 var bingzhong := 0
 var direction := 1
+var slot := -1
+var key := ""
+var behavior := 1
+var target_slot := 0
+var target_x := 0
+var target_y := 0
+var control := true
+var auto := false
+var protected := false
+var is_boss := false
 var acted := false
 var moved := false
 var alive := true
@@ -30,14 +40,24 @@ func setup(d: Dictionary, b: Node) -> void:
 	battle = b
 	side = str(d.get("side", "enemy"))
 	unit_name = str(d.get("name", "?"))
+	key = str(d.get("key", unit_name.replace("\u3000", "").replace(" ", "")))
 	x = int(d.get("x", 0))
 	y = int(d.get("y", 0))
 	hp = int(d.get("hp", 1))
-	max_hp = max(1, hp)
+	max_hp = max(1, int(d.get("max_hp", hp)))
 	move = int(d.get("move", 4))
 	select = int(d.get("select", 1))
 	bingzhong = int(d.get("bingzhong", 0))
 	direction = int(d.get("direction", 1))
+	slot = int(d.get("slot", -1))
+	behavior = int(d.get("behavior", 1))
+	target_slot = int(d.get("target_slot", 0))
+	target_x = int(d.get("target_x", 0))
+	target_y = int(d.get("target_y", 0))
+	control = bool(d.get("control", true))
+	auto = bool(d.get("auto", false))
+	protected = bool(d.get("protected", false))
+	is_boss = bool(d.get("is_boss", false))
 	position = _tile_center(x, y)
 	z_index = int(position.y)
 
@@ -131,8 +151,12 @@ func _draw() -> void:
 	if selected:
 		draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 24, Color("#ffd166"), 2.0)
 	# 阵营点
-	var c := Color("#4da3ff") if side == "player" else Color("#ff5a5a")
+	var c := Color("#69b7ff") if side == "player" else Color("#ff5a5a")
+	if auto and side == "player":
+		c = Color("#8fd18f")
 	draw_circle(Vector2(-19, -30), 4.0, c)
+	if protected:
+		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 24, Color("#e8ba4c"), 1.0)
 	# HP 条
 	var w := 38.0
 	var ratio := clampf(float(hp) / float(max_hp), 0.0, 1.0)

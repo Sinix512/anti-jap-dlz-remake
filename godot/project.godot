@@ -1,10 +1,10 @@
 ; Engine configuration file.
-; M1 vertical slice for 抗日：地雷战.
+; M3-M5: original UI, 47-level campaign, story/cutscenes for 抗日：地雷战.
 config_version=5
 
 [application]
 
-config/name="抗日：地雷战 · M1"
+config/name="抗日：地雷战 · M3-M5"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/show_image=false
