@@ -219,6 +219,8 @@ func _capture(mode: String) -> void:
 					campaign.battle.scenario.on_unit_moved(p)
 		"m5-story":
 			_show_story_preview()
+		"m5-story-speaker":
+			_show_story_preview_speaker()
 		"m5-archive":
 			_show_story_archive()
 		"m5-ending":
@@ -268,6 +270,14 @@ func _capture(mode: String) -> void:
 	img.save_png(path)
 	print("CAPTURE ", path, " ", img.get_size())
 	get_tree().quit()
+
+
+func _show_story_preview_speaker() -> void:
+	if is_instance_valid(story_player):
+		story_player.queue_free()
+	story_player = load("res://scripts/m5/StoryPlayer.gd").new()
+	add_child(story_player)
+	story_player.setup(font, m5, [6], "李勇", Callable())
 
 
 func _show_story_preview() -> void:

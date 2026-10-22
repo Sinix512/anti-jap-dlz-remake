@@ -22,6 +22,7 @@ var mode := "world"
 var selected_town := 0
 var party_selected := -1
 var k04_page := 0
+var _shop_detail: Label
 var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
@@ -401,6 +402,17 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 		var b := _button(tabs[i][0], Vector2(24 + i * 74, 38),
 				Vector2(68, 26), tabs[i][1], 14)
 		ui_root.add_child(b)
+	var dbg := ColorRect.new()
+	dbg.color = Color(0, 0, 0, 0.66)
+	dbg.position = Vector2(404, 70)
+	dbg.size = Vector2(212, 250)
+	dbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(dbg)
+	_shop_detail = OriginalUI.label("", font, 13, Color("#f0e4c8"))
+	_shop_detail.position = Vector2(412, 78)
+	_shop_detail.size = Vector2(196, 232)
+	_shop_detail.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	ui_root.add_child(_shop_detail)
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(24, 76)
 	scroll.size = Vector2(374, 236)
@@ -423,6 +435,8 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 			rows.append({"rec": rec, "count": 0, "id": int(rec["index"])})
 	for r in rows:
 		list.add_child(_shop_row(r, kind, selling))
+	if not rows.is_empty():
+		_shop_show_detail(rows[0]["rec"], selling)
 	if rows.is_empty():
 		list.add_child(_label("（空）", Vector2.ZERO, Vector2(340, 24), 16,
 				Color("#8b98aa")))
@@ -438,10 +452,22 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 
 
 
+func _shop_show_detail(rec: Dictionary, selling: bool) -> void:
+	if _shop_detail == null:
+		return
+	var price := int(rec.get("price", 0))
+	var desc := str(rec.get("desc", rec.get("description", "")))
+	_shop_detail.text = "商品：%s\n\n价格：%d\n售价：%d\n\n%s" % [
+		rec.get("name", ""), price, max(1, int(price / 2.0)),
+		desc if desc != "" else "点击右侧按钮买入/卖出。"]
+
+
 func _shop_row(r: Dictionary, kind: String, selling: bool) -> HBoxContainer:
 	var rec: Dictionary = r["rec"]
 	var row := HBoxContainer.new()
 	row.custom_minimum_size = Vector2(0, 32)
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.mouse_entered.connect(func(): _shop_show_detail(rec, selling))
 	row.add_theme_constant_override("separation", 6)
 	var icon := TextureRect.new()
 	icon.custom_minimum_size = Vector2(30, 30)
