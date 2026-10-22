@@ -638,19 +638,29 @@ func _show_settings() -> void:
 	dim.color = Color(0.015, 0.01, 0.008, 0.88)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_root.add_child(dim)
+	var panel := TextureRect.new()
+	panel.texture = load("res://assets/ui/menu02.png") \
+			if ResourceLoader.exists("res://assets/ui/menu02.png") else null
+	panel.position = Vector2(80, 56)
+	panel.size = Vector2(480, 360)
+	panel.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	panel.stretch_mode = TextureRect.STRETCH_SCALE
+	panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_root.add_child(panel)
 	menu_root.add_child(OriginalUI.header("设 置", font, Rect2(0, 0, 640, 30)))
 	var cfg := ConfigFile.new()
 	cfg.load("user://dlz_config.cfg")
 	var pname := str(cfg.get_value("player", "name", "李勇"))
-	var y := 70
+	var y := 100
 	var l1 := OriginalUI.label("主角姓名（替换剧情中的 GG）", font, 16,
 			OriginalUI.GOLD_LIGHT)
-	l1.position = Vector2(80, y)
+	l1.position = Vector2(100, y)
 	l1.size = Vector2(480, 22)
 	menu_root.add_child(l1)
 	var edit := LineEdit.new()
 	edit.text = pname
-	edit.position = Vector2(80, y + 26)
+	edit.position = Vector2(100, y + 26)
 	edit.size = Vector2(240, 30)
 	edit.add_theme_font_override("font", font)
 	edit.add_theme_font_size_override("font_size", 16)
@@ -658,7 +668,7 @@ func _show_settings() -> void:
 	menu_root.add_child(edit)
 	var vol_l := OriginalUI.label("音量（0-100）", font, 16,
 			OriginalUI.GOLD_LIGHT)
-	vol_l.position = Vector2(360, y)
+	vol_l.position = Vector2(340, y)
 	vol_l.size = Vector2(220, 22)
 	menu_root.add_child(vol_l)
 	var vol := HSlider.new()
@@ -666,25 +676,25 @@ func _show_settings() -> void:
 	vol.max_value = 1.0
 	vol.step = 0.05
 	vol.value = float(cfg.get_value("audio", "master_volume", 0.8))
-	vol.position = Vector2(360, y + 28)
-	vol.size = Vector2(200, 24)
+	vol.position = Vector2(340, y + 28)
+	vol.size = Vector2(190, 24)
 	menu_root.add_child(vol)
 	var variant := CheckButton.new()
 	variant.text = "使用过场变体（A 版）"
 	variant.button_pressed = bool(cfg.get_value("video", "story_variant", false))
-	variant.position = Vector2(300, y + 76)
+	variant.position = Vector2(320, y + 76)
 	variant.add_theme_font_override("font", font)
 	variant.add_theme_font_size_override("font_size", 14)
 	menu_root.add_child(variant)
 	var full := CheckButton.new()
 	full.text = "全屏"
 	full.button_pressed = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	full.position = Vector2(80, y + 76)
+	full.position = Vector2(100, y + 76)
 	full.add_theme_font_override("font", font)
 	full.add_theme_font_size_override("font_size", 16)
 	menu_root.add_child(full)
 	var bgm_l := OriginalUI.label("BGM 音量", font, 14, OriginalUI.GOLD_LIGHT)
-	bgm_l.position = Vector2(80, y + 112)
+	bgm_l.position = Vector2(100, y + 112)
 	bgm_l.size = Vector2(200, 20)
 	menu_root.add_child(bgm_l)
 	var bgm_vol := HSlider.new()
@@ -692,8 +702,8 @@ func _show_settings() -> void:
 	bgm_vol.max_value = 1.0
 	bgm_vol.step = 0.05
 	bgm_vol.value = float(cfg.get_value("audio", "bgm_volume", 0.8))
-	bgm_vol.position = Vector2(80, y + 132)
-	bgm_vol.size = Vector2(200, 24)
+	bgm_vol.position = Vector2(100, y + 132)
+	bgm_vol.size = Vector2(180, 24)
 	menu_root.add_child(bgm_vol)
 	var sfx_l := OriginalUI.label("音效音量", font, 14, OriginalUI.GOLD_LIGHT)
 	sfx_l.position = Vector2(320, y + 112)
@@ -705,18 +715,18 @@ func _show_settings() -> void:
 	sfx_vol.step = 0.05
 	sfx_vol.value = float(cfg.get_value("audio", "sfx_volume", 0.8))
 	sfx_vol.position = Vector2(320, y + 132)
-	sfx_vol.size = Vector2(200, 24)
+	sfx_vol.size = Vector2(190, 24)
 	menu_root.add_child(sfx_vol)
 	var save := OriginalUI.button("保存并返回", font, Vector2(160, 34),
 			_save_settings.bind(edit, full, vol, variant, bgm_vol, sfx_vol), 16)
-	save.position = Vector2(80, y + 200)
+	save.position = Vector2(100, y + 200)
 	menu_root.add_child(save)
 	var back := OriginalUI.button("返回", font, Vector2(100, 30), _show_title, 16)
-	back.position = Vector2(260, y + 202)
+	back.position = Vector2(280, y + 202)
 	menu_root.add_child(back)
 	var note := OriginalUI.label("窗口基准 640×480，整数倍最近邻缩放。", font, 14,
 			Color("#b9a98b"))
-	note.position = Vector2(80, y + 246)
+	note.position = Vector2(100, y + 246)
 	note.size = Vector2(480, 22)
 	menu_root.add_child(note)
 
