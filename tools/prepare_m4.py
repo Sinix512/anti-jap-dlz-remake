@@ -678,6 +678,9 @@ def main() -> None:
         out_levels.append({
             "index": idx,
             "name": lv["name"],
+            "name_gbk_hex": lv["name"].encode("gb18030", errors="replace").hex(),
+            "success_gbk_hex": lv["success"].strip().strip("\u3000").encode("gb18030", errors="replace").hex(),
+            "failure_gbk_hex": lv["failure"].strip().strip("\u3000").encode("gb18030", errors="replace").hex(),
             "kind": kind,
             "hidden_mode": mode,
             "sub_index": sub,

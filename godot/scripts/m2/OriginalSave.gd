@@ -35,6 +35,12 @@ static func _gbk(hex: String) -> PackedByteArray:
 	return hex.hex_decode()
 
 
+static func _write_at(arr: PackedByteArray, off: int, raw: PackedByteArray,
+		n: int) -> void:
+	for i in range(min(n, raw.size())):
+		arr[off + i] = raw[i]
+
+
 static func _people_bytes(state) -> PackedByteArray:
 	var b := StreamPeerBuffer.new()
 	b.big_endian = false
@@ -77,8 +83,11 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	b.put_u32(0x28)  # block1 game state：战略界面
 	b.put_u32(1)  # block2 difficulty
 	b.put_u32(100)  # terrain modifier
-	# Intro 700 B: 只写难度/固定字段；关卡字符串保持 0，避免 UTF-8/GBK 混写。
+	# Intro 700 B: 关卡名/成功/失败按 GBK 写入。
 	var intro := PackedByteArray(); intro.resize(700)
+	_write_at(intro, 0x00, _gbk(str(level.get("name_gbk_hex", ""))), 32)
+	_write_at(intro, 0x28, _gbk(str(level.get("success_gbk_hex", ""))), 64)
+	_write_at(intro, 0x68, _gbk(str(level.get("failure_gbk_hex", ""))), 64)
 	intro.encode_u32(0x20, 1)
 	intro.encode_u32(0x2B4, 99)
 	b.put_data(intro)
@@ -144,7 +153,11 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	b.get_u32()  # block0
 	var out := {"game_state": int(b.get_u32()), "difficulty": int(b.get_u32())}
 	b.get_u32()  # block3 terrain
-	_skip(b, 700)  # intro
+	var intro_got = b.get_data(700)
+	var intro: PackedByteArray = intro_got[1]
+	out["intro_name_gbk_hex"] = intro.slice(0, 32).hex_encode()
+	out["intro_success_gbk_hex"] = intro.slice(0x28, 0x28 + 64).hex_encode()
+	out["intro_failure_gbk_hex"] = intro.slice(0x68, 0x68 + 64).hex_encode()
 	out["town"] = int(b.get_u32())
 	out["money"] = int(b.get_u32())
 	out["map_width"] = 128
