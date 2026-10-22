@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 NRG = ROOT.parent / "dlz" / "ANTI-JAP" / "ISO" / "抗日地雷战音效光盘.nrg"
 OUT = ROOT / "godot" / "assets" / "audio" / "bgm_cd.ogg"
+TITLE = ROOT / "godot" / "assets" / "audio" / "bgm_title.ogg"
 
 
 def iso_data_end(path: Path) -> int:
@@ -76,6 +77,12 @@ def main() -> None:
         print("ffmpeg failed", rc)
         sys.exit(rc)
     print("bgm", OUT, OUT.stat().st_size)
+    # 原版 CD 是多轨；第一段 5.8–167.5s 作为标题/城镇循环，避免整张 32 分钟循环。
+    if not TITLE.exists() or args.force:
+        subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                        "-ss", "5.8", "-to", "167.5", "-i", str(OUT),
+                        "-c:a", "libvorbis", "-q:a", "3", str(TITLE)], check=False)
+        print("title", TITLE, TITLE.stat().st_size if TITLE.exists() else 0)
 
 
 if __name__ == "__main__":

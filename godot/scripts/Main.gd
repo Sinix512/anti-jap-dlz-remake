@@ -534,7 +534,9 @@ func _show_free_result(victory: bool, message: String) -> void:
 
 
 func _start_bgm() -> void:
-	var path := "res://assets/audio/bgm_cd.ogg"
+	var path := "res://assets/audio/bgm_title.ogg"
+	if not ResourceLoader.exists(path):
+		path = "res://assets/audio/bgm_cd.ogg"
 	if not ResourceLoader.exists(path):
 		return
 	bgm = AudioStreamPlayer.new()
