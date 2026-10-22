@@ -177,7 +177,7 @@ python3 tools/verify_m5_media.py    # 1292 项检查，RESULT: PASS
 ./verify_m6.sh          # M6 战斗系统回归
 ./verify_all.sh         # M1-M6 全量无头回归
 # M7/M8 是自动全通/连续战役验收，当前作为诊断入口，未加入 verify_all：
-./verify_play.sh        # M11 资产审计 + M7/M8/M9/M10 全通验收（较慢）
+./verify_play.sh        # M11 资产审计 + M7/M8/M9/M10/M12 全通验收（较慢）
 ```
 
 ## 里程碑总览
