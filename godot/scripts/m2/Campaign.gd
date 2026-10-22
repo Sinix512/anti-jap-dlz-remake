@@ -813,11 +813,16 @@ func _show_k04_status() -> void:
 	if ResourceLoader.exists(str(m.get("face_png", ""))):
 		portrait.texture = load(m["face_png"])
 	ui_root.add_child(portrait)
-	var info := "姓名：%s\n兵种：%s\n等级：%d\nHP：%d/%d\n武力：%d  智力：%d\n地雷数：%d\n武器：%s" % [
+	var mine_total := 0
+	for k in state.mines:
+		mine_total += int(state.mines[k])
+	var eq: Dictionary = state.item(int(m.get("equip", -1)))
+	var equip_name := str(eq.get("name", "无"))
+	var info := "姓名：%s\n兵种：%s\n等级：%d\nHP：%d/%d\n武力：%d  智力：%d\n地雷库存：%d\n武器：%s" % [
 		m.get("name", ""), m.get("unit_name", ""), int(m.get("level", 1)),
 		int(m.get("hp", 0)), int(m.get("max_hp", 0)),
 		int(m.get("wuli", 0)), int(m.get("zhili", 0)),
-		state.mine_count(int(m.get("mine_id", 0))), m.get("equip_name", "无")]
+		mine_total, equip_name]
 	var info_l := OriginalUI.label(info, font, 15, Color("#f0e4c8"))
 	info_l.position = Vector2(310, 70)
 	info_l.size = Vector2(220, 290)
