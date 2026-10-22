@@ -115,6 +115,13 @@ func _capture(mode: String) -> void:
 			if is_instance_valid(campaign):
 				campaign.selected_town = 1
 				campaign._open_shop("junxie")
+		"m4-shop-zahuo":
+			_start_campaign()
+			for i in range(3):
+				await get_tree().process_frame
+			if is_instance_valid(campaign):
+				campaign.selected_town = 1
+				campaign._open_shop("zahuo")
 		"m2-k04", "m4-k04":
 			_start_campaign()
 			for i in range(3):

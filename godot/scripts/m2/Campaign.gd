@@ -377,9 +377,10 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 	shop_kind = kind
 	shop_selling = selling
 	_new_ui()
+	var shop_bg := "res://assets/ui/k02.png" \
+			if kind in ["zahuo", "material"] else "res://assets/ui/k01.png"
 	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/k01.png") \
-			if ResourceLoader.exists("res://assets/ui/k01.png") else null
+	bg.texture = load(shop_bg) if ResourceLoader.exists(shop_bg) else null
 	bg.position = Vector2.ZERO
 	bg.size = Vector2(640, 480)
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -440,8 +441,9 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 	if rows.is_empty():
 		list.add_child(_label("（空）", Vector2.ZERO, Vector2(340, 24), 16,
 				Color("#8b98aa")))
-	var info := OriginalUI.label("K01 原版商店\n\n商品：%d 种\n模式：%s\n\n点击右侧按钮\n买入/卖出" % [
-			rows.size(), "出售" if selling else "购买"], font, 14,
+	var code := "K02" if shop_bg.ends_with("k02.png") else "K01"
+	var info := OriginalUI.label("%s 原版商店\n\n商品：%d 种\n模式：%s\n\n点击右侧按钮\n买入/卖出" % [
+			code, rows.size(), "出售" if selling else "购买"], font, 14,
 			Color("#f0e4c8"))
 	info.position = Vector2(24, 320)
 	info.size = Vector2(580, 84)
