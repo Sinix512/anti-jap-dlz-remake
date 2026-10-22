@@ -1032,7 +1032,7 @@ func _open_save_load() -> void:
 
 
 func _open_save_impl(load_first: bool) -> void:
-	var content := _panel_shell("存档 / 读档", 560, 360)
+	var content := _panel_shell("存档 / 读档", 560, 410)
 	content.add_child(_label("资金 %d   第 %d 天   队伍 %d 人" % [
 		state.money, state.day, state.party_size()],
 		Vector2.ZERO, Vector2(500, 24), 16, Color("#f2c14e")))
@@ -1043,13 +1043,16 @@ func _open_save_impl(load_first: bool) -> void:
 		row.add_theme_constant_override("separation", 8)
 		var txt := "槽 %d：空" % slot
 		if not info.is_empty():
-			txt = "槽 %d：第 %d 天 / 资金 %d / %d 人 / %s" % [
-				slot, int(info.get("day", 0)), int(info.get("money", 0)),
-				(info.get("party", []) as Array).size(),
-				str(info.get("saved_at", ""))]
-		var l := _label(txt, Vector2.ZERO, Vector2(380, 24), 16,
+			var ci := int(info.get("campaign_index", -1))
+			var lv_name := ""
+			if ci >= 0 and ci < 47:
+				lv_name = str(state.m4_level(ci).get("name", ""))
+			txt = "槽 %d：L%02d %s / 第 %d 天 / 资金 %d / %d 人" % [
+				slot, ci, lv_name, int(info.get("day", 0)),
+				int(info.get("money", 0)), (info.get("party", []) as Array).size()]
+		var l := _label(txt, Vector2.ZERO, Vector2(390, 24), 14,
 				Color("#e8edf4"))
-		l.custom_minimum_size = Vector2(380, 24)
+		l.custom_minimum_size = Vector2(390, 24)
 		row.add_child(l)
 		var save := _button("存档", Vector2.ZERO, Vector2(66, 30),
 				_save_slot.bind(slot), 14)
@@ -1062,6 +1065,22 @@ func _open_save_impl(load_first: bool) -> void:
 			loadb.disabled = true
 		row.add_child(loadb)
 		content.add_child(row)
+	var cp: Dictionary = state.slot_info(8)
+	if not cp.is_empty():
+		var crow := HBoxContainer.new()
+		crow.add_theme_constant_override("separation", 8)
+		var ctxt := "自动检查点：第 %d 天 / 资金 %d / %d 人" % [
+			int(cp.get("day", 0)), int(cp.get("money", 0)),
+			(cp.get("party", []) as Array).size()]
+		var cl := _label(ctxt, Vector2.ZERO, Vector2(390, 24), 14,
+				Color("#f2c14e"))
+		cl.custom_minimum_size = Vector2(390, 24)
+		crow.add_child(cl)
+		var cload := _button("读取检查点", Vector2.ZERO, Vector2(100, 28),
+				_load_checkpoint, 14)
+		cload.custom_minimum_size = Vector2(100, 28)
+		crow.add_child(cload)
+		content.add_child(crow)
 	var orow := HBoxContainer.new()
 	orow.add_theme_constant_override("separation", 8)
 	var exp := _button("导出原版布局", Vector2.ZERO, Vector2(130, 28),
@@ -1109,6 +1128,16 @@ func _save_slot(slot: int) -> void:
 	else:
 		_toast("存档失败")
 	_open_save_impl(false)
+
+
+func _load_checkpoint() -> void:
+	if state.load_checkpoint():
+		selected_town = state.current_town
+		_close_panel()
+		_toast("已读取自动检查点")
+		_show_town(selected_town)
+	else:
+		_toast("没有自动检查点")
 
 
 func _load_slot(slot: int) -> void:
