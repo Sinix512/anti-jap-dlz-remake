@@ -1684,6 +1684,12 @@ func _execute_item_at(tile: Vector2i) -> void:
 			affected += 1
 		target.refresh()
 	_play_sfx(int(it.get("audio_apply", -1)))
+	if kind == "throw":
+		var aidx := int(it.get("anm_index", -1))
+		if aidx >= 0:
+			_play_anm_sheet("res://assets/m5/anm/ffpact%02d_sheet.png" % aidx,
+					Vector2(tile.x * TILE + TILE / 2.0,
+							tile.y * TILE + TILE / 2.0), 0.75)
 	_consume_inventory("items", active_item_id)
 	caster.acted = true
 	caster.refresh()

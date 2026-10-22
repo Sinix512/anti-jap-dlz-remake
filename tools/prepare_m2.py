@@ -102,10 +102,17 @@ def main():
     items = {}
     for it in game["items"]:
         icon = f"res://assets/goods/goods_{it['goods']:03d}.png"
-        items[str(it["index"])] = {
+        item_rec = {
             **it,
             "icon": icon,
         }
+        # 投掷类物品的 ANM 效果（由 FFPACT 帧内容对照推断，非原版表）。
+        throw_anm = {41: 11, 42: 6, 43: 8, 44: 41, 45: 42, 46: 41,
+                47: 43, 48: 43, 49: 43, 50: 43, 51: 44, 52: 44,
+                53: 5, 54: 5, 55: 5, 56: 4}
+        if int(it["index"]) in throw_anm:
+            item_rec["anm_index"] = throw_anm[int(it["index"])]
+        items[str(it["index"])] = item_rec
     materials = {}
     for m in game["materials"]:
         materials[str(m["index"])] = {
