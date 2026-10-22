@@ -67,6 +67,8 @@ func _capture(mode: String) -> void:
 	match mode:
 		"menu", "m3-title":
 			pass
+		"character":
+			_show_character_create()
 		"battle":
 			_start_free_level(14)
 		"battle8":
@@ -283,7 +285,7 @@ func _show_title() -> void:
 	title_screen = load("res://scripts/ui/TitleScreen.gd").new()
 	add_child(title_screen)
 	title_screen.setup(font)
-	title_screen.new_game.connect(_start_campaign)
+	title_screen.new_game.connect(_show_character_create)
 	title_screen.continue_game.connect(_continue_campaign)
 	title_screen.battle_select.connect(_open_battle_select)
 	title_screen.story_archive.connect(_show_story_archive)
@@ -300,6 +302,52 @@ func _show_title() -> void:
 	debug2.visible = false
 	debug2.pressed.connect(_start_campaign)
 	title_screen.add_child(debug2)
+
+
+func _show_character_create() -> void:
+	_clear_all()
+	menu_root = Control.new()
+	menu_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu_root.theme = theme_ref
+	add_child(menu_root)
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/menu01.png") 			if ResourceLoader.exists("res://assets/ui/menu01.png") else null
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	menu_root.add_child(bg)
+	var cfg := ConfigFile.new()
+	cfg.load("user://dlz_config.cfg")
+	var name := str(cfg.get_value("player", "name", "李勇"))
+	var edit := LineEdit.new()
+	edit.text = name
+	edit.position = Vector2(52, 390)
+	edit.size = Vector2(190, 34)
+	edit.add_theme_font_override("font", font)
+	edit.add_theme_font_size_override("font_size", 16)
+	menu_root.add_child(edit)
+	var tip := OriginalUI.label("形象/兵种：默认（后续开放）", font, 14,
+			Color("#e5d4ad"))
+	tip.position = Vector2(52, 168)
+	tip.size = Vector2(260, 20)
+	menu_root.add_child(tip)
+	var start := OriginalUI.button("开始战役", font, Vector2(120, 30),
+			func(): _save_player_name(edit.text); _start_campaign(), 16)
+	start.position = Vector2(240, 438)
+	menu_root.add_child(start)
+	var back := OriginalUI.button("返回", font, Vector2(90, 30),
+			_show_title, 16)
+	back.position = Vector2(420, 438)
+	menu_root.add_child(back)
+
+
+func _save_player_name(text: String) -> void:
+	var c := ConfigFile.new()
+	c.load("user://dlz_config.cfg")
+	var nm := text.strip_edges()
+	c.set_value("player", "name", nm if nm != "" else "李勇")
+	c.save("user://dlz_config.cfg")
 
 
 func _start_campaign() -> void:
