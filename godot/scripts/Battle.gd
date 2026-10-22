@@ -536,7 +536,7 @@ func _play_flm(flm_index: int, world: Vector2, scale_factor: float = 1.0) -> voi
 	anim.sprite_frames = frames
 	anim.position = world
 	anim.scale = Vector2(scale_factor, scale_factor)
-	anim.z_index = 5000
+	anim.z_index = 0
 	anim.animation_finished.connect(anim.queue_free)
 	fx_root.add_child(anim)
 	anim.play("default")
@@ -1158,7 +1158,7 @@ func _play_mine_effect(mine_id: int, tile: Vector2i) -> void:
 	vp.position = Vector2(tile.x * TILE - 72, tile.y * TILE - 36)
 	vp.size = Vector2(192, 120)
 	vp.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vp.z_index = 5000
+	vp.z_index = 0
 	vp.finished.connect(vp.queue_free)
 	fx_root.add_child(vp)
 	vp.play()
