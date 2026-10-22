@@ -85,6 +85,7 @@ var last_result := ""
 var last_message := ""
 var log_history: Array = []
 var pending_story: Array = []
+var sfx_nodes: Array = []
 
 
 func setup(d: Dictionary, lv: Dictionary, f: Font, ctx: Dictionary = {}) -> void:
@@ -257,6 +258,7 @@ func _chest_at(t: Vector2i) -> int:
 
 
 func _open_chest(u, i: int) -> void:
+	_play_sfx(514)
 	var c: Dictionary = chests[i]
 	c["opened"] = true
 	stats["chests"] = int(stats.get("chests", 0)) + 1
@@ -509,6 +511,25 @@ func update_hud() -> void:
 		btn_end.text = "战斗结束"
 	if overlay != null:
 		overlay.queue_redraw()
+
+
+func _play_sfx(wave_id: int, volume_db: float = -6.0) -> void:
+	if wave_id < 0:
+		return
+	var path := "res://assets/audio/wave_%04d.wav" % wave_id
+	if not ResourceLoader.exists(path):
+		return
+	while sfx_nodes.size() >= 8:
+		var old = sfx_nodes.pop_front()
+		if is_instance_valid(old):
+			old.queue_free()
+	var p := AudioStreamPlayer.new()
+	p.stream = load(path)
+	p.volume_db = volume_db
+	add_child(p)
+	sfx_nodes.append(p)
+	p.finished.connect(p.queue_free)
+	p.play()
 
 
 func emit_story_event(kind: String, data: Dictionary = {}) -> void:
@@ -817,6 +838,7 @@ func _player_move(t: Vector2i) -> void:
 	move_tiles.clear()
 	attack_tiles.clear()
 	update_hud()
+	_play_sfx(int(unit_class(u).get("audio_yidong", -1)), -10.0)
 	for step in path:
 		await u.move_visual(step.x, step.y, 0.075)
 	u.moved = true
@@ -859,6 +881,7 @@ func _perform_attack(attacker: Node2D, defender: Node2D, counter: bool = false) 
 	move_tiles.clear()
 	attack_tiles.clear()
 	update_hud()
+	_play_sfx(int(unit_class(attacker).get("audio_gongji", -1)))
 	await _attack_anim(attacker, defender)
 	attacker.attack_count += 1
 	var dmg := compute_damage(attacker, defender)
@@ -1126,6 +1149,7 @@ func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
 		if is_instance_valid(node):
 			node.queue_free()
 		mine_nodes.erase(t)
+	_play_sfx(int(m.get("audio_index", -1)), -2.0)
 	var area := _mine_area(t, int(rec.get("apply_fw", m.get("apply_fw", 0))))
 	var total := 0
 	var deaths: Array = []
@@ -1550,6 +1574,7 @@ func _execute_item_at(tile: Vector2i) -> void:
 			target.morale = max(0, target.morale - p2)
 			affected += 1
 		target.refresh()
+	_play_sfx(int(it.get("audio_apply", -1)))
 	_consume_inventory("items", active_item_id)
 	caster.acted = true
 	caster.refresh()

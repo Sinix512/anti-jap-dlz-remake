@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "out"
 ASSETS = ROOT / "godot" / "assets"
 UI = ASSETS / "ui"
+AUDIO = ASSETS / "audio"
 GODOT_DATA = ROOT / "godot" / "data"
 
 # 原版 HUD 的 DirectDraw 色键：KUANG00/04 的绿色底
@@ -253,6 +254,12 @@ def main() -> None:
         if p.exists():
             shutil.copyfile(p, UI / f"sfx_{dst}.wav")
             manifest[f"sfx_{dst}.wav"] = f"res://assets/ui/sfx_{dst}.wav"
+
+    # WAVE.DAT 全量音效：攻击/移动/地雷/物品等按原版索引播放
+    AUDIO.mkdir(parents=True, exist_ok=True)
+    for p in sorted((OUT / "wave").glob("wave_*.wav")):
+        shutil.copyfile(p, AUDIO / p.name)
+        manifest["audio/" + p.name] = "res://assets/audio/" + p.name
 
     (GODOT_DATA / "m3.json").write_text(json.dumps({
         "meta": {
