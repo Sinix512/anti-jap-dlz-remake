@@ -19,6 +19,7 @@ var _on_done: Callable
 var _records: Dictionary = {}
 
 var _portrait: TextureRect
+var _big_portrait: TextureRect
 var _speaker: Label
 var _text_label: Label
 var _hint: Label
@@ -75,6 +76,15 @@ func _build_scene() -> void:
 	_counter.size = Vector2(110, 20)
 	_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_counter)
+	_big_portrait = TextureRect.new()
+	_big_portrait.position = Vector2(18, 62)
+	_big_portrait.size = Vector2(150, 190)
+	_big_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_big_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_big_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_big_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_big_portrait.visible = false
+	add_child(_big_portrait)
 
 	_panel = Control.new()
 	_panel.position = Vector2(20, 276)
@@ -92,12 +102,12 @@ func _build_scene() -> void:
 	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_panel.add_child(_portrait)
 	_speaker = OriginalUI.label("", font, 16, OriginalUI.GOLD_LIGHT)
-	_speaker.position = Vector2(102, 36)
-	_speaker.size = Vector2(480, 22)
+	_speaker.position = Vector2(24, 36)
+	_speaker.size = Vector2(552, 22)
 	_panel.add_child(_speaker)
 	_text_label = OriginalUI.label("", font, 16, OriginalUI.INK)
-	_text_label.position = Vector2(102, 62)
-	_text_label.size = Vector2(482, 94)
+	_text_label.position = Vector2(24, 62)
+	_text_label.size = Vector2(552, 94)
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	_panel.add_child(_text_label)
 	_hint = OriginalUI.label("点击 / 空格 继续    Esc 跳过", font, 14,
@@ -156,18 +166,23 @@ func _show_line(i: int) -> void:
 	_indicator.visible = false
 	var face := int(l.get("face", -1))
 	if face >= 0 and ResourceLoader.exists("res://assets/face/face_%03d.png" % face):
-		_portrait.texture = load("res://assets/face/face_%03d.png" % face)
-		_portrait.visible = true
+		var ft: Texture2D = load("res://assets/face/face_%03d.png" % face)
+		_portrait.texture = null
+		_portrait.visible = false
+		_big_portrait.texture = ft
+		_big_portrait.visible = true
 	else:
 		_portrait.texture = null
 		_portrait.visible = false
+		_big_portrait.texture = null
+		_big_portrait.visible = false
 		if speaker == "旁白":
 			_speaker.text = ""
 			_text_label.position = Vector2(24, 40)
 			_text_label.size = Vector2(552, 116)
 		else:
-			_text_label.position = Vector2(102, 62)
-			_text_label.size = Vector2(482, 94)
+			_text_label.position = Vector2(24, 62)
+			_text_label.size = Vector2(552, 94)
 	_counter.text = "%d / %d" % [i + 1, lines.size()]
 
 
