@@ -375,40 +375,41 @@ func _shop_title(kind: String) -> String:
 func _open_shop(kind: String, selling: bool = false) -> void:
 	shop_kind = kind
 	shop_selling = selling
-	var content := _panel_shell(_shop_title(kind), 560, 390)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 8)
-	content.add_child(top)
-	var money := _label("资金 %d" % state.money, Vector2.ZERO, Vector2(180, 24),
-			16, Color("#f2c14e"))
-	money.custom_minimum_size = Vector2(180, 24)
-	top.add_child(money)
-	var b1 := _button("购买", Vector2.ZERO, Vector2(70, 28),
-			_open_shop_buy.bind(kind), 14)
-	b1.custom_minimum_size = Vector2(70, 28)
-	top.add_child(b1)
-	var b2 := _button("出售", Vector2.ZERO, Vector2(70, 28),
-			_open_shop_sell.bind(kind), 14)
-	b2.custom_minimum_size = Vector2(70, 28)
-	top.add_child(b2)
-	var b3 := _button("买材料", Vector2.ZERO, Vector2(80, 28),
-			func(): _open_shop("material", false), 14)
-	b3.custom_minimum_size = Vector2(80, 28)
-	top.add_child(b3)
-	var b4 := _button("锻造", Vector2.ZERO, Vector2(70, 28),
-			_open_forge, 14)
-	b4.custom_minimum_size = Vector2(70, 28)
-	top.add_child(b4)
-
+	_new_ui()
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/k01.png") \
+			if ResourceLoader.exists("res://assets/ui/k01.png") else null
+	bg.position = Vector2.ZERO
+	bg.size = Vector2(640, 480)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ui_root.add_child(bg)
+	ui_root.add_child(OriginalUI.header(_shop_title(kind) + (" / 出售" if selling else " / 购买"),
+			font, Rect2(0, 0, 640, 30)))
+	var money := OriginalUI.label("资金：%d" % state.money, font, 16,
+			Color("#f2c14e"))
+	money.position = Vector2(470, 36)
+	money.size = Vector2(150, 22)
+	ui_root.add_child(money)
+	var tabs := [["购买", _open_shop.bind(kind, false)],
+			["出售", _open_shop.bind(kind, true)],
+			["材料", _open_shop.bind("material", false)],
+			["锻造", _open_forge],
+			["离开", func(): _show_town(selected_town)]]
+	for i in range(tabs.size()):
+		var b := _button(tabs[i][0], Vector2(24 + i * 74, 38),
+				Vector2(68, 26), tabs[i][1], 14)
+		ui_root.add_child(b)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(520, 265)
+	scroll.position = Vector2(24, 76)
+	scroll.size = Vector2(374, 236)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	content.add_child(scroll)
+	ui_root.add_child(scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 2)
 	scroll.add_child(list)
-
 	var rows: Array = []
 	if selling:
 		var inv: Dictionary = state.materials if kind == "material" else state.items
@@ -418,14 +419,23 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 				rows.append({"rec": rec, "count": int(inv[k]), "id": int(k)})
 	else:
 		var shop: Dictionary = state.town(selected_town).get("shops", {})
-		var arr: Array = shop.get(kind, [])
-		for rec in arr:
+		for rec in shop.get(kind, []):
 			rows.append({"rec": rec, "count": 0, "id": int(rec["index"])})
 	for r in rows:
 		list.add_child(_shop_row(r, kind, selling))
 	if rows.is_empty():
-		list.add_child(_label("（空）", Vector2.ZERO, Vector2(500, 24), 16,
+		list.add_child(_label("（空）", Vector2.ZERO, Vector2(340, 24), 16,
 				Color("#8b98aa")))
+	var info := OriginalUI.label("K01 原版商店\n\n商品：%d 种\n模式：%s\n\n点击右侧按钮\n买入/卖出" % [
+			rows.size(), "出售" if selling else "购买"], font, 14,
+			Color("#f0e4c8"))
+	info.position = Vector2(24, 320)
+	info.size = Vector2(580, 84)
+	ui_root.add_child(info)
+	var back := _button("返回城镇", Vector2(450, 410), Vector2(120, 30),
+			func(): _show_town(selected_town), 14)
+	ui_root.add_child(back)
+
 
 
 func _shop_row(r: Dictionary, kind: String, selling: bool) -> HBoxContainer:
