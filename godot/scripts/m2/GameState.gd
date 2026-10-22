@@ -5,6 +5,7 @@ extends RefCounted
 
 const SAVE_VERSION := 3
 const CombatRules = preload("res://scripts/battle/CombatRules.gd")
+const OriginalSave = preload("res://scripts/m2/OriginalSave.gd")
 
 var data: Dictionary = {}
 var money := 0
@@ -714,6 +715,42 @@ func from_dict(d: Dictionary) -> bool:
 	player_name = str(d.get("player_name", "李勇"))
 	saved_at = str(d.get("saved_at", ""))
 	return true
+
+
+func save_original(path: String = "user://dlz_original.dat") -> bool:
+	var level := m4_level(campaign_index)
+	var bytes: PackedByteArray = OriginalSave.encode(self, level)
+	if bytes.size() != OriginalSave.SIZE:
+		return false
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_buffer(bytes)
+	f.close()
+	return true
+
+
+func load_original(path: String = "user://dlz_original.dat") -> bool:
+	if not FileAccess.file_exists(path):
+		return false
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return false
+	var bytes := f.get_buffer(OriginalSave.SIZE)
+	f.close()
+	var d: Dictionary = OriginalSave.decode(bytes)
+	return OriginalSave.apply(self, d, path)
+
+
+func original_info(path: String = "user://dlz_original.dat") -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var bytes := f.get_buffer(OriginalSave.SIZE)
+	f.close()
+	return OriginalSave.decode(bytes)
 
 
 func save_checkpoint() -> bool:

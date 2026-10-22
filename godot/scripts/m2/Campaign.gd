@@ -809,7 +809,7 @@ func _open_save_load() -> void:
 
 
 func _open_save_impl(load_first: bool) -> void:
-	var content := _panel_shell("存档 / 读档", 560, 300)
+	var content := _panel_shell("存档 / 读档", 560, 360)
 	content.add_child(_label("资金 %d   第 %d 天   队伍 %d 人" % [
 		state.money, state.day, state.party_size()],
 		Vector2.ZERO, Vector2(500, 24), 16, Color("#f2c14e")))
@@ -839,11 +839,45 @@ func _open_save_impl(load_first: bool) -> void:
 			loadb.disabled = true
 		row.add_child(loadb)
 		content.add_child(row)
+	var orow := HBoxContainer.new()
+	orow.add_theme_constant_override("separation", 8)
+	var exp := _button("导出原版布局", Vector2.ZERO, Vector2(130, 28),
+			_export_original, 14)
+	exp.custom_minimum_size = Vector2(130, 28)
+	orow.add_child(exp)
+	var imp := _button("导入原版布局", Vector2.ZERO, Vector2(130, 28),
+			_import_original, 14)
+	imp.custom_minimum_size = Vector2(130, 28)
+	orow.add_child(imp)
+	var olabel := _label("实验：85072 B / 未用原始 EXE 回读", Vector2.ZERO,
+			Vector2(240, 24), 12, Color("#9aa8ba"))
+	olabel.custom_minimum_size = Vector2(240, 24)
+	orow.add_child(olabel)
+	content.add_child(orow)
 	var hint := _label("自用存档：user://%s*.json" % [
 		m2["meta"].get("save_prefix", "dlz_m2_save_")],
-		Vector2.ZERO, Vector2(520, 28), 16, Color("#9aa8ba"))
+		Vector2.ZERO, Vector2(520, 24), 12, Color("#9aa8ba"))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(hint)
+
+
+func _export_original() -> void:
+	if state == null:
+		return
+	_toast("已导出原版布局" if state.save_original() else "导出失败")
+	_open_save_impl(false)
+
+
+func _import_original() -> void:
+	if state == null:
+		return
+	if state.load_original():
+		selected_town = state.current_town
+		_close_panel()
+		_toast("已导入原版布局")
+		_show_world()
+	else:
+		_toast("导入失败：缺 user://dlz_original.dat")
 
 
 func _save_slot(slot: int) -> void:

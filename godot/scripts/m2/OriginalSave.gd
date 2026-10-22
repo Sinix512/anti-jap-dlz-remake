@@ -1,0 +1,252 @@
+extends RefCounted
+
+## 原版 85072 B 存档布局的编解码器（实验）。
+## 布局来自 dlz_save.bt / 28 个 block 尺寸；名字用 GBK 字节写入。
+## 注意：尚未用原始 DLZ.exe 回读验证；未识别的原版字段写 0。
+## 游戏内正式存档仍是 GameState 的 JSON；这里是兼容桥/校验工具。
+
+const SIZE := 85072
+const SKILL_KEYS := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
+		"weishe", "saorao", "pohuai", "lueduo", "fanjian", "yibing",
+		"duzhan", "ansha", "shidu", "kongxi"]
+
+
+static func _pad(b: StreamPeerBuffer, n: int) -> void:
+	var z := PackedByteArray()
+	z.resize(n)
+	b.put_data(z)
+
+
+static func _skip(b: StreamPeerBuffer, n: int) -> void:
+	b.seek(b.get_position() + n)
+
+
+static func _put_name(b: StreamPeerBuffer, raw: PackedByteArray, n: int) -> void:
+	var out := PackedByteArray()
+	out.resize(n)
+	for i in range(min(n, raw.size())):
+		out[i] = raw[i]
+	b.put_data(out)
+
+
+static func _gbk(hex: String) -> PackedByteArray:
+	if hex == "":
+		return PackedByteArray()
+	return hex.hex_decode()
+
+
+static func _people_bytes(state) -> PackedByteArray:
+	var b := StreamPeerBuffer.new()
+	b.big_endian = false
+	var base: Array = state.data.get("people", [])
+	var by_pid := {}
+	for m in state.party:
+		by_pid[int(m["pid"])] = m
+	for i in range(128):
+		if i >= base.size():
+			_pad(b, 132)
+			continue
+		var p: Dictionary = base[i]
+		var m = by_pid.get(i)
+		_put_name(b, _gbk(str(p.get("name_gbk_hex", ""))), 16)
+		b.put_u32(int(p.get("face", 0)))
+		b.put_u32(0)
+		b.put_u32(int(p.get("unknown_18", 0)))
+		b.put_u32(int(p.get("wuli", 0)))
+		b.put_u32(int(p.get("zhili", 0)))
+		b.put_u32(int(m.get("level", p.get("level", 1))) if m != null else int(p.get("level", 1)))
+		b.put_u32(int(m.get("xp", p.get("jingyan", 0))) if m != null else 0)
+		b.put_u32(int(m.get("bingzhong", p.get("bingzhong", 0))) if m != null else int(p.get("bingzhong", 0)))
+		var counts: Dictionary = (m.get("skills", p.get("skills", {})) if m != null else p.get("skills", {}))
+		b.put_u32(int(m.get("attack_count", p.get("gongji", 0))) if m != null else 0)
+		for k in SKILL_KEYS:
+			b.put_u32(int(counts.get(k, 0)))
+		var slots: Array = (m.get("item_slots", p.get("wupin", [])) if m != null else p.get("wupin", []))
+		for j in range(8):
+			b.put_u8(int(slots[j]) if j < slots.size() else 0)
+		var mines: Array = (m.get("mine_slots", p.get("dilei", [])) if m != null else p.get("dilei", []))
+		for j in range(8):
+			b.put_u8(int(mines[j]) if j < mines.size() else 0)
+	return b.get_data_array()
+
+
+static func encode(state, level: Dictionary) -> PackedByteArray:
+	var b := StreamPeerBuffer.new()
+	b.big_endian = false
+	b.put_u32(2)  # game mode: strategic
+	b.put_u32(int(state.campaign_index))
+	b.put_u32(1)  # difficulty
+	b.put_u32(100)  # terrain modifier
+	# Intro 700 B: 只写难度/固定字段；关卡字符串保持 0，避免 UTF-8/GBK 混写。
+	var intro := PackedByteArray(); intro.resize(700)
+	intro.encode_u32(0x20, 1)
+	intro.encode_u32(0x2B4, 99)
+	b.put_data(intro)
+	b.put_u32(128)  # map width
+	b.put_u32(int(state.current_town))
+	_pad(b, 12)
+	_pad(b, 64)
+	for i in range(19):
+		b.put_u32(1 if state.is_liberated(i) else 0)
+	for i in range(14):
+		var v := 0
+		match i:
+			0: v = int(state.campaign_index)
+			1: v = int(state.score_total)
+			2: v = 1 if state.hidden_unlocked else 0
+			3: v = int(state.ending_id)
+			4: v = state.campaign_completed.size()
+		b.put_u32(v)
+	_pad(b, 380)
+	_pad(b, 8192)
+	_pad(b, 8192)
+	var people := _people_bytes(state)
+	b.put_data(people)
+	b.put_data(people)
+	for i in range(160):
+		var v := 0
+		if i == 0:
+			v = mini(65535, int(state.money))
+		else:
+			v = mini(65535, state.item_count(i - 1))
+		b.put_u16(v)
+	_pad(b, 320)
+	for i in range(40):
+		b.put_u16(1 if state.has_member(i) else 0)
+	_pad(b, 40)
+	_pad(b, 32768)
+	_pad(b, 8)
+	_pad(b, 28)
+	_pad(b, 12)
+	b.put_u32(int(Time.get_unix_time_from_system()))
+	b.put_u32(0)
+	var data := b.get_data_array()
+	if data.size() != SIZE:
+		push_error("OriginalSave size %d != %d" % [data.size(), SIZE])
+	return data
+
+
+static func decode(data: PackedByteArray) -> Dictionary:
+	if data.size() != SIZE:
+		return {}
+	var b := StreamPeerBuffer.new()
+	b.data_array = data
+	b.big_endian = false
+	b.get_u32()  # block0 game mode
+	var out := {"fight_index": int(b.get_u32()), "difficulty": int(b.get_u32())}
+	b.get_u32()  # block3 terrain
+	_skip(b, 700)  # intro
+	out["map_width"] = int(b.get_u32())
+	out["town"] = int(b.get_u32())
+	_skip(b, 12)
+	_skip(b, 64)
+	var liberated: Array = []
+	for i in range(19):
+		if int(b.get_u32()) != 0:
+			liberated.append(i)
+	out["liberated"] = liberated
+	var progress: Array = []
+	for i in range(14):
+		progress.append(int(b.get_u32()))
+	_skip(b, 380)
+	_skip(b, 8192)
+	_skip(b, 8192)
+	var people_got = b.get_data(16896)
+	var people_raw: PackedByteArray = people_got[1]
+	_skip(b, 16896)
+	var people := _decode_people(people_raw)
+	out["people"] = people
+	var cangku: Array = []
+	for i in range(160):
+		cangku.append(int(b.get_u16()))
+	out["money"] = cangku[0]
+	var items := {}
+	for i in range(1, 160):
+		if cangku[i] > 0:
+			items[str(i - 1)] = cangku[i]
+	out["items"] = items
+	_skip(b, 320)
+	var members: Array = []
+	for i in range(40):
+		if int(b.get_u16()) != 0:
+			members.append(i)
+	out["members"] = members
+	out["score_total"] = progress[1] if progress.size() > 1 else 0
+	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
+	out["ending_id"] = progress[3] if progress.size() > 3 else 0
+	out["campaign_completed"] = progress[4] if progress.size() > 4 else 0
+	return out
+
+
+static func _decode_people(raw: PackedByteArray) -> Array:
+	var out: Array = []
+	var b := StreamPeerBuffer.new()
+	b.data_array = raw
+	b.big_endian = false
+	for i in range(128):
+		var name_got = b.get_data(16)
+		var name_bytes: PackedByteArray = name_got[1]
+		var face := int(b.get_u32())
+		b.get_u32()
+		var enemy := int(b.get_u32())
+		var wuli := int(b.get_u32())
+		var zhili := int(b.get_u32())
+		var level := int(b.get_u32())
+		var xp := int(b.get_u32())
+		var bz := int(b.get_u32())
+		var atk := int(b.get_u32())
+		var skills := {}
+		for k in SKILL_KEYS:
+			skills[k] = int(b.get_u32())
+		var items: Array = []
+		for j in range(8):
+			items.append(int(b.get_u8()))
+		var mines: Array = []
+		for j in range(8):
+			mines.append(int(b.get_u8()))
+		out.append({"slot": i, "name_gbk": name_bytes, "face": face,
+				"enemy": enemy, "wuli": wuli, "zhili": zhili, "level": level,
+				"xp": xp, "bingzhong": bz, "attack_count": atk,
+				"skills": skills, "items": items, "mines": mines})
+	return out
+
+
+static func apply(state, d: Dictionary, path: String) -> bool:
+	if d.is_empty():
+		return false
+	state.party.clear()
+	state.items.clear()
+	state.materials.clear()
+	state.mines.clear()
+	state.liberated = (d.get("liberated", []) as Array).duplicate()
+	state.money = int(d.get("money", 0))
+	state.current_town = int(d.get("town", 0))
+	state.campaign_index = int(d.get("fight_index", 0))
+	state.score_total = int(d.get("score_total", 0))
+	state.hidden_unlocked = bool(d.get("hidden_unlocked", false))
+	state.ending_id = int(d.get("ending_id", 0))
+	state.campaign_completed.clear()
+	for i in range(min(state.campaign_index, 36)):
+		state.campaign_completed.append(i)
+	var people: Array = d.get("people", [])
+	for pid in d.get("members", []):
+		var p: Dictionary = people[pid] if pid < people.size() else {}
+		state._add_member(int(pid))
+		var m = state.get_member(int(pid))
+		if m == null:
+			continue
+		m["level"] = int(p.get("level", 1))
+		m["xp"] = int(p.get("xp", 0))
+		m["bingzhong"] = int(p.get("bingzhong", m.get("bingzhong", 0)))
+		m["wuli"] = int(p.get("wuli", m.get("wuli", 0)))
+		m["zhili"] = int(p.get("zhili", m.get("zhili", 0)))
+		m["skills"] = (p.get("skills", {}) as Dictionary).duplicate(true)
+		m["attack_count"] = int(p.get("attack_count", 0))
+		m["item_slots"] = (p.get("items", []) as Array).duplicate()
+		m["mine_slots"] = (p.get("mines", []) as Array).duplicate()
+		m["max_hp"] = state.max_hp_for(int(m["bingzhong"]), int(m["level"]))
+		m["hp"] = int(m["max_hp"])
+	for k in d.get("items", {}):
+		state.items[str(k)] = int(d["items"][k])
+	state.saved_at = "original:" + path
+	return true

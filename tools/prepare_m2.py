@@ -130,6 +130,7 @@ def main():
         people_out.append({
             "pid": pid,
             "name": p["name"],
+            "name_gbk_hex": p["name"].encode("gb18030", errors="replace").hex(),
             "face": p["face"],
             "face_png": f"res://assets/face/face_{p['face']:03d}.png",
             "bingzhong": p["bingzhong"],
