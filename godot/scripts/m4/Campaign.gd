@@ -41,6 +41,9 @@ func setup(font_ref: Font) -> void:
 	state.setup_m4(m4)
 	state.new_game(m2)
 	state.player_name = _load_player_name()
+	var vcfg := ConfigFile.new()
+	if vcfg.load("user://dlz_config.cfg") == OK:
+		state.story_variant = bool(vcfg.get_value("video", "story_variant", false))
 	selected_town = state.level_town(state.campaign_index)
 	state.current_town = selected_town
 	_show_world()
@@ -483,16 +486,25 @@ func _media_for(idx: int) -> String:
 			var parsed = JSON.parse_string(f.get_as_text())
 			if parsed is Dictionary:
 				media = parsed
+	var base := ""
+	var variant := ""
 	for c in media.get("clips", []):
 		if str(c.get("kind", "mpeg")) != "mpeg":
 			continue
 		var lvl := int(c.get("level_index", c.get("level", -1)))
 		var cid := str(c.get("id", ""))
-		if lvl == idx or cid == ("d%02d" % (idx + 1)):
-			var p := str(c.get("ogv_path", c.get("ogv", "")))
-			if p != "" and ResourceLoader.exists(p):
-				return p
-	return ""
+		if lvl != idx and cid != ("d%02d" % (idx + 1)):
+			continue
+		var p := str(c.get("ogv_path", c.get("ogv", "")))
+		if p == "" or not ResourceLoader.exists(p):
+			continue
+		if bool(c.get("variant", false)):
+			variant = p
+		else:
+			base = p
+	if state.story_variant and variant != "":
+		return variant
+	return base
 
 
 func _play_current_story() -> void:

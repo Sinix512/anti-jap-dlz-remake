@@ -26,6 +26,7 @@ var hidden_unlocked := false
 var hidden_done: Array = []
 var ending_id := 0
 var player_name := "李勇"
+var story_variant := false
 var m4_data: Dictionary = {}
 
 

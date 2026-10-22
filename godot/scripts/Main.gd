@@ -545,6 +545,13 @@ func _show_settings() -> void:
 	vol.position = Vector2(360, y + 28)
 	vol.size = Vector2(200, 24)
 	menu_root.add_child(vol)
+	var variant := CheckButton.new()
+	variant.text = "使用过场变体（A 版）"
+	variant.button_pressed = bool(cfg.get_value("video", "story_variant", false))
+	variant.position = Vector2(300, y + 76)
+	variant.add_theme_font_override("font", font)
+	variant.add_theme_font_size_override("font_size", 14)
+	menu_root.add_child(variant)
 	var full := CheckButton.new()
 	full.text = "全屏"
 	full.button_pressed = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
@@ -553,7 +560,7 @@ func _show_settings() -> void:
 	full.add_theme_font_size_override("font_size", 16)
 	menu_root.add_child(full)
 	var save := OriginalUI.button("保存并返回", font, Vector2(160, 34),
-			_save_settings.bind(edit, full, vol), 16)
+			_save_settings.bind(edit, full, vol, variant), 16)
 	save.position = Vector2(80, y + 140)
 	menu_root.add_child(save)
 	var back := OriginalUI.button("返回", font, Vector2(100, 30), _show_title, 16)
@@ -566,12 +573,14 @@ func _show_settings() -> void:
 	menu_root.add_child(note)
 
 
-func _save_settings(edit: LineEdit, full: CheckButton, vol: HSlider) -> void:
+func _save_settings(edit: LineEdit, full: CheckButton, vol: HSlider,
+		variant: CheckButton) -> void:
 	var c := ConfigFile.new()
 	var nm := edit.text.strip_edges()
 	c.set_value("player", "name", nm if nm != "" else "李勇")
 	c.set_value("video", "fullscreen", full.button_pressed)
 	c.set_value("audio", "master_volume", float(vol.value))
+	c.set_value("video", "story_variant", variant.button_pressed)
 	c.save("user://dlz_config.cfg")
 	AudioServer.set_bus_volume_db(0, linear_to_db(clampf(float(vol.value), 0.0, 1.0)))
 	if full.button_pressed:
