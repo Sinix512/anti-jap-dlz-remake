@@ -1071,7 +1071,7 @@ def convert_anm(
             duration=out_info["duration"],
         )
         skipped = False
-    if video_id.startswith("mine"):
+    if video_id.startswith("mine") or video_id in {f"ffpact{i:02d}" for i in range(5)}:
         sheet = dest / "anm" / f"{video_id}_sheet.png"
         if force or not sheet.exists():
             try:

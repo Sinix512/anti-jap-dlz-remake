@@ -1148,32 +1148,38 @@ func _place_mine() -> void:
 	update_hud()
 
 
+func _play_anm_sheet(path: String, world: Vector2, scale_factor: float = 0.6) -> bool:
+	if not ResourceLoader.exists(path):
+		return false
+	var tex: Texture2D = load(path)
+	if tex == null:
+		return false
+	var frames := SpriteFrames.new()
+	frames.remove_animation("default")
+	frames.add_animation("default")
+	frames.set_animation_speed("default", 12.0)
+	frames.set_animation_loop("default", false)
+	var n := int(tex.get_width() / 320)
+	for i in range(n):
+		var at := AtlasTexture.new()
+		at.atlas = tex
+		at.region = Rect2(i * 320, 0, 320, 200)
+		frames.add_frame("default", at)
+	var anim := AnimatedSprite2D.new()
+	anim.sprite_frames = frames
+	anim.position = world
+	anim.scale = Vector2(scale_factor, scale_factor)
+	anim.z_index = 0
+	anim.animation_finished.connect(anim.queue_free)
+	fx_root.add_child(anim)
+	anim.play("default")
+	return true
+
+
 func _play_mine_effect(mine_id: int, tile: Vector2i) -> void:
-	var sheet := "res://assets/m5/anm/mine%02d_sheet.png" % mine_id
-	if ResourceLoader.exists(sheet):
-		var tex: Texture2D = load(sheet)
-		if tex != null:
-			var frames := SpriteFrames.new()
-			frames.remove_animation("default")
-			frames.add_animation("default")
-			frames.set_animation_speed("default", 12.0)
-			frames.set_animation_loop("default", false)
-			var n := int(tex.get_width() / 320)
-			for i in range(n):
-				var at := AtlasTexture.new()
-				at.atlas = tex
-				at.region = Rect2(i * 320, 0, 320, 200)
-				frames.add_frame("default", at)
-			var anim := AnimatedSprite2D.new()
-			anim.sprite_frames = frames
-			anim.position = Vector2(tile.x * TILE + TILE / 2.0,
-					tile.y * TILE + TILE / 2.0)
-			anim.scale = Vector2(0.6, 0.6)
-			anim.z_index = 0
-			anim.animation_finished.connect(anim.queue_free)
-			fx_root.add_child(anim)
-			anim.play("default")
-			return
+	var world := Vector2(tile.x * TILE + TILE / 2.0, tile.y * TILE + TILE / 2.0)
+	if _play_anm_sheet("res://assets/m5/anm/mine%02d_sheet.png" % mine_id, world, 0.6):
+		return
 	var path := "res://assets/m5/anm/mine%02d.ogv" % mine_id
 	if not ResourceLoader.exists(path):
 		return
@@ -1488,8 +1494,13 @@ func _execute_skill_at(tile: Vector2i) -> void:
 				affected += 1
 		target.refresh()
 	if affected > 0:
-		_play_flm(int(active_skill.get("flm_index", -1)),
-				Vector2(center.x * TILE + TILE / 2.0, center.y * TILE + TILE / 2.0), 1.2)
+		var center_world := Vector2(center.x * TILE + TILE / 2.0,
+				center.y * TILE + TILE / 2.0)
+		_play_flm(int(active_skill.get("flm_index", -1)), center_world, 1.2)
+		var aidx := int(active_skill.get("anm_index", -1))
+		if aidx >= 0:
+			_play_anm_sheet("res://assets/m5/anm/ffpact%02d_sheet.png" % aidx,
+					center_world, 0.75)
 		caster.skill_counts[SKILL_KEYS[sid]] = count + 1
 		caster.acted = true
 		caster.refresh()
