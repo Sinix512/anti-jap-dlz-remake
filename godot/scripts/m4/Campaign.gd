@@ -564,6 +564,13 @@ func _on_battle_finished(result: String, message: String) -> void:
 	var idx := current_battle_index
 	var score := _score_for(stats, victory, idx)
 	var info: Dictionary = {}
+	var joined_names: Array = []
+	if victory and not current_battle_standalone:
+		for pid in state.m4_level(idx).get("joins", []):
+			var jr: Dictionary = state.join_member(int(pid))
+			if bool(jr.get("ok", false)):
+				joined_names.append(str(jr.get("msg", "")).replace("加入队伍", ""))
+	stats["joined"] = joined_names
 	if not current_battle_standalone:
 		info = state.complete_level(idx, score, victory)
 		state.current_town = state.level_town(state.campaign_index) \
@@ -644,6 +651,12 @@ func _show_report(victory: bool, message: String, idx: int, score: int,
 	grade.position = Vector2(466, 312)
 	grade.size = Vector2(120, 28)
 	layer.add_child(grade)
+	if not (bs.get("joined", []) as Array).is_empty():
+		var jl := OriginalUI.label("新加入：%s" % "、".join(bs["joined"]),
+				font, 14, OriginalUI.GOLD_LIGHT)
+		jl.position = Vector2(160, 420)
+		jl.size = Vector2(320, 22)
+		layer.add_child(jl)
 	var row := HBoxContainer.new()
 	row.position = Vector2(160, 450)
 	row.add_theme_constant_override("separation", 12)

@@ -157,6 +157,15 @@ func recruit_cost(pid: int) -> int:
 	return int(p.get("recruit_cost", 1000)) if not p.is_empty() else 0
 
 
+func join_member(pid: int) -> Dictionary:
+	if has_member(pid):
+		return {"ok": false, "msg": "该角色已在队伍中"}
+	if party_size() >= max_party():
+		return {"ok": false, "msg": "队伍已满，%s 暂未加入" % people()[pid].get("name", "")}
+	_add_member(pid)
+	return {"ok": true, "msg": "%s 加入队伍" % people()[pid].get("name", "")}
+
+
 func recruit(pid: int) -> Dictionary:
 	if has_member(pid):
 		return {"ok": false, "msg": "该角色已在队伍中"}

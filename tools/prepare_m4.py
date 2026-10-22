@@ -143,6 +143,16 @@ MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
 PARTY_DEPLOY = {**{i: True for i in MAIN_LEVELS}}
 PARTY_DEPLOY[46] = True  # 鬼子进村：张嘎 + 村民 + 队伍 + 八路军增援
 PROTECT_ALL = {36, 40}  # 狼牙山：五壮士全部阵亡才失败
+# 剧情加入：按原作情节在胜利后加入队伍（pid 对应 PEOPLE.DAT）。
+# 这不是反汇编确认的加入触发器，是可玩性/剧情补足。
+JOIN_AFTER = {
+    6: [8],    # 接应肖飞
+    11: [13],  # 解救林嫂
+    18: [21],  # 智擒郑之光
+    19: [22],  # 义收金花婆
+    23: [34],  # 营救彼德
+    30: [33],  # 红岩反击战：李正
+}
 TURN_LIMIT_OVERRIDE = {i: 60 for i in range(36)}  # 主线至少 60 回合；原版 20-40 回合对低等级队伍过紧
 
 # 每关推荐剧情 TXT n（M5 再细化；这里只放关键的开场/收尾）
@@ -699,6 +709,7 @@ def main() -> None:
             "objective": obj_raw,
             "protect": protect_names,
             "protect_all": idx in PROTECT_ALL,
+            "joins": JOIN_AFTER.get(idx, []),
             "chests": chests,
             "specials": [s for s in specials if not s["empty"]],
             "story_ids": STORY_IDS.get(idx, []),

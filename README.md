@@ -115,6 +115,7 @@ M3 只改表现，不改玩法/数值；M1/M2 回归保持通过。
 - **事件层**：`m5.json.scenes[*].events` 45 条（turn/unit_died/chest），188 条记录带
   `trigger`；`Battle.story_event` → `Campaign` 队列 → 战斗内暂停播放。
 - **角色创建**：`MENU01` 原版界面用于“新的战役”姓名输入；形象/兵种/属性仍为默认。
+- **剧情加入**：L06/L11/L18/L19/L23/L30 胜利后按 `m4.json.joins` 加入队伍。
 - **过场**：33 段 MPEG → 640×480 WebM（交付格式）+ OGV（Godot 4.7 的 Theora 播放格式），
   按 D01–D36 映射到主线关卡，出击前播放。变体映射：`d01a→L00`、`d07a→L06`、
   `d10a→L09`、`d14a→L13`（无 D14 base）、`d28a→L27`；缺失 base 编号
