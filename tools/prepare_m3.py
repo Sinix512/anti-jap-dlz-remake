@@ -265,7 +265,7 @@ def main() -> None:
     for p in sorted((OUT / "flm").glob("flm_*.png")):
         shutil.copyfile(p, FLM / p.name)
         manifest["flm/" + p.name] = "res://assets/flm/" + p.name
-    for src in ("MENU01", "K00", "K01", "K02", "K03", "K04"):
+    for src in ("MENU01", "K00", "K01", "K02", "K03", "K04", "BG03"):
         p = OUT / "img" / f"{src}.png"
         if p.exists():
             shutil.copyfile(p, UI / f"{src.lower()}.png")

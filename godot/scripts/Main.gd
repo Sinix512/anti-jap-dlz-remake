@@ -195,6 +195,13 @@ func _capture(mode: String) -> void:
 				campaign.state.ending_id = 2
 				campaign.state.score_total = 3100
 				campaign._show_ending(2)
+		"m5-ending-gallery":
+			_start_campaign()
+			for i in range(3):
+				await get_tree().process_frame
+			if is_instance_valid(campaign):
+				campaign.state.ending_id = 2
+				campaign._show_ending_gallery()
 		"m5-ending-hidden":
 			_start_campaign()
 			for i in range(3):

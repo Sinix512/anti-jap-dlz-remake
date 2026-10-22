@@ -904,6 +904,9 @@ func _show_ending(forced := -1) -> void:
 				_start_hidden.bind("fiction"), 14)
 		row.add_child(fic)
 	root.add_child(row)
+	var gallery := _button("结局一览", Vector2(520, 40), Vector2(90, 26),
+			_show_ending_gallery, 14)
+	root.add_child(gallery)
 	var state_l := OriginalUI.label("累计得分 %d / 3600" % state.score_total,
 			font, 14, Color("#d8c39a"))
 	state_l.position = Vector2(0, 462)
@@ -947,6 +950,40 @@ func _close_credits() -> void:
 		credits_layer.queue_free()
 	credits_layer = null
 	exit_requested.emit()
+
+
+func _show_ending_gallery() -> void:
+	if is_instance_valid(ending_layer):
+		ending_layer.queue_free()
+	ending_layer = CanvasLayer.new()
+	ending_layer.layer = 95
+	add_child(ending_layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.theme = ui_theme
+	ending_layer.add_child(root)
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/bg03.png") \
+			if ResourceLoader.exists("res://assets/ui/bg03.png") else null
+	bg.position = Vector2.ZERO
+	bg.size = Vector2(640, 480)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	root.add_child(bg)
+	var head := OriginalUI.header("结 局 一 览", font, Rect2(0, 0, 640, 30))
+	root.add_child(head)
+	var endings: Array = m5.get("endings", [])
+	for i in range(endings.size()):
+		var e: Dictionary = endings[i]
+		var b := _button("%s  %d" % [e.get("title", "结局"), int(e.get("score", 0))],
+				Vector2(310, 74 + i * 56), Vector2(260, 40),
+				_show_ending.bind(int(e.get("id", i))), 16)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		root.add_child(b)
+	var back := _button("返 回", Vector2(520, 438), Vector2(90, 26),
+			func(): _show_ending(state.ending_id), 14)
+	root.add_child(back)
 
 
 func _open_story_archive() -> void:
