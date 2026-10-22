@@ -5,7 +5,7 @@ extends RefCounted
 
 
 static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
-		force_party := false, max_party := -1) -> Dictionary:
+		force_party := false, max_party := -1, deploy_pids: Array = []) -> Dictionary:
 	var levels: Array = m4.get("levels", [])
 	if idx < 0 or idx >= levels.size():
 		return {}
@@ -20,13 +20,20 @@ static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
 		deploy.append([int(p[0]), int(p[1])])
 	var allow_party := force_party or bool(lv.get("party_deploy", false))
 	var limit := max_party if max_party >= 0 else int(lv.get("max_deploy", 10))
-	if allow_party and not party.is_empty():
+	var roster: Array = []
+	if allow_party and not deploy_pids.is_empty():
+		for m in party:
+			if int(m.get("pid", -1)) in deploy_pids:
+				roster.append(m)
+	else:
+		roster = party
+	if allow_party and not roster.is_empty():
 		var fixed_keys := {}
 		for u in units:
 			if str(u.get("side", "")) == "player":
 				fixed_keys[str(u.get("key", _key(u.get("name", ""))))] = true
 		var added := 0
-		for m in party:
+		for m in roster:
 			if added >= limit:
 				break
 			if int(m.get("hp", 0)) <= 0:

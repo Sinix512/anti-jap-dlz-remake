@@ -22,6 +22,8 @@ var _last_report: Dictionary = {}
 var battle_story_queue: Array = []
 var battle_story_seen: Dictionary = {}
 var story_layer: CanvasLayer
+var deploy_selected: Array = []
+var current_deploy_pids: Array = []
 var credits_layer: CanvasLayer
 
 
@@ -416,7 +418,8 @@ func _launch_campaign_level() -> void:
 func _show_deployment(idx: int) -> void:
 	_new_ui()
 	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/k00.png") 			if ResourceLoader.exists("res://assets/ui/k00.png") else null
+	bg.texture = load("res://assets/ui/k00.png") \
+			if ResourceLoader.exists("res://assets/ui/k00.png") else null
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_SCALE
@@ -424,43 +427,81 @@ func _show_deployment(idx: int) -> void:
 	bg.size = Vector2(640, 480)
 	ui_root.add_child(bg)
 	var lv: Dictionary = state.m4_level(idx)
+	var max_dep := mini(int(lv.get("max_deploy", 10)), state.party_size())
+	max_dep = maxi(1, max_dep)
+	# 过滤已不在队伍/已阵亡的旧选择
+	var valid: Array = []
+	for pid in deploy_selected:
+		for m in state.party:
+			if int(m["pid"]) == int(pid) and int(m.get("hp", 0)) > 0:
+				valid.append(int(pid))
+	deploy_selected = valid
+	if deploy_selected.is_empty():
+		for m in state.party:
+			if deploy_selected.size() >= max_dep:
+				break
+			if int(m.get("hp", 0)) > 0:
+				deploy_selected.append(int(m["pid"]))
 	ui_root.add_child(OriginalUI.header("出 战 / L%02d %s" % [idx, lv.get("name", "")],
 			font, Rect2(0, 0, 640, 30)))
 	var left := VBoxContainer.new()
-	left.position = Vector2(52, 86)
-	left.size = Vector2(250, 286)
+	left.position = Vector2(44, 84)
+	left.size = Vector2(268, 292)
 	left.add_theme_constant_override("separation", 3)
 	ui_root.add_child(left)
 	for m in state.party:
-		var l := OriginalUI.label("%s  Lv%d  %s  HP%d/%d" % [
-			m.get("name", ""), int(m.get("level", 1)), m.get("unit_name", ""),
-			int(m.get("hp", 0)), int(m.get("max_hp", 0))], font, 14,
-			Color("#f0e4c8"))
-		l.size = Vector2(250, 22)
-		left.add_child(l)
+		var pid := int(m["pid"])
+		var mark := "✓" if deploy_selected.has(pid) else "·"
+		var b := OriginalUI.button("%s %s  Lv%d %s" % [mark, m.get("name", ""),
+				int(m.get("level", 1)), m.get("unit_name", "")], font,
+				Vector2(262, 24), _toggle_deploy.bind(pid, idx), 14)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.disabled = int(m.get("hp", 0)) <= 0
+		left.add_child(b)
 	var right := VBoxContainer.new()
-	right.position = Vector2(376, 86)
-	right.size = Vector2(218, 286)
-	right.add_theme_constant_override("separation", 4)
+	right.position = Vector2(372, 84)
+	right.size = Vector2(224, 292)
+	right.add_theme_constant_override("separation", 3)
 	ui_root.add_child(right)
-	right.add_child(OriginalUI.label("目标：%s" % lv.get("objective", {}).get("label", ""),
+	right.add_child(OriginalUI.label("出战 %d/%d" % [deploy_selected.size(), max_dep],
 			font, 14, OriginalUI.GOLD_LIGHT))
+	for pid in deploy_selected:
+		var m = state.get_member(int(pid))
+		if m != null:
+			right.add_child(OriginalUI.label("%s  Lv%d" % [m.get("name", ""),
+					int(m.get("level", 1))], font, 14, Color("#f0e4c8")))
+	right.add_child(OriginalUI.label("目标：%s" % lv.get("objective", {}).get("label", ""),
+			font, 12, Color("#e5d4ad")))
 	right.add_child(OriginalUI.label("敌军：%d" % int(lv.get("enemies", 0)),
-			font, 14, Color("#f0e4c8")))
-	right.add_child(OriginalUI.label("我军：%d" % state.party_size(),
-			font, 14, Color("#f0e4c8")))
-	right.add_child(OriginalUI.label("（当前全员出击）", font, 12,
-			Color("#b9a98b")))
+			font, 12, Color("#e5d4ad")))
 	var go := _button("出 击", Vector2(120, 398), Vector2(140, 34),
-			func(): _launch_level(idx, false), 16)
+			_deploy_go.bind(idx), 16)
 	ui_root.add_child(go)
 	var back := _button("返 回", Vector2(300, 398), Vector2(120, 34),
 			_show_world, 16)
 	ui_root.add_child(back)
-	var hint := OriginalUI.label("原版 K00 出战界面 / 自动检查点已保存",
+	var hint := OriginalUI.label("K00 出战 / 选择出战队员 / 自动检查点已保存",
 			font, 12, Color("#c8b88f"))
 	hint.position = Vector2(120, 440)
 	ui_root.add_child(hint)
+
+
+func _deploy_go(idx: int) -> void:
+	current_deploy_pids = deploy_selected.duplicate()
+	_launch_level(idx, false, current_deploy_pids)
+
+
+func _toggle_deploy(pid: int, idx: int) -> void:
+	var lv: Dictionary = state.m4_level(idx)
+	var max_dep := maxi(1, mini(int(lv.get("max_deploy", 10)), state.party_size()))
+	if deploy_selected.has(pid):
+		deploy_selected.erase(pid)
+	elif deploy_selected.size() >= max_dep:
+		_toast("最多出战 %d 人" % max_dep)
+		return
+	else:
+		deploy_selected.append(pid)
+	_show_deployment(idx)
 
 
 func _play_media(idx: int, cb: Callable) -> void:
@@ -553,8 +594,11 @@ func _open_battle_select() -> void:
 		list.add_child(b)
 
 
-func _launch_level(idx: int, standalone: bool) -> void:
-	var level: Dictionary = LevelBuilder.build(m4, m2, idx, state.party, false)
+func _launch_level(idx: int, standalone: bool, deploy_pids: Array = []) -> void:
+	var selected: Array = deploy_pids
+	if selected.is_empty() and not standalone:
+		selected = current_deploy_pids
+	var level: Dictionary = LevelBuilder.build(m4, m2, idx, state.party, false, -1, selected)
 	if level.is_empty():
 		_toast("关卡数据缺失")
 		return
@@ -750,7 +794,8 @@ func _retry_battle() -> void:
 	if is_instance_valid(battle):
 		battle.queue_free()
 		battle = null
-	_launch_level(int(r.get("idx", current_battle_index)), bool(r.get("standalone", false)))
+	_launch_level(int(r.get("idx", current_battle_index)),
+			bool(r.get("standalone", false)), current_deploy_pids)
 
 
 func _report_continue() -> void:
