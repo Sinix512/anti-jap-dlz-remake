@@ -301,6 +301,10 @@ func _show_gallery_preview() -> void:
 	var g = load("res://scripts/m5/MediaGallery.gd").new()
 	add_child(g)
 	g.setup(font, media if media is Dictionary else {}, anm if anm is Dictionary else {})
+	if g.has_signal("closed"):
+		g.closed.connect(func():
+			g.queue_free()
+			_show_title())
 
 
 func _show_cutscene_preview() -> void:
@@ -363,6 +367,10 @@ func _show_title() -> void:
 	var intro := OriginalUI.button("片头", font, Vector2(70, 26), _play_intro, 14)
 	intro.position = Vector2(552, 404)
 	title_screen.add_child(intro)
+	var gallery := OriginalUI.button("影像馆", font, Vector2(70, 26),
+			_show_gallery_preview, 14)
+	gallery.position = Vector2(470, 404)
+	title_screen.add_child(gallery)
 	# M1 回归兼容：隐藏的 L14 快速入口（不参与视觉，仅测试/调试）
 	var debug := Button.new()
 	debug.text = "L14 地道战"
