@@ -715,6 +715,18 @@ func from_dict(d: Dictionary) -> bool:
 	return true
 
 
+func save_checkpoint() -> bool:
+	return save_slot(8)
+
+
+func load_checkpoint() -> bool:
+	return load_slot(8)
+
+
+func has_checkpoint() -> bool:
+	return not slot_info(8).is_empty()
+
+
 func save_path(slot: int) -> String:
 	return "user://%s%d.json" % [meta().get("save_prefix", "dlz_m2_save_"), slot]
 

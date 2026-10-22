@@ -403,6 +403,8 @@ func _launch_campaign_level() -> void:
 		return
 	_close_panel()
 	var idx: int = state.campaign_index
+	if not current_battle_standalone:
+		state.save_checkpoint()
 	_play_media(idx, func():
 		_play_story_then(idx, func(): _launch_level(idx, false)))
 
@@ -676,6 +678,8 @@ func _show_report(victory: bool, message: String, idx: int, score: int,
 
 func _retry_battle() -> void:
 	var r := _last_report
+	if not bool(r.get("victory", false)) and not bool(r.get("standalone", true)):
+		state.load_checkpoint()
 	if is_instance_valid(result_canvas):
 		result_canvas.queue_free()
 		result_canvas = null
@@ -697,7 +701,10 @@ func _report_continue() -> void:
 		_show_world()
 		return
 	if not bool(r.get("victory", false)):
-		_show_world()
+		if state.load_checkpoint():
+			_launch_level(int(r.get("idx", current_battle_index)), false)
+		else:
+			_show_world()
 		return
 	var idx := int(r.get("idx", 0))
 	# 胜利后先放收尾剧情，再回世界
