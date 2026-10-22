@@ -1,4 +1,8 @@
+# 生成物（体积 + 版权）：由 extract_all.py 重建，不入库
 out/
+data/
+assets/
+
 __pycache__/
 *.pyc
 .DS_Store

@@ -1,18 +1,29 @@
 """抗日地雷战 IMG 解码器。
 
-格式（公开研究 dlzr/img_loader + 本地逐字节校验一致）：
+基本格式（84/86 个文件直接成立）：
 
-    偏移 0x00  4B   'IMGV'
-    偏移 0x04  2B   pad (=1)
-    偏移 0x06  2B   宽 - 1 (LE)
-    偏移 0x08  2B   高 - 1 (LE)
-    偏移 0x0A  6B   pad
-    偏移 0x10  w*h  8bpp 像素索引，逐行、无压缩
-    随后      768B  调色板，256 × RGB，每分量 6 位（×4 才是 0-255）
+    0x00  4B   'IMGV'
+    0x04  2B   pad (=1)
+    0x06  2B   宽 - 1 (LE)
+    0x08  2B   高 - 1 (LE)
+    0x0A  6B   pad
+    0x10  w*h  8bpp 索引像素，逐行、自上而下、无压缩
+    随后  768B 调色板，256 × RGB，每分量 6 位（×4 → 0-255）
 
-校验方式：16 + w*h + 768 必须等于文件长度（86 个 IMG 里 85 个成立；
-END04.IMG 只有 64784 字节，属于另一种压缩变体，单独处理）。
+两个异类（本机逐字节定位，见下方 resolve_geometry）：
+
+* `END04.IMG`：头部声明 640×480，但像素区只有 64,000 B。
+  64,000 = 320×200，且 `16 + 320*200 + 768 == 64,784` 正好等于文件长度；
+  按 320×200 解码得到完整的「两人背影」结局图。→ 头部尺寸只是显示尺寸，
+  像素实际是 320×200（游戏里拉伸到 640×480）。
+* `ZYB.IMG`：像素区 4,839,680 B = 640 × 7,562，调色板同样在文件尾部。
+  按 640×7,562 解码后，第 5/6 屏交界处「袁世辉」三字的上半截与下半截
+  正好接上 → 它是一张**纵向滚动字幕长图**，不是 16 帧动画。
+  `16 + 640*7562 + 768 == 4,840,464` 正好等于文件长度。
+
+校验方式：所有分支都必须满足 `16 + w*h + 768 == 文件长度`。
 """
+
 from __future__ import annotations
 
 import struct
@@ -24,6 +35,12 @@ from PIL import Image
 HEADER = 16
 PALETTE = 768
 COMPONENT_SCALE = 4  # 6 位 → 8 位
+
+# END04.IMG 的像素区是 320×200（64,000 B），头部却写着 640×480。
+# 这个尺寸无法从头部推出来，只能按文件长度 + 解码结果确认，所以单独列出。
+_QUIRKS = {
+    "END04.IMG": (320, 200),
+}
 
 
 @dataclass(frozen=True)
@@ -44,6 +61,13 @@ class ImgHeader:
         return self.palette_offset + PALETTE
 
 
+@dataclass(frozen=True)
+class Geometry:
+    width: int
+    height: int
+    kind: str  # plain / quirk / strip
+
+
 def read_header(path: Path) -> ImgHeader:
     blob = path.read_bytes()[:HEADER]
     if blob[:4] != b"IMGV":
@@ -52,27 +76,59 @@ def read_header(path: Path) -> ImgHeader:
     return ImgHeader(width=w1 + 1, height=h1 + 1)
 
 
-def palette_bytes(blob: bytes, head: ImgHeader) -> bytes:
-    raw = blob[head.palette_offset:head.size]
+def _pixel_bytes(blob: bytes) -> int:
+    return len(blob) - HEADER - PALETTE
+
+
+def resolve_geometry(path: Path, blob: bytes | None = None) -> Geometry:
+    """返回真实像素网格；三条分支都以「16 + w*h + 768 == 文件长度」为准。"""
+    blob = path.read_bytes() if blob is None else blob
+    head = read_header(path)
+    n = _pixel_bytes(blob)
+    if n <= 0:
+        raise ValueError(f"{path.name}: 文件太短（{len(blob)} B）")
+
+    if n == head.width * head.height:
+        return Geometry(head.width, head.height, "plain")
+
+    if path.name in _QUIRKS:
+        w, h = _QUIRKS[path.name]
+        if n != w * h:
+            raise ValueError(
+                f"{path.name}: 像素区 {n} B != 约定的 {w}×{h} = {w * h} B"
+            )
+        return Geometry(w, h, "quirk")
+
+    # 纵向长图：像素区恰好是 640 的整数倍，高度由文件长度反推
+    if n % head.width == 0:
+        return Geometry(head.width, n // head.width, "strip")
+
+    raise ValueError(
+        f"{path.name}: 像素区 {n} B 无法用 {head.width}×{head.height} "
+        f"或 {head.width} 宽的长图解释，可能是未见过的压缩变体"
+    )
+
+
+def palette_bytes(blob: bytes) -> bytes:
+    raw = blob[-PALETTE:]
     return bytes(min(255, c * COMPONENT_SCALE) for c in raw)
 
 
 def decode(path: Path) -> Image.Image:
     blob = path.read_bytes()
-    head = read_header(path)
-    if len(blob) != head.size:
-        raise ValueError(
-            f"{path.name}: 长度 {len(blob)} != 预期 {head.size}"
-            f"（{head.width}×{head.height}），可能是压缩变体"
-        )
-    img = Image.frombytes("P", (head.width, head.height),
-                          blob[head.pixel_offset:head.palette_offset])
-    img.putpalette(palette_bytes(blob, head))
+    geom = resolve_geometry(path, blob)
+    pixels = blob[HEADER:HEADER + geom.width * geom.height]
+    img = Image.frombytes("P", (geom.width, geom.height), pixels)
+    img.putpalette(palette_bytes(blob))
     return img
 
 
-def save_png(path: Path, dest: Path) -> ImgHeader:
-    head = read_header(path)
+def save_png(path: Path, dest: Path) -> Geometry:
+    blob = path.read_bytes()
+    geom = resolve_geometry(path, blob)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    decode(path).save(dest)
-    return head
+    pixels = blob[HEADER:HEADER + geom.width * geom.height]
+    img = Image.frombytes("P", (geom.width, geom.height), pixels)
+    img.putpalette(palette_bytes(blob))
+    img.save(dest)
+    return geom
