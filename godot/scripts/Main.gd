@@ -37,6 +37,7 @@ func _ready() -> void:
 	theme = theme_ref
 	OriginalUI.apply_cursor()
 	OriginalUI.make_sfx(self)
+	_apply_saved_audio()
 	m2 = _load_json(M2_PATH)
 	m3 = _load_json(M3_PATH)
 	m4 = _load_json(M4_PATH)
@@ -425,6 +426,14 @@ func _show_free_result(victory: bool, message: String) -> void:
 	result_layer.add_child(row)
 
 
+func _apply_saved_audio() -> void:
+	var c := ConfigFile.new()
+	if c.load("user://dlz_config.cfg") != OK:
+		return
+	var v := float(c.get_value("audio", "master_volume", 0.8))
+	AudioServer.set_bus_volume_db(0, linear_to_db(clampf(v, 0.0, 1.0)))
+
+
 func _show_settings() -> void:
 	if is_instance_valid(menu_root):
 		menu_root.queue_free()
@@ -454,6 +463,19 @@ func _show_settings() -> void:
 	edit.add_theme_font_size_override("font_size", 16)
 	edit.max_length = 8
 	menu_root.add_child(edit)
+	var vol_l := OriginalUI.label("音量（0–100）", font, 16,
+			OriginalUI.GOLD_LIGHT)
+	vol_l.position = Vector2(360, y)
+	vol_l.size = Vector2(220, 22)
+	menu_root.add_child(vol_l)
+	var vol := HSlider.new()
+	vol.min_value = 0.0
+	vol.max_value = 1.0
+	vol.step = 0.05
+	vol.value = float(cfg.get_value("audio", "master_volume", 0.8))
+	vol.position = Vector2(360, y + 28)
+	vol.size = Vector2(200, 24)
+	menu_root.add_child(vol)
 	var full := CheckButton.new()
 	full.text = "全屏"
 	full.button_pressed = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
@@ -462,7 +484,7 @@ func _show_settings() -> void:
 	full.add_theme_font_size_override("font_size", 16)
 	menu_root.add_child(full)
 	var save := OriginalUI.button("保存并返回", font, Vector2(160, 34),
-			_save_settings.bind(edit, full), 16)
+			_save_settings.bind(edit, full, vol), 16)
 	save.position = Vector2(80, y + 140)
 	menu_root.add_child(save)
 	var back := OriginalUI.button("返回", font, Vector2(100, 30), _show_title, 16)
@@ -475,12 +497,14 @@ func _show_settings() -> void:
 	menu_root.add_child(note)
 
 
-func _save_settings(edit: LineEdit, full: CheckButton) -> void:
+func _save_settings(edit: LineEdit, full: CheckButton, vol: HSlider) -> void:
 	var c := ConfigFile.new()
 	var nm := edit.text.strip_edges()
 	c.set_value("player", "name", nm if nm != "" else "李勇")
 	c.set_value("video", "fullscreen", full.button_pressed)
+	c.set_value("audio", "master_volume", float(vol.value))
 	c.save("user://dlz_config.cfg")
+	AudioServer.set_bus_volume_db(0, linear_to_db(clampf(float(vol.value), 0.0, 1.0)))
 	if full.button_pressed:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
