@@ -406,7 +406,57 @@ func _launch_campaign_level() -> void:
 	if not current_battle_standalone:
 		state.save_checkpoint()
 	_play_media(idx, func():
-		_play_story_then(idx, func(): _launch_level(idx, false)))
+		_play_story_then(idx, func(): _show_deployment(idx)))
+
+
+func _show_deployment(idx: int) -> void:
+	_new_ui()
+	var bg := TextureRect.new()
+	bg.texture = load("res://assets/ui/k00.png") 			if ResourceLoader.exists("res://assets/ui/k00.png") else null
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bg.size = Vector2(640, 480)
+	ui_root.add_child(bg)
+	var lv: Dictionary = state.m4_level(idx)
+	ui_root.add_child(OriginalUI.header("出 战 / L%02d %s" % [idx, lv.get("name", "")],
+			font, Rect2(0, 0, 640, 30)))
+	var left := VBoxContainer.new()
+	left.position = Vector2(52, 86)
+	left.size = Vector2(250, 286)
+	left.add_theme_constant_override("separation", 3)
+	ui_root.add_child(left)
+	for m in state.party:
+		var l := OriginalUI.label("%s  Lv%d  %s  HP%d/%d" % [
+			m.get("name", ""), int(m.get("level", 1)), m.get("unit_name", ""),
+			int(m.get("hp", 0)), int(m.get("max_hp", 0))], font, 14,
+			Color("#f0e4c8"))
+		l.size = Vector2(250, 22)
+		left.add_child(l)
+	var right := VBoxContainer.new()
+	right.position = Vector2(376, 86)
+	right.size = Vector2(218, 286)
+	right.add_theme_constant_override("separation", 4)
+	ui_root.add_child(right)
+	right.add_child(OriginalUI.label("目标：%s" % lv.get("objective", {}).get("label", ""),
+			font, 14, OriginalUI.GOLD_LIGHT))
+	right.add_child(OriginalUI.label("敌军：%d" % int(lv.get("enemies", 0)),
+			font, 14, Color("#f0e4c8")))
+	right.add_child(OriginalUI.label("我军：%d" % state.party_size(),
+			font, 14, Color("#f0e4c8")))
+	right.add_child(OriginalUI.label("（当前全员出击）", font, 12,
+			Color("#b9a98b")))
+	var go := _button("出 击", Vector2(120, 398), Vector2(140, 34),
+			func(): _launch_level(idx, false), 16)
+	ui_root.add_child(go)
+	var back := _button("返 回", Vector2(300, 398), Vector2(120, 34),
+			_show_world, 16)
+	ui_root.add_child(back)
+	var hint := OriginalUI.label("原版 K00 出战界面 / 自动检查点已保存",
+			font, 12, Color("#c8b88f"))
+	hint.position = Vector2(120, 440)
+	ui_root.add_child(hint)
 
 
 func _play_media(idx: int, cb: Callable) -> void:

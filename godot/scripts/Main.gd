@@ -91,6 +91,12 @@ func _capture(mode: String) -> void:
 				await get_tree().process_frame
 			if is_instance_valid(campaign):
 				campaign._show_town(0)
+		"m4-deploy":
+			_start_campaign()
+			for i in range(3):
+				await get_tree().process_frame
+			if is_instance_valid(campaign):
+				campaign._show_deployment(0)
 		"m4-briefing":
 			_start_campaign()
 			for i in range(3):
