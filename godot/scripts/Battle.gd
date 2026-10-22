@@ -513,6 +513,35 @@ func update_hud() -> void:
 		overlay.queue_redraw()
 
 
+func _play_flm(flm_index: int, world: Vector2, scale_factor: float = 1.0) -> void:
+	if flm_index < 0:
+		return
+	var path := "res://assets/flm/flm_%03d.png" % flm_index
+	if not ResourceLoader.exists(path):
+		return
+	var tex: Texture2D = load(path)
+	if tex == null:
+		return
+	var frames := SpriteFrames.new()
+	frames.remove_animation("default")
+	frames.add_animation("default")
+	frames.set_animation_speed("default", 24.0)
+	frames.set_animation_loop("default", false)
+	for i in range(16):
+		var at := AtlasTexture.new()
+		at.atlas = tex
+		at.region = Rect2(i * TILE, 0, TILE, TILE)
+		frames.add_frame("default", at)
+	var anim := AnimatedSprite2D.new()
+	anim.sprite_frames = frames
+	anim.position = world
+	anim.scale = Vector2(scale_factor, scale_factor)
+	anim.z_index = 5000
+	anim.animation_finished.connect(anim.queue_free)
+	fx_root.add_child(anim)
+	anim.play("default")
+
+
 func _play_sfx(wave_id: int, volume_db: float = -6.0) -> void:
 	if wave_id < 0:
 		return
@@ -882,6 +911,8 @@ func _perform_attack(attacker: Node2D, defender: Node2D, counter: bool = false) 
 	attack_tiles.clear()
 	update_hud()
 	_play_sfx(int(unit_class(attacker).get("audio_gongji", -1)))
+	_play_flm(int(unit_class(attacker).get("flm_gongji", -1)),
+			(defender.position + attacker.position) * 0.5)
 	await _attack_anim(attacker, defender)
 	attacker.attack_count += 1
 	var dmg := compute_damage(attacker, defender)
@@ -1167,6 +1198,8 @@ func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
 		mine_nodes.erase(t)
 	_play_sfx(int(m.get("audio_index", -1)), -2.0)
 	_play_mine_effect(int(rec.get("mine_id", 0)), t)
+	_play_flm(int(m.get("flm_index", -1)), Vector2(t.x * TILE + TILE / 2.0,
+			t.y * TILE + TILE / 2.0), 1.4)
 	var area := _mine_area(t, int(rec.get("apply_fw", m.get("apply_fw", 0))))
 	var total := 0
 	var deaths: Array = []
@@ -1430,6 +1463,8 @@ func _execute_skill_at(tile: Vector2i) -> void:
 				affected += 1
 		target.refresh()
 	if affected > 0:
+		_play_flm(int(active_skill.get("flm_index", -1)),
+				Vector2(center.x * TILE + TILE / 2.0, center.y * TILE + TILE / 2.0), 1.2)
 		caster.skill_counts[SKILL_KEYS[sid]] = count + 1
 		caster.acted = true
 		caster.refresh()

@@ -19,6 +19,7 @@ OUT = ROOT / "out"
 ASSETS = ROOT / "godot" / "assets"
 UI = ASSETS / "ui"
 AUDIO = ASSETS / "audio"
+FLM = ASSETS / "flm"
 GODOT_DATA = ROOT / "godot" / "data"
 
 # 原版 HUD 的 DirectDraw 色键：KUANG00/04 的绿色底
@@ -260,6 +261,10 @@ def main() -> None:
     for p in sorted((OUT / "wave").glob("wave_*.wav")):
         shutil.copyfile(p, AUDIO / p.name)
         manifest["audio/" + p.name] = "res://assets/audio/" + p.name
+    FLM.mkdir(parents=True, exist_ok=True)
+    for p in sorted((OUT / "flm").glob("flm_*.png")):
+        shutil.copyfile(p, FLM / p.name)
+        manifest["flm/" + p.name] = "res://assets/flm/" + p.name
 
     (GODOT_DATA / "m3.json").write_text(json.dumps({
         "meta": {
