@@ -445,7 +445,10 @@ func update_hud() -> void:
 	if hud_root == null:
 		return
 	level_label.text = "L%02d  %s" % [int(level["index"]), level["name"]]
-	turn_label.text = "第 %d 回合" % turn
+	var tlim := int(level.get("turn_limit", 0))
+	turn_label.text = ("第 %d/%d 回合" % [turn, tlim]) if tlim > 0 else ("第 %d 回合" % turn)
+	turn_label.add_theme_color_override("font_color",
+			Color("#ff8a6a") if tlim > 0 and turn >= tlim - 5 else OriginalUI.GOLD_LIGHT)
 	if phase == "player":
 		phase_label.text = "我方回合"
 		phase_label.add_theme_color_override("font_color", PLAYER_COLOR)
