@@ -3,8 +3,8 @@
 整文件 56,588 B，分段布局（段偏移来自 dlz_research 的 `dlz_game.bt`，MIT；
 本机用「逐段长度累加 == 文件长度」和「每段首记录 GBK 名字」两条独立证据复核）：
 
-    0x0000   160 B   What0（未解析）
-    0x00A0   320 B   DiXingModifier[16] × 20 B（未导出）
+    0x0000   160 B   What0 → 按 10 地雷 × 16 地形解释为可埋矩阵（推断）
+    0x00A0   320 B   DiXingModifier[16] × 20 B（5 个 int：火攻/滚木/防御/体力/士气）
     0x01E0 15360 B   BingZhong[96] × 160 B      —— 兵种
     0x3DE0  1536 B   BingZhongYiDong[96] × 16 B —— 每兵种 16 地形移动消耗
     0x43E0 11520 B   WuPin[160] × 72 B          —— 物品
@@ -31,7 +31,10 @@ from pathlib import Path
 
 # 段偏移
 WHAT0_OFFSET = 0x0000
+WHAT0_SIZE = 160
 TERRAIN_MOD_OFFSET = 0x00A0
+TERRAIN_COUNT = 16
+TERRAIN_MOD_SIZE = 20
 UNIT_OFFSET = 0x01E0
 UNIT_COUNT = 96
 UNIT_SIZE = 160
@@ -210,6 +213,9 @@ class Game:
     select_ranges: list[list[list[int]]]
     apply_ranges: list[list[list[int]]]
     item_valid: list[list[int]]
+    what0: list[int]
+    mine_terrain: list[list[int]]
+    terrain_modifiers: list[list[int]]
 
     def as_dict(self) -> dict:
         return {
@@ -223,10 +229,22 @@ class Game:
             "select_ranges": self.select_ranges,
             "apply_ranges": self.apply_ranges,
             "item_valid": self.item_valid,
+            "what0": self.what0,
+            "mine_terrain": self.mine_terrain,
+            "terrain_modifiers": self.terrain_modifiers,
         }
 
 
 def parse(blob: bytes) -> Game:
+    what0 = list(blob[WHAT0_OFFSET:WHAT0_OFFSET + WHAT0_SIZE])
+    # 10 地雷 × 16 地形；模板未给方向，按 10 行推断（每行前 9 项为 1，
+    # 后 7 项多为 0，正好对应可埋/不可埋地形）。
+    mine_terrain = [what0[i * 16:(i + 1) * 16] for i in range(10)]
+    terrain_modifiers = [
+        list(struct.unpack_from("<5i", blob, TERRAIN_MOD_OFFSET + i * TERRAIN_MOD_SIZE))
+        for i in range(TERRAIN_COUNT)
+    ]
+
     units = []
     for i in range(UNIT_COUNT):
         off = UNIT_OFFSET + i * UNIT_SIZE
@@ -287,7 +305,8 @@ def parse(blob: bytes) -> Game:
                   for i in range(VALID_COUNT)]
 
     return Game(units, unit_move, items, materials, mine_recipes,
-                mines, skills, select_ranges, apply_ranges, item_valid)
+                mines, skills, select_ranges, apply_ranges, item_valid,
+                what0, mine_terrain, terrain_modifiers)
 
 
 def load(path: Path) -> Game:

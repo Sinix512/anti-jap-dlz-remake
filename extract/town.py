@@ -11,8 +11,20 @@
   * `goods_what[10]` 19 个城镇全是 -1（GAME.DAT 里也只有 10 种材料，
     模板注释称「代码里没有使用」，与本机一致）。
 
-⚠️ 前 11 个 int32（0, -1 和 3 组三元组）与 name_x/name_y/offset_x/offset_y
-的语义未验证，JSON 里只以 `raw_u32` 原样导出，不冒充坐标/音效。
+前 35 个 int32 的布局（模板推导 + 本机值域复核）：
+
+    0x00  i32 pad0（恒 0）
+    0x04  i32 pad1（恒 -1）
+    0x08  3 × (i32 wave_id, i32 x, i32 y)   3 个环境音热点，wave_id 落在
+                                             WAVE.DAT 的 800 段（803/808/812 等）
+    0x2C  6 × i32 building_label_x
+    0x44  6 × i32 building_label_y
+    0x5C  6 × i32 building_offset_x
+    0x74  6 × i32 building_offset_y
+
+6 个建筑槽位的模板顺序是 民房 / 指挥部 / 军械部 / 杂货铺 / 出口 / 作坊；
+本机只能证明「槽位数量 = 6、坐标在 640×480 内、小城镇只启用部分槽位」，
+顺序本身未独立验证，所以 JSON 里保留 `slot` 数字，同时给出候选名。
 """
 
 from __future__ import annotations
@@ -34,6 +46,23 @@ GOODS_WHAT = slice(35, 45)
 GOODS_JUNXIE = slice(45, 57)
 GOODS_ZAHUO = slice(57, 69)
 GOODS_MATERIAL = slice(69, 81)
+
+# 前 35 个 int32
+PAD = slice(0, 2)
+SOUND_HOTSPOTS = slice(2, 11)
+BUILDING_LABEL_X = slice(11, 17)
+BUILDING_LABEL_Y = slice(17, 23)
+BUILDING_OFFSET_X = slice(23, 29)
+BUILDING_OFFSET_Y = slice(29, 35)
+BUILDING_SLOTS = ("民房", "指挥部", "军械部", "杂货铺", "出口", "作坊")
+
+# DLZ.exe 0x45058 起的 19 个地名，顺序与 TOWN.DAT / PLACE.DAT 的 19 条记录一致；
+# 已用 PLACE 背景图里烧进画面的地名逐条比对。
+TOWN_NAMES = (
+    "桃花岭", "赵　村", "花坪镇", "李　村", "土　桥", "白洋淀",
+    "萧家庄", "冉　庄", "枣　庄", "阳　村", "清风寨", "鸡公山",
+    "太平镇", "黑风寨", "长　湾", "施南镇", "红岩镇", "平阳县", "天池山",
+)
 
 
 @dataclass
@@ -58,9 +87,38 @@ class Town:
     def goods_material(self) -> list[int]:
         return self.raw_u32[GOODS_MATERIAL]
 
+    @property
+    def sound_hotspots(self) -> list[dict]:
+        values = self.raw_u32[SOUND_HOTSPOTS]
+        return [
+            {"wave": values[i * 3], "x": values[i * 3 + 1], "y": values[i * 3 + 2]}
+            for i in range(3)
+        ]
+
+    @property
+    def buildings(self) -> list[dict]:
+        label_x = self.raw_u32[BUILDING_LABEL_X]
+        label_y = self.raw_u32[BUILDING_LABEL_Y]
+        offset_x = self.raw_u32[BUILDING_OFFSET_X]
+        offset_y = self.raw_u32[BUILDING_OFFSET_Y]
+        return [
+            {
+                "slot": i,
+                "name_guess": BUILDING_SLOTS[i],
+                "label_x": label_x[i],
+                "label_y": label_y[i],
+                "offset_x": offset_x[i],
+                "offset_y": offset_y[i],
+            }
+            for i in range(6)
+        ]
+
     def as_dict(self) -> dict:
         return {
             "index": self.index,
+            "name": TOWN_NAMES[self.index],
+            "sound_hotspots": self.sound_hotspots,
+            "buildings": self.buildings,
             "goods_what": self.goods_what,
             "goods_junxie": self.goods_junxie,
             "goods_zahuo": self.goods_zahuo,

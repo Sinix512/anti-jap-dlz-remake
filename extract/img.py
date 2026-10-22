@@ -10,6 +10,9 @@
     0x10  w*h  8bpp 索引像素，逐行、自上而下、无压缩
     随后  768B 调色板，256 × RGB，每分量 6 位（×4 → 0-255）
 
+例外：`DLZ00.IMG` 的调色板是 8 位分量（0..255，不再 ×4）；
+`BUTTON00/01.IMG` 尾部 768 B 全 0，是发行版里的空占位（对应 TGA 另有文件）。
+
 两个异类（本机逐字节定位，见下方 resolve_geometry）：
 
 * `END04.IMG`：头部声明 640×480，但像素区只有 64,000 B。
@@ -110,8 +113,18 @@ def resolve_geometry(path: Path, blob: bytes | None = None) -> Geometry:
 
 
 def palette_bytes(blob: bytes) -> bytes:
+    """尾部 768 B 调色板。
+
+    83 个 IMG 是 6 位分量（0..63），需要 ×4；
+    `DLZ00.IMG` 是唯一的 8 位分量（0..255），不能再乘；
+    `BUTTON00/01.IMG` 尾部 768 B 全 0（发行版里的空占位，对应 TGA 另有文件），
+    保持全黑并在 README 里记一笔。
+    """
     raw = blob[-PALETTE:]
-    return bytes(min(255, c * COMPONENT_SCALE) for c in raw)
+    if not any(raw):
+        return bytes(PALETTE)
+    scale = 1 if max(raw) > 63 else COMPONENT_SCALE
+    return bytes(min(255, c * scale) for c in raw)
 
 
 def decode(path: Path) -> Image.Image:
