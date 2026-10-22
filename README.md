@@ -126,7 +126,7 @@ M3 只改表现，不改玩法/数值；M1/M2 回归保持通过。
 - **续关**：主线出击前自动写槽 8 检查点；失败后“继续/重试”恢复出击前队伍/库存。
 - **原版存档布局（实验）**：存档页可导出/导入 85072 B 的 `dlz_original.dat`，
   含 fight_index/town/money/items/people/GBK 名字；仓库按物品 ID 写入，
-  城镇 block5、资金 block6；intro 关卡名/成功/失败用 GBK；block20/21 按 4×10 物品格缓存
+  城镇 block5、资金 block6；intro 关卡名/成功/失败用 GBK；无 PARY 时回退初始队伍；block20/21 按 4×10 物品格缓存
   写当前页物品；block13 首 u32 保留原版状态机，队伍写尾部私有 `PARY`。
 - **过场**：33 段 MPEG → 640×480 WebM（交付格式）+ OGV（Godot 4.7 的 Theora 播放格式），
   按 D01–D36 映射到主线关卡，出击前播放。变体映射：`d01a→L00`、`d07a→L06`、

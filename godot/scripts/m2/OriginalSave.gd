@@ -279,6 +279,10 @@ static func apply(state, d: Dictionary, path: String) -> bool:
 		m["mine_slots"] = (p.get("mines", []) as Array).duplicate()
 		m["max_hp"] = state.max_hp_for(int(m["bingzhong"]), int(m["level"]))
 		m["hp"] = int(m["max_hp"])
+	if state.party.is_empty():
+		# 真原版存档没有 PARY；回退到默认起始队伍，避免导入后队伍为空。
+		for pid in state.data.get("starting", {}).get("party", []):
+			state._add_member(int(pid))
 	for k in d.get("items", {}):
 		state.items[str(k)] = int(d["items"][k])
 	state.saved_at = "original:" + path
