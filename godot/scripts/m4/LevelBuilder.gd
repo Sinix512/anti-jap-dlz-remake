@@ -35,9 +35,9 @@ static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
 			if fixed_keys.has(k):
 				continue
 			var spawn := _pick_deploy(deploy, added, lv, units)
-			# 战役等级同步：低等级队伍在后期主线会被原版高等级敌军压死。
-			# 这是可玩性补足，不改变存档等级；隐藏/彩蛋关不启用。
-			var floor := mini(60, 5 + idx * 2) if idx < 36 else 0
+			# 战役等级同步：低等级队伍在后期主线/隐藏/彩蛋会被原版高等级敌军压死。
+			# 这是可玩性补足，不改变存档等级。
+			var floor := mini(60, 5 + idx * 2)
 			var d := member_unit(m2, m, spawn, floor)
 			units.append(d)
 			fixed_keys[k] = true
@@ -45,7 +45,7 @@ static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
 	# 兜底：没有任何玩家单位时，放一个队伍成员到部署点/地图边缘
 	if not _has_side(units, "player") and not party.is_empty():
 		var spawn := _pick_deploy(deploy, 0, lv, units)
-		var floor0 := mini(60, 5 + idx * 2) if idx < 36 else 0
+		var floor0 := mini(60, 5 + idx * 2)
 		units.append(member_unit(m2, party[0], spawn, floor0))
 	lv["units"] = units
 	lv["players"] = _count_side(units, "player")
