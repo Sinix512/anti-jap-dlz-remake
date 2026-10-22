@@ -618,6 +618,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cancel()
 		elif event.keycode == KEY_TAB:
 			_focus_next_side()
+		elif event.keycode == KEY_1:
+			_on_attack()
+		elif event.keycode == KEY_2:
+			_on_skill()
+		elif event.keycode == KEY_3:
+			_on_mine()
+		elif event.keycode == KEY_4:
+			_on_item()
+		elif event.keycode == KEY_5:
+			_on_wait()
+		elif event.keycode == KEY_6:
+			_on_end_turn()
 
 
 func _zoom_at(factor: float) -> void:

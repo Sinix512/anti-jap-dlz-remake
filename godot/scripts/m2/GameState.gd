@@ -775,6 +775,8 @@ func apply_difficulty(level: Dictionary) -> void:
 		u["max_hp"] = hp
 		u["raw_hp"] = hp
 		u["hp_source"] = str(u.get("hp_source", "")) + "+difficulty"
+		var atk := -8 if difficulty == 0 else 8
+		u["attack_bonus"] = int(u.get("attack_bonus", 0)) + atk
 
 
 func save_checkpoint() -> bool:
