@@ -25,6 +25,7 @@ var menu_root: Control
 var result_canvas: CanvasLayer
 var result_layer: Control
 var free_level := -1
+var bgm: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -38,6 +39,7 @@ func _ready() -> void:
 	OriginalUI.apply_cursor()
 	OriginalUI.make_sfx(self)
 	_apply_saved_audio()
+	_start_bgm()
 	m2 = _load_json(M2_PATH)
 	m3 = _load_json(M3_PATH)
 	m4 = _load_json(M4_PATH)
@@ -472,6 +474,19 @@ func _show_free_result(victory: bool, message: String) -> void:
 			_show_title, 16)
 	row.add_child(title)
 	result_layer.add_child(row)
+
+
+func _start_bgm() -> void:
+	var path := "res://assets/audio/bgm_cd.ogg"
+	if not ResourceLoader.exists(path):
+		return
+	bgm = AudioStreamPlayer.new()
+	bgm.stream = load(path)
+	if bgm.stream is AudioStreamOggVorbis:
+		(bgm.stream as AudioStreamOggVorbis).loop = true
+	bgm.volume_db = -14.0
+	add_child(bgm)
+	bgm.play()
 
 
 func _apply_saved_audio() -> void:

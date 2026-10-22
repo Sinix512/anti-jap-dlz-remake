@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 python3 tools/prepare_m1.py
 python3 tools/prepare_m2.py
 python3 tools/prepare_m3.py
+python3 tools/prepare_bgm.py
 python3 tools/prepare_m4.py
 python3 tools/prepare_m5.py
 python3 tools/rebuild_font.py
