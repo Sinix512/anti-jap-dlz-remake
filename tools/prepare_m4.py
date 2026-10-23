@@ -705,6 +705,16 @@ def main() -> None:
                 "source": "DLZ.exe 0x4465D0 per-level init table",
                 "special_count_raw": int(lv["intro"]["special_count_raw"]),
                 "special_count": sum(1 for s in specials if not s["empty"]),
+                # 0x11C 的 32 字节：非 FF 值对应 PEOPLE.DAT 索引。
+                # 这些名字与剧情加入/关卡队伍高度吻合，暂作为“队伍候选”证据，
+                # 不直接限制部署（避免改变现有 47 关平衡）。
+                "player_indices": sorted({int(v) for v in
+                                          lv["intro"]["unknown_11c"]
+                                          if int(v) != 255}),
+                "player_names": [norm(people[int(v)]["name"]) for v in
+                                 sorted({int(v) for v in
+                                         lv["intro"]["unknown_11c"]
+                                         if int(v) != 255})],
                 "dynamic_spawns": [],
             } if idx in TRIGGER_FUNCTIONS else {}),
             "difficulty": int(lv["intro"]["difficulty_raw"]),
