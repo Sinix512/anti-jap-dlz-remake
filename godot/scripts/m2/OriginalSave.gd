@@ -10,8 +10,10 @@ extends RefCounted
 ##   block7 score_total     0x6223A8（战斗结算累加评分）
 ##   block8 kills_by_gun    0x472580（战斗结算累加）
 ##   block9 kills_by_mine   0x7D069C（战斗结算累加）
-## block13 的 95×u32 仍只确认前 3 个状态机；尾部 PARY 是私有扩展，
-## 原版没有该标记。游戏内正式存档仍是 GameState 的 JSON。
+## block13 是 95×u32 的关卡/界面状态机；idx0/2/3/4/5/6/9/10/11/…/85/86/90/91
+## 都有代码引用，idx90 还是 2800/3000/3300/3600 结局阈值，不能整块当空。
+## 队伍用各 People 记录的 pad2=0x50415254('PART') 标记（原版 pad2 为 0）；
+## 兼容旧版 PARY，但新文件不再覆盖 block13。正式存档仍是 GameState JSON。
 
 const SIZE := 85072
 const SKILL_KEYS := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
@@ -64,7 +66,9 @@ static func _people_bytes(state) -> PackedByteArray:
 		var m = by_pid.get(i)
 		_put_name(b, _gbk(str(p.get("name_gbk_hex", ""))), 16)
 		b.put_u32(int(p.get("face", 0)))
-		b.put_u32(0)
+		# pad2 原版为 0。复刻用 0x50415254('PART') 标记队伍成员，
+		# 避免再占用 block13 的已用状态槽；原版应忽略该 pad。
+		b.put_u32(0x50415254 if m != null else 0)
 		b.put_u32(int(p.get("unknown_18", 0)))
 		b.put_u32(int(p.get("wuli", 0)))
 		b.put_u32(int(p.get("zhili", 0)))
@@ -116,13 +120,10 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 			3: v = int(state.ending_id)
 			4: v = state.campaign_completed.size()
 		b.put_u32(v)
-	# block13：前 3 个 u32 是原版 0/1/2 状态机。尾部 PARY 是私有扩展，
-	# 用于本工具保留队伍；原版没有该标记。
-	var b13 := PackedByteArray(); b13.resize(380)
-	b13.encode_u32(340, 0x50415259)  # PARY
-	for i in range(10):
-		b13.encode_u32(344 + i * 4, int(state.party[i]["pid"]) if i < state.party.size() else 0)
-	b.put_data(b13)
+	# block13 是 95 槽的关卡/界面状态机（已确认 idx0/2/3/4/5/6/9/10/11/.../
+	# 85/86/90/91 被引用，idx90 还是 2800/3000/3300/3600 结局阈值）。
+	# 复刻没有原版的这些状态，写 0，不再用 PARY 覆盖 idx85/86。
+	_pad(b, 380)
 	_pad(b, 8192)
 	_pad(b, 8192)
 	var people := _people_bytes(state)
@@ -215,10 +216,16 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	out["item_grid"] = {"ids": grid_ids, "counts": grid_counts.slice(0, 10)}
 	var members: Array = []
 	if b13.size() >= 380 and b13.decode_u32(340) == 0x50415259:
+		# 兼容旧版导出的 PARY 扩展。
 		for i in range(10):
 			var pid := int(b13.decode_u32(344 + i * 4))
 			if pid > 0 and pid < 40:
 				members.append(pid)
+	else:
+		# 新版：队伍成员各自的 People.pad2 == 'PART'，不再覆盖 block13。
+		for i in range(min(40, people.size())):
+			if int(people[i].get("pad2", 0)) == 0x50415254:
+				members.append(i)
 	out["members"] = members
 	# block1/3/7 是原版字段；旧版本导出文件把 40/100/0 写在这里，
 	# 这时才回退到 block12 的复刻进度。新文件不再需要回退。
@@ -247,7 +254,7 @@ static func _decode_people(raw: PackedByteArray) -> Array:
 		var name_got = b.get_data(16)
 		var name_bytes: PackedByteArray = name_got[1]
 		var face := int(b.get_u32())
-		b.get_u32()
+		var pad2 := int(b.get_u32())
 		var enemy := int(b.get_u32())
 		var wuli := int(b.get_u32())
 		var zhili := int(b.get_u32())
@@ -265,9 +272,10 @@ static func _decode_people(raw: PackedByteArray) -> Array:
 		for j in range(8):
 			mines.append(int(b.get_u8()))
 		out.append({"slot": i, "name_gbk": name_bytes, "face": face,
-				"enemy": enemy, "wuli": wuli, "zhili": zhili, "level": level,
-				"xp": xp, "bingzhong": bz, "attack_count": atk,
-				"skills": skills, "items": items, "mines": mines})
+				"pad2": pad2, "enemy": enemy, "wuli": wuli, "zhili": zhili,
+				"level": level, "xp": xp, "bingzhong": bz,
+				"attack_count": atk, "skills": skills, "items": items,
+				"mines": mines})
 	return out
 
 

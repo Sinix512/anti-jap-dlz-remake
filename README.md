@@ -131,9 +131,9 @@ M3 只改表现，不改玩法/数值；M1/M2 回归保持通过。
   含 fight_index/town/money/items/people/GBK 名字；block1 `fight_index`、
   block3 `current_level`、block5 城镇、block6 资金、block7 总分、block8/9 枪/雷歼敌累计，
   均已按 `save_game@0x427C94` 确认；M2Test 断言 block1/3/5/6/7/8/9 原始字节。
-  仓库按物品 ID 写入；intro 关卡名/成功/失败用 GBK；无 PARY 时回退初始队伍；
-  block20/21 按 4×10 物品格缓存写当前页物品；block13 首 3×u32 保留原版状态机，
-  队伍写尾部私有 `PARY`（原版没有该标记）。
+  仓库按物品 ID 写入；intro 关卡名/成功/失败用 GBK；
+  block20/21 按 4×10 物品格缓存写当前页物品；block13 是 95 槽关卡/界面状态机，
+  不再用 PARY 覆盖；队伍用成员 `People.pad2='PART'` 私有标记。
   战斗结算会把普通攻击/地雷击杀分别累计到 block8/9，M1Test/M2Test 已覆盖。
 - **过场**：33 段 MPEG → 640×480 WebM（交付格式）+ OGV（Godot 4.7 的 Theora 播放格式），
   按 D01–D36 映射到主线关卡，出击前播放。变体映射：`d01a→L00`、`d07a→L06`、

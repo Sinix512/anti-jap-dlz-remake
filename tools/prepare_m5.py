@@ -71,6 +71,15 @@ ENEMY_NAMES = {
     98: ("军区首长", 143), 99: ("军区首长", 143),
 }
 
+# 40+ 是“场景内角色码”，同一个码在不同关卡可以是不同人。这里只对
+# 台词能直接确定说话者的记录做覆盖，避免把全局表当成绝对映射。
+SPEAKER_OVERRIDES = {
+    30: {49: ("国军", 21)},       # “高镇长，我们支援您来了！”
+    65: {50: ("汉奸", 99)},       # “八路一来，第一个做掉你！”
+    119: {50: ("日军军官", 70)},  # “火车怎么停下来了？”
+    264: {48: ("汉奸", 99)},      # “你的亲爹来了。”
+}
+
 
 def load(name: str):
     return json.loads((DATA / name).read_text(encoding="utf-8"))
@@ -80,7 +89,10 @@ def norm(s: str) -> str:
     return str(s).replace("\u3000", "").replace(" ", "")
 
 
-def speaker_for(code: int, people: list[dict]) -> tuple[str, int]:
+def speaker_for(code: int, people: list[dict], n: int = -1) -> tuple[str, int]:
+    ov = SPEAKER_OVERRIDES.get(n, {})
+    if code in ov:
+        return ov[code]
     if code == 0:
         return "GG", -1
     if 1 <= code <= 39:
@@ -100,7 +112,7 @@ def parse_record(rec: dict, people: list[dict]) -> dict:
         if m:
             code = int(m.group(1))
             text = m.group(2)
-            name, face = speaker_for(code, people)
+            name, face = speaker_for(code, people, int(rec["n"]))
             lines.append({"code": code, "speaker": name, "face": face,
                           "text": text})
         elif raw.strip():
