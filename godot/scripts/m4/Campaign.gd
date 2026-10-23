@@ -378,11 +378,14 @@ func _open_mission() -> void:
 		return
 	var content := _panel_shell("作战会议 / L%02d %s" % [
 		int(lv["index"]), str(lv["name"])], 560, 300)
-	content.add_child(_label("胜利：%s\n失败：%s\n回合上限：%s\n目标：%s" % [
+	var limit := int(lv.get("turn_limit", 0))
+	var orig_limit := int(lv.get("original_turn_limit", 0))
+	content.add_child(_label("胜利：%s\n失败：%s\n回合上限：复刻 %s / 原版 %s\n目标：%s" % [
 		str(lv.get("success", "")), str(lv.get("failure", "")),
-		str(int(lv.get("turn_limit", 0))) if int(lv.get("turn_limit", 0)) > 0 else "无",
+		str(limit) if limit > 0 else "无",
+		str(orig_limit) if orig_limit > 0 else "无",
 		str(lv.get("objective", {}).get("label", ""))],
-		Vector2.ZERO, Vector2(520, 96), 16, OriginalUI.INK))
+		Vector2.ZERO, Vector2(520, 108), 16, OriginalUI.INK))
 	content.add_child(_label("可出击队伍：%d 人    部署点：%d" % [
 		state.party_size(), (lv.get("deploy", []) as Array).size()],
 		Vector2.ZERO, Vector2(520, 24), 16, Color("#d8c39a")))

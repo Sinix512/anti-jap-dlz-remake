@@ -140,6 +140,15 @@ PROTECT = {
 }
 
 MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
+# 5 个代表关的关卡初始化函数（DLZ.exe 0x4465D0 表）：
+# 这些函数只做开场音效/旗标，不包含逐回合触发器。用于 TRIGGERS.md 的证据。
+TRIGGER_FUNCTIONS = {
+    0: "0x40BE07",
+    3: "0x40C15B",
+    12: "0x40C646",
+    18: "0x40C8DA",
+    36: "0x40D020",
+}
 PARTY_DEPLOY = {**{i: True for i in MAIN_LEVELS}}
 PARTY_DEPLOY[46] = True  # 鬼子进村：张嘎 + 村民 + 队伍 + 八路军增援
 PROTECT_ALL = {36, 40}  # 狼牙山：五壮士全部阵亡才失败
@@ -688,6 +697,16 @@ def main() -> None:
             "success": lv["success"].strip().strip("\u3000"),
             "failure": lv["failure"].strip().strip("\u3000"),
             "turn_limit": TURN_LIMIT_OVERRIDE.get(idx, turn_limit(lv["failure"])),
+            "original_turn_limit": (
+                int(obj_raw.get("turns", 0)) if obj_raw["type"] == "survive"
+                else turn_limit(lv["failure"])),
+            "trigger_evidence": ({
+                "init_function": TRIGGER_FUNCTIONS[idx],
+                "source": "DLZ.exe 0x4465D0 per-level init table",
+                "special_count_raw": int(lv["intro"]["special_count_raw"]),
+                "special_count": sum(1 for s in specials if not s["empty"]),
+                "dynamic_spawns": [],
+            } if idx in TRIGGER_FUNCTIONS else {}),
             "difficulty": int(lv["intro"]["difficulty_raw"]),
             "stars": stars,
             "score_base": score,
