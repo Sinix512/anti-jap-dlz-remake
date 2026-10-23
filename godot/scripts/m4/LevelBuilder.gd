@@ -29,6 +29,7 @@ static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
 		roster = party
 	if allow_party and not roster.is_empty():
 		var fixed_keys := {}
+		var leader_pid := int((roster[0] as Dictionary).get("pid", -1))
 		for u in units:
 			if str(u.get("side", "")) == "player":
 				fixed_keys[str(u.get("key", _key(u.get("name", ""))))] = true
@@ -46,6 +47,7 @@ static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
 			# 这是可玩性补足，不改变存档等级。
 			var floor := mini(60, 5 + idx * 2)
 			var d := member_unit(m2, m, spawn, floor)
+			d["hero"] = int(d.get("pid", -1)) == leader_pid
 			units.append(d)
 			fixed_keys[k] = true
 			added += 1
@@ -80,6 +82,7 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary,
 					"defense": max(0, int(equip_item.get("para4", 0)))}
 	return {
 		"pid": pid,
+		"hero": pid == 0,
 		"slot": -1,
 		"side": "player",
 		"name": str(m.get("name", "游击队员")),

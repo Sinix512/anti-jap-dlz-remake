@@ -55,7 +55,7 @@ FIGHTER_FIELDS = {
 }
 
 HELPERS = {
-    0x43DD47: "sound",
+    0x43DD47: "message_txt",
     0x429CC8: "spawn",
     0x429BED: "remove",
     0x4299B2: "adjacent",

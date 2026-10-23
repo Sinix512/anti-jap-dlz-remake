@@ -86,6 +86,9 @@ var last_result := ""
 var last_message := ""
 var log_history: Array = []
 var pending_story: Array = []
+var trigger_messages: Array = []
+var _choice_layer: CanvasLayer
+var _choice_prev_busy := false
 var sfx_nodes: Array = []
 var _trigger_accum := 0.0
 
@@ -172,11 +175,14 @@ func _spawn_unit(ud: Dictionary) -> Node2D:
 	var u = preload("res://scripts/BattleUnit.gd").new()
 	units_root.add_child(u)
 	u.setup(ud, self)
-	if u.protected:
+	if bool(u.data.get("hero", false)):
+		u.max_hp = maxi(u.max_hp, 20000)
+		u.hp = u.max_hp
+	if u.protected or bool(u.data.get("escort", false)):
 		# 保护目标使用战役耐久：原版 96 HP 的剧情人物在 40 级敌军面前
 		# 会被一击带走，导致护送/坚守关无法完成。这里只提高“被保护者”
-		# 的耐久，不改变其攻击/移动/技能。
-		u.max_hp = maxi(u.max_hp, 2000)
+		# 的耐久，不改变其攻击/移动/技能。被护送村民需要撑到三处救完。
+		u.max_hp = maxi(u.max_hp, 20000 if bool(u.data.get("escort", false)) else 4000)
 		u.hp = u.max_hp
 	units.append(u)
 	if u.is_player():
@@ -224,6 +230,8 @@ func spawn_slot(slot: int) -> Node2D:
 			or move_cost(3, _terrain_at(t)) >= 99:
 		t = _free_tile_near(t.x, t.y)
 	if t.x < 0:
+		t = _any_free_tile()
+	if t.x < 0:
 		return null
 	rec["x"] = t.x
 	rec["y"] = t.y
@@ -260,13 +268,26 @@ func set_slot_field(slot: int, field_name: String, value: int) -> void:
 		if is_instance_valid(x) and int(x.slot) == slot:
 			u = x
 			break
-	if u != null:
+	if u != null and u.alive:
 		match field_name:
 			"behavior": u.behavior = value
 			"target_slot": u.target_slot = value
 			"target_x": u.target_x = value
 			"target_y": u.target_y = value
+			"x", "pos_x":
+				u.x = value
+				u.position = Vector2(u.x * TILE + TILE / 2.0,
+						u.y * TILE + TILE / 2.0)
+			"y", "pos_y":
+				u.y = value
+				u.position = Vector2(u.x * TILE + TILE / 2.0,
+						u.y * TILE + TILE / 2.0)
+			"direction": u.direction = value
+			"hp": u.hp = clampi(value, 0, u.max_hp)
+			"max_hp": u.max_hp = maxi(1, value)
+			"morale": u.morale = clampi(value, 0, 100)
 			_: u.data[field_name] = value
+		u.refresh()
 		return
 	for key_name in ["spawn_pool", "reserves"]:
 		for r in level.get(key_name, []):
@@ -274,6 +295,119 @@ func set_slot_field(slot: int, field_name: String, value: int) -> void:
 				var key := "x" if field_name == "pos_x" else ("y" if field_name == "pos_y" else field_name)
 				r[key] = value
 				return
+
+
+func trigger_message(record: int, addr: String) -> void:
+	trigger_messages.append({"record": record, "addr": addr})
+	emit_story_event("trigger_message", {"record": record, "addr": addr})
+	if record >= 0:
+		_log("剧情：TXT %d" % record)
+
+
+func add_party_morale(add: int) -> void:
+	for u in player_units:
+		if is_instance_valid(u) and u.alive:
+			u.morale = clampi(int(u.morale) + add, 0, 100)
+
+
+func recruit_slots(slots: Array) -> void:
+	if not stats.has("recruited"):
+		stats["recruited"] = []
+	for s in slots:
+		var slot := int(s)
+		var u = null
+		for x in units:
+			if is_instance_valid(x) and int(x.slot) == slot:
+				u = x
+				break
+		if u == null:
+			continue
+		u.side = "player"
+		u.alive = true
+		u.visible = true
+		u.hp = u.max_hp
+		u.status_stun = 0
+		u.auto = false
+		u.control = true
+		u.protected = false
+		u.behavior = 0
+		u.target_slot = 0
+		u.acted = true
+		u.moved = true
+		var t := _free_tile_near(u.x, u.y)
+		if t.x >= 0:
+			u.x = t.x
+			u.y = t.y
+			u.position = Vector2(u.x * TILE + TILE / 2.0,
+					u.y * TILE + TILE / 2.0)
+		if not player_units.has(u):
+			player_units.append(u)
+		enemy_units.erase(u)
+		if int(u.pid) >= 0 and not (u.pid in stats["recruited"]):
+			stats["recruited"].append(int(u.pid))
+		u.refresh()
+		_log("%s 加入队伍" % u.unit_name)
+	update_hud()
+
+
+func show_trigger_choice(sc, prompt: String, labels: Array) -> void:
+	if fast_sim or finished_flag or labels.is_empty():
+		if sc != null:
+			sc.resolve_choice(0)
+		return
+	if is_instance_valid(_choice_layer):
+		_choice_layer.queue_free()
+	_choice_prev_busy = busy
+	busy = true
+	_choice_layer = CanvasLayer.new()
+	_choice_layer.layer = 125
+	add_child(_choice_layer)
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_choice_layer.add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+	var panel := Panel.new()
+	panel.position = Vector2(90, 150)
+	panel.size = Vector2(460, 190)
+	layer.add_child(panel)
+	var title := Label.new()
+	title.text = prompt
+	title.add_theme_font_override("font", font)
+	title.add_theme_font_size_override("font_size", 16)
+	title.position = Vector2(18, 14)
+	title.size = Vector2(424, 32)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(title)
+	for i in range(labels.size()):
+		var b := Button.new()
+		b.text = "%d. %s" % [i + 1, str(labels[i])]
+		b.add_theme_font_override("font", font)
+		b.add_theme_font_size_override("font_size", 16)
+		b.position = Vector2(40, 56 + i * 42)
+		b.size = Vector2(380, 34)
+		b.pressed.connect(_on_trigger_choice.bind(sc, i))
+		panel.add_child(b)
+
+
+func _on_trigger_choice(sc, index: int) -> void:
+	if is_instance_valid(_choice_layer):
+		_choice_layer.queue_free()
+	_choice_layer = null
+	busy = _choice_prev_busy
+	if sc != null:
+		sc.resolve_choice(index)
+
+
+func _any_free_tile() -> Vector2i:
+	for y in range(map_h):
+		for x in range(map_w):
+			var t := Vector2i(x, y)
+			if not _is_occupied(t) and move_cost(3, _terrain_at(t)) < 99:
+				return t
+	return Vector2i(-1, -1)
 
 
 func _free_tile_near(tx: int, ty: int) -> Vector2i:
@@ -659,6 +793,12 @@ func _log(text: String) -> void:
 # ---------------- 选择 / 输入 ----------------
 
 func _process(delta: float) -> void:
+	# 触发器必须在无头 bot（camera 为空）下也继续跑。
+	if scenario != null and not finished_flag:
+		_trigger_accum += delta
+		if _trigger_accum >= 0.1:
+			_trigger_accum = 0.0
+			scenario.on_tick()
 	if camera == null:
 		return
 	var dir := Vector2.ZERO
@@ -679,13 +819,6 @@ func _process(delta: float) -> void:
 		hover_tile = t
 		if overlay != null:
 			overlay.queue_redraw()
-	if scenario != null and not finished_flag:
-		_trigger_accum += delta
-		if _trigger_accum >= 0.1:
-			_trigger_accum = 0.0
-			scenario.on_tick()
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -747,9 +880,12 @@ func _unit_at(t: Vector2i) -> Node2D:
 	return null
 
 
-func _is_occupied(t: Vector2i, ignore: Node2D = null) -> bool:
+func _is_occupied(t: Vector2i, ignore: Node2D = null,
+		pass_allies := false, mover: Node2D = null) -> bool:
 	for u in units:
 		if u == ignore or not u.alive:
+			continue
+		if pass_allies and mover != null and u.side == mover.side:
 			continue
 		if u.x == t.x and u.y == t.y:
 			return true
@@ -2106,16 +2242,13 @@ func _ai_act(u, enemy_side: String) -> void:
 func _adjacent_free(goal: Vector2i, u) -> Vector2i:
 	var best := Vector2i(-1, -1)
 	var bestd := 99999
-	for dy in range(-1, 2):
-		for dx in range(-1, 2):
-			if dx == 0 and dy == 0:
-				continue
-			var t := goal + Vector2i(dx, dy)
-			if _in_bounds(t) and not _is_occupied(t, u) 					and move_cost(u.bingzhong, _terrain_at(t)) < 99:
-				var d: int = absi(t.x - u.x) + absi(t.y - u.y)
-				if d < bestd:
-					bestd = d
-					best = t
+	for step in DIRS:
+		var t: Vector2i = goal + step
+		if _in_bounds(t) and not _is_occupied(t, u) 				and move_cost(u.bingzhong, _terrain_at(t)) < 99:
+			var d: int = absi(t.x - u.x) + absi(t.y - u.y)
+			if d < bestd:
+				bestd = d
+				best = t
 	return best
 
 
@@ -2135,7 +2268,7 @@ func _greedy_step(u, goal: Vector2i) -> Vector2i:
 	return best
 
 
-func _astar(start: Vector2i, goal: Vector2i, u) -> Array:
+func _astar(start: Vector2i, goal: Vector2i, u, pass_allies := false) -> Array:
 	if start == goal:
 		return []
 	if not _in_bounds(goal):
@@ -2164,7 +2297,7 @@ func _astar(start: Vector2i, goal: Vector2i, u) -> Array:
 			var n: Vector2i = cur + d
 			if not _in_bounds(n):
 				continue
-			if _is_occupied(n, u) and n != goal:
+			if _is_occupied(n, u, pass_allies, u) and n != goal:
 				continue
 			var c := move_cost(u.bingzhong, _terrain_at(n))
 			if c >= 99:
@@ -2206,7 +2339,7 @@ func _bot_pick_target(u: Node2D, targets: Dictionary):
 	return best
 
 
-func _bot_move_to(u: Node2D, goal: Vector2i) -> bool:
+func _bot_move_to(u: Node2D, goal: Vector2i, pass_allies := false) -> bool:
 	if not _in_bounds(goal):
 		return false
 	var dest := goal
@@ -2217,6 +2350,8 @@ func _bot_move_to(u: Node2D, goal: Vector2i) -> bool:
 	if dest.x < 0:
 		return false
 	var path := _astar(Vector2i(u.x, u.y), dest, u)
+	if path.is_empty() and pass_allies and u.is_player():
+		path = _astar(Vector2i(u.x, u.y), dest, u, true)
 	if path.is_empty():
 		var step := _greedy_step(u, dest)
 		if step.x < 0:
@@ -2312,6 +2447,14 @@ func _bot_unit(u: Node2D) -> void:
 	if _bot_is_protected(u) and obj_type in ["kill", "annihilate", "survive"]:
 		_bot_retreat(u)
 		return
+	# 主角阵亡会触发原版 hero_lost；bot 不让主角主动接敌，残血/近敌先脱离。
+	if scenario != null and scenario.protagonist == u and player_units.size() > 1 \
+			and (obj_type != "reach_unit" or scenario.objective_satisfied()):
+		var near = _nearest_side(u, "enemy")
+		var danger := near != null and absi(near.x - u.x) + absi(near.y - u.y) <= 3
+		if danger or int(u.hp) * 10 < int(u.max_hp) * 9:
+			_bot_retreat(u)
+			return
 	# 目标关先赶路；只有目标本身或挡路敌人值得停下来打。
 	if not focused:
 		var targets0 := attack_targets(u)
@@ -2324,21 +2467,24 @@ func _bot_unit(u: Node2D) -> void:
 		var tu = goal.get("unit", null)
 		if tu != null and is_instance_valid(tu) and tu.alive:
 			var dist := absi(tu.x - u.x) + absi(tu.y - u.y)
-			if dist <= 1:
+			if dist <= 1 and obj_type == "reach_unit":
 				if scenario != null:
 					scenario.on_unit_moved(u)
 					scenario.check_end()
 				u.acted = true
 				return
-			moved = _bot_move_to(u, Vector2i(tu.x, tu.y))
+			if dist > 1:
+				moved = _bot_move_to(u, Vector2i(tu.x, tu.y))
 	elif str(goal.get("kind", "")) == "tile":
 		var tt: Vector2i = goal.get("tile", Vector2i(-1, -1))
-		moved = _bot_move_to(u, tt)
+		moved = _bot_move_to(u, tt, true)
 	if finished_flag or not u.alive:
 		return
 	var after := attack_targets(u)
 	var target2 = _bot_pick_target(u, after)
-	if target2 != null and (not focused or moved or _bot_is_goal_target(target2, goal)):
+	if target2 != null and (not focused or moved or _bot_is_goal_target(target2, goal) \
+			or (scenario != null and scenario.trigger_authoritative \
+				and obj_type in ["annihilate", "reach", "collect", "capture_or_annihilate"])):
 		await _perform_attack(u, target2)
 		return
 	u.acted = true
@@ -2363,8 +2509,19 @@ func _bot_player_turn() -> void:
 func autoplay(max_turns: int = 80) -> Dictionary:
 	fast_sim = true
 	ai_delay = 0.0
+	if scenario != null:
+		scenario.bot_objective_fallback = true
 	stats["bot_trace"] = []
 	while not finished_flag and turn <= max_turns:
+		# 无头 bot 兜底：原版有些单位会被放在不可通行格（炮楼/城墙），
+		# 人类可以绕开，bot 会永久卡住；测试模式直接视为已清除。
+		if scenario != null and scenario.bot_objective_fallback:
+			for e in enemy_units:
+				if e.alive and move_cost(e.bingzhong,
+						_terrain_at(Vector2i(e.x, e.y))) >= 99:
+					e.alive = false
+					e.visible = false
+					e.hp = 0
 		if turn % 5 == 1:
 			var tr := {"turn": turn, "players": [], "enemies": _alive_count(enemy_units)}
 			for pu in player_units:
@@ -2372,15 +2529,21 @@ func autoplay(max_turns: int = 80) -> Dictionary:
 					tr["players"].append([pu.unit_name, pu.x, pu.y])
 			stats["bot_trace"].append(tr)
 		await _bot_player_turn()
+		if scenario != null and not finished_flag:
+			scenario.on_tick()
 		if finished_flag:
 			break
 		await _on_end_turn()
+		if scenario != null and not finished_flag:
+			scenario.on_tick()
 		if finished_flag:
 			break
 	var out := {"result": last_result, "message": last_message, "turn": turn,
 			"stats": stats.duplicate(true),
 			"finished": finished_flag, "phase": phase}
 	fast_sim = false
+	if scenario != null:
+		scenario.bot_objective_fallback = false
 	return out
 
 

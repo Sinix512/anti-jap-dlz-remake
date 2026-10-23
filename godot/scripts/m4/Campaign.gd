@@ -638,6 +638,11 @@ func _launch_level(idx: int, standalone: bool, deploy_pids: Array = []) -> void:
 func _on_battle_story_event(kind: String, data: Dictionary) -> void:
 	if current_battle_standalone or current_battle_index < 0:
 		return
+	if kind == "trigger_message":
+		var rec := int(data.get("record", -1))
+		if rec >= 0:
+			battle_story_queue.append([rec])
+		return
 	var scenes: Dictionary = m5.get("scenes", {})
 	var sc: Dictionary = scenes.get(str(current_battle_index), {})
 	var events: Array = sc.get("events", [])
@@ -693,6 +698,10 @@ func _on_battle_finished(result: String, message: String) -> void:
 			var jr: Dictionary = state.join_member(int(pid))
 			if bool(jr.get("ok", false)):
 				joined_names.append(str(jr.get("msg", "")).replace("加入队伍", ""))
+		for pid in stats.get("recruited", []):
+			var rr: Dictionary = state.join_member(int(pid))
+			if bool(rr.get("ok", false)):
+				joined_names.append(str(rr.get("msg", "")).replace("加入队伍", ""))
 	stats["joined"] = joined_names
 	if not current_battle_standalone:
 		if victory:

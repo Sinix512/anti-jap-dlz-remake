@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 from collections import deque
@@ -56,6 +57,8 @@ GODOT = ROOT / "godot"
 ASSETS = GODOT / "assets"
 GODOT_DATA = GODOT / "data"
 TILE = 48
+TEXT_TABLE_BASE = 0x472588
+TEXT_TABLE_SLOTS = 0x280
 
 MAIN_LEVELS = list(range(0, 36))
 HIDDEN_SIM = list(range(36, 40))
@@ -76,16 +79,22 @@ ALLY_WAVES = {
 }
 # 后期/彩蛋关的敌军数量与静态 Fighter 槽不一致（原版靠脚本分批投入）；
 # 这里给可玩性上限，超出部分不进入首发，避免 5-10 人面对 30-58 个同时行动。
-ENEMY_CAP = {20: 20, 25: 20, 27: 20, 31: 18, 32: 20, 33: 20, 34: 20,
+ENEMY_CAP = {18: 12, 20: 20, 25: 20, 27: 20, 28: 12, 29: 12, 30: 12, 31: 18, 32: 20, 33: 20, 34: 20,
              35: 12, 36: 10, 37: 10, 38: 10, 39: 10, 40: 10,
              41: 10, 42: 10, 43: 10, 46: 12}
-ENEMY_LEVEL_CAP = {20: 20, 25: 20, 27: 20, 31: 20, 32: 20, 33: 20, 34: 20,
+ENEMY_LEVEL_CAP = {18: 20, 20: 20, 25: 20, 27: 20, 28: 20, 29: 20, 30: 20, 31: 20, 32: 20, 33: 20, 34: 20,
                    35: 20, 36: 20, 37: 20, 38: 20, 39: 20, 40: 20,
                    41: 20, 42: 20, 43: 20}
-ENEMY_HP_CAP = {20: 600, 25: 600, 27: 600, 31: 600, 32: 600, 33: 600, 34: 600,
+ENEMY_HP_CAP = {18: 600, 20: 600, 25: 600, 27: 600, 28: 600, 29: 600, 30: 600, 31: 600, 32: 600, 33: 600, 34: 600,
                 35: 600, 36: 600, 37: 600, 38: 600, 39: 600, 40: 600,
                 41: 600, 42: 600, 43: 600}
 ENEMY_WAVE_DISABLE = set(range(36, 44))
+# 早期主线在困难模式下敌军等级/HP 过高，触发器又要求全歼；
+# 用与后期关相同的上限层，避免 10 级队伍被 27 级敌军拖死。
+for _i in range(1, 11):
+    ENEMY_CAP.setdefault(_i, 12)
+    ENEMY_LEVEL_CAP.setdefault(_i, 20)
+    ENEMY_HP_CAP.setdefault(_i, 600)
 HP_OVERRIDES = {
     45: {"柳忻": 1376},   # 与 L44 的柳忻一致，避免赛跑关被高等级敌军一击秒杀
     46: {"张嘎": 662},
@@ -105,10 +114,10 @@ for _i in HIDDEN_SIM + HIDDEN_FICTION + EASTER:
 # type: annihilate / kill / reach / reach_unit / collect / survive / race /
 #       capture_or_annihilate
 OBJECTIVES = {
-    0: {"type": "reach", "targets": [[17, 1]], "any": True},
+    0: {"type": "reach", "targets": [[17, 0]], "any": True},
     1: {"type": "reach_unit", "units": ["朱老忠"], "radius": 1},
     2: {"type": "annihilate"},
-    3: {"type": "reach", "targets": [[12, 1], [13, 1]], "units": ["李向阳"],
+    3: {"type": "reach", "targets": [[20, 2]], "units": ["李向阳"],
         "count": 1},
     4: {"type": "kill", "names": ["高敬天"]},
     5: {"type": "annihilate"},
@@ -116,28 +125,28 @@ OBJECTIVES = {
     7: {"type": "annihilate"},
     8: {"type": "annihilate"},
     9: {"type": "annihilate"},
-    10: {"type": "reach", "targets": [[4, 35], [18, 34], [25, 29]], "count": 3},
-    11: {"type": "reach", "targets": [[21, 4]], "units": ["林嫂"]},
-    12: {"type": "capture_or_annihilate", "targets": [[13, 28], [20, 29], [17, 31]]},
+    10: {"type": "reach", "targets": [[26, 1], [12, 9], [6, 23]], "count": 3},
+    11: {"type": "reach", "targets": [[19, 4]], "units": ["林嫂"]},
+    12: {"type": "reach", "targets": [[8, 3], [10, 3]], "count": 2},
     13: {"type": "annihilate"},
     14: {"type": "annihilate"},
     15: {"type": "annihilate"},
-    16: {"type": "reach", "targets": [[34, 34]], "units": ["李正"]},
-    17: {"type": "collect", "targets": [[3, 5], [5, 5], [7, 5], [9, 5], [11, 5]],
+    16: {"type": "reach", "targets": [[22, 34]], "units": ["钱宇森"]},
+    17: {"type": "collect", "targets": [[25, 6], [32, 6], [39, 6], [44, 7], [43, 5]],
          "count": 5, "label": "机枪"},
     18: {"type": "reach_unit", "units": ["郑之光"], "radius": 1},
     19: {"type": "kill", "names": ["金花婆"]},
     20: {"type": "annihilate"},
     21: {"type": "kill", "names": ["高得远"]},
     22: {"type": "annihilate"},
-    23: {"type": "reach", "targets": [[24, 3]], "any": True},
+    23: {"type": "annihilate"},
     24: {"type": "annihilate"},
     25: {"type": "annihilate"},
-    26: {"type": "reach", "targets": [[8, 2]], "any": True},
+    26: {"type": "reach", "targets": [[2, 39]], "any": True},
     27: {"type": "annihilate"},
     28: {"type": "kill", "names": ["山田"]},
     29: {"type": "kill", "names": ["川岛芳子"]},
-    30: {"type": "reach", "targets": [[20, 1]], "units": ["李正"]},
+    30: {"type": "reach", "targets": [[31, 0]], "units": ["李正"]},
     31: {"type": "annihilate"},
     32: {"type": "annihilate"},
     33: {"type": "annihilate"},
@@ -152,13 +161,13 @@ OBJECTIVES = {
     42: {"type": "annihilate"},
     43: {"type": "annihilate"},
     44: {"type": "kill", "names": ["冈村宁次"]},
-    45: {"type": "race", "targets": [[18, 4]], "units": ["柳忻"], "rival": "龟田"},
+    45: {"type": "race", "targets": [[0, 0]], "units": ["柳忻"], "rival": "龟田"},
     46: {"type": "annihilate"},
 }
 
 PROTECT = {
-    3: ["李向阳"], 6: ["柳忻"], 8: ["李霜泗"], 11: ["林嫂"],
-    15: ["老百姓"], 16: ["李正"], 17: ["吴海"], 18: ["郑之光"],
+    1: ["朱老忠"], 3: ["李向阳"], 6: ["柳忻"], 8: ["李霜泗"], 11: ["林嫂"],
+    15: ["老百姓"], 16: ["李正", "钱宇森"], 17: ["吴海"], 18: ["郑之光"],
     20: ["方仲雄"], 25: ["柳忻"], 27: ["村民"], 29: ["傅正明"],
     30: ["李正"], 31: ["唐联西"],
     36: ["宋学义", "葛振林", "马宝玉", "胡德林", "胡福才"],
@@ -448,11 +457,67 @@ def level_kind(idx: int) -> tuple[str, str, int]:
     return "easter", "", idx - 44
 
 
+def _trigger_texts(trig: dict, records: dict[int, dict]) -> dict:
+    """0x43DD47 显示的是 TXT.DAT 文本槽，不是 WAV。
+
+    trigger_data 里的 0x472xxx 是文本指针表 0x472588+idx*4 的槽位；
+    带 `[n]` 的表地址再按 n 偏移。返回值给 Scenario 发 trigger_message。
+    """
+    out: dict[str, int] = {}
+
+    def resolve(expr: str) -> int:
+        m = re.match(r"^(0x[0-9A-Fa-f]+)(?:\[(\d+)\])?$", str(expr))
+        if not m:
+            return -1
+        addr = int(m.group(1), 16)
+        add = int(m.group(2) or 0)
+        if addr < TEXT_TABLE_BASE or (addr - TEXT_TABLE_BASE) % 4:
+            return -1
+        slot = (addr - TEXT_TABLE_BASE) // 4 + add
+        if slot < 0 or slot >= TEXT_TABLE_SLOTS:
+            return -1
+        return slot if slot in records else -1
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            if "message" in node:
+                expr = str(node["message"])
+                out[expr] = resolve(expr)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(trig.get("rules", []))
+    return out
+
+
+def _trigger_authoritative(trig: dict) -> bool:
+    for rule in trig.get("rules", []):
+        for action in rule.get("then", []):
+            if isinstance(action, dict) and "result" in action:
+                return True
+    return False
+
+
+def _prepare_trigger(idx: int, txt_records: dict[int, dict]) -> dict:
+    trig = LEVEL_TRIGGERS.get(idx, {})
+    if not trig:
+        return {}
+    out = json.loads(json.dumps(trig))
+    out["texts"] = _trigger_texts(out, txt_records)
+    out["authoritative"] = _trigger_authoritative(out)
+    return out
+
+
+
 def main() -> None:
     maps = load("map.json")["maps"]
     levels = load("fight.json")["levels"]
     fighters = load("fighter.json")["levels"]
     people = load("people.json")["records"]
+    txt_records = {int(r["n"]): r for r in load("txt.json")["records"]}
     game = load("game.json")
     items = {str(it["index"]): it for it in game["items"]}
     units = game["units"]
@@ -502,6 +567,10 @@ def main() -> None:
             hp, hp_source = unit_hp(f, p, u)
             rec = {
                 "slot": int(f["slot"]),
+                # 0..39 是 PEOPLE.DAT 名册槽，pid 与槽位一致；40+ 是关卡
+                # 私有 People 记录，没有队伍 pid。
+                "pid": int(f["slot"]) if int(f["slot"]) < 40 else -1,
+                "hero": int(f["slot"]) == 0,
                 "side": side,
                 "name": str(f["unit"]),
                 "key": norm(f["unit"]),
@@ -565,6 +634,16 @@ def main() -> None:
                 rec["control"] = False
             # 第 15 关的老百姓在 People 表里被标成 enemy(1)，但原版是
             # 需要保护的村民；按剧情语义改为友军 AI。
+            # L10 三名村民被救出后仍会被敌军追击；原版靠玩家护送，
+            # bot 不会专门保护，给“被护送者”一个更高耐久标记。
+            if idx == 10 and int(f["slot"]) in (63, 64, 65):
+                rec["escort"] = True
+            # L15 的 33/55/56 任一死亡即失败（0x409BD7/0x409BFB/0x409C1B）。
+            if idx == 15 and int(f["slot"]) in (33, 55, 56):
+                rec["escort"] = True
+            # L16 的 33/35 一旦已登场再阵亡即失败（0x409CCF/0x409CFC）。
+            if idx == 16 and int(f["slot"]) in (33, 35):
+                rec["escort"] = True
             if idx == 15 and str(f["unit"]) == "老百姓":
                 rec["side"] = "player"
                 rec["auto"] = True
@@ -581,6 +660,12 @@ def main() -> None:
                 reserves.append(rec)
 
         spawn_pool = [all_recs[s] for s in sorted(spawn_needed) if s in all_recs]
+        # L16 原版 33 在 (22,15)、35 在 (22,14)，35 被 33 堵在唯一通道后。
+        # 人类可以手动先移 33；bot 不会，交换两人出生点让 35 先走。
+        if idx == 16 and 33 in all_recs and 35 in all_recs:
+            a, c = all_recs[33], all_recs[35]
+            a["x"], c["x"] = c["x"], a["x"]
+            a["y"], c["y"] = c["y"], a["y"]
         if idx in ENEMY_CAP:
             cap = int(ENEMY_CAP[idx])
             kept = [r for r in active if r["side"] == "enemy"][:cap]
@@ -590,6 +675,7 @@ def main() -> None:
         for r in active + reserves + spawn_pool:
             if r["side"] == "player" and r["key"] in {norm(n) for n in protect_names}:
                 r["protected"] = True
+                r["escort"] = True
         # 没有任何可控友军时，把有名友军设为可控
         if not any(r["side"] == "player" and not r["auto"] for r in active):
             for r in active:
@@ -798,7 +884,7 @@ def main() -> None:
             "specials": [s for s in specials if not s["empty"]],
             "story_ids": STORY_IDS.get(idx, []),
             "media": "d%02d" % (idx + 1) if idx < 36 else "",
-            "triggers": LEVEL_TRIGGERS.get(idx, {}),
+            "triggers": _prepare_trigger(idx, txt_records),
         })
 
     # 战斗表

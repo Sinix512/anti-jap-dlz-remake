@@ -112,6 +112,9 @@ func _run() -> void:
 
 	# 5) L12 两个仓库格各站 1 人 -> 胜利
 	b = _new_battle(12)
+	for u in b.units:
+		if u.alive and u.side == "enemy" and (u.x == 8 or u.x == 10) and u.y == 3:
+			b.remove_slot(int(u.slot))
 	var ps: Array = b.player_units.filter(func(u): return u.alive)
 	if ps.size() >= 2:
 		ps[0].set_tile(8, 3)
@@ -201,6 +204,167 @@ func _run() -> void:
 	b.remove_slot(72)
 	b.scenario.on_tick()
 	_check(bool(b.finished_flag) and b.last_result == "defeat", "L46 村民少于 11 失败")
+	b.queue_free()
+
+	# 12) 旧 objective 不再抢在触发器前判胜
+	b = _new_battle(0)
+	p = _leader(b)
+	p.set_tile(17, 1)
+	b.scenario.on_tick()
+	_check(not b.finished_flag, "L00 旧目标 (17,1) 不抢判")
+	b.queue_free()
+
+	b = _new_battle(12)
+	var e12 = b.enemy_units[0]
+	e12.set_tile(8, 3)
+	b.scenario.on_tick()
+	_check(not b.finished_flag, "L12 只有敌军占仓库格不判胜")
+	b.queue_free()
+
+	b = _new_battle(26)
+	var e26 = b.enemy_units[0]
+	e26.set_tile(2, 39)
+	b.scenario.on_tick()
+	_check(not b.finished_flag, "L26 只有敌军在 (2,39) 不判胜")
+	b.queue_free()
+
+	b = _new_battle(10)
+	p = _leader(b)
+	p.set_tile(4, 35)
+	b.scenario.on_tick()
+	_check(not b.finished_flag, "L10 旧目标点不抢判")
+	b.queue_free()
+
+	b = _new_battle(18)
+	var u21 = b.unit_by_slot(21)
+	p = _leader(b)
+	if u21 != null:
+		p.set_tile(u21.x + 1, u21.y)
+		b.scenario.on_tick()
+	_check(not b.finished_flag, "L18 接近郑之光不抢判")
+	b.queue_free()
+
+	b = _new_battle(23)
+	p = _leader(b)
+	p.set_tile(24, 4)
+	b.scenario.on_tick()
+	_check(not b.finished_flag, "L23 旧目标点不抢判")
+	b.queue_free()
+
+	# 13) 主角阵亡消息：0x472598 是 TXT 槽 4，不是 WAV
+	b = _new_battle(0)
+	p = _leader(b)
+	b.remove_slot(int(p.slot))
+	b.scenario.on_tick()
+	_check(b.trigger_messages.any(func(m): return int(m.get("record", -1)) == 4),
+			"L00 主角阵亡显示 TXT 4")
+	_check(bool(b.finished_flag) and b.last_result == "defeat",
+			"L00 主角阵亡失败")
+	b.queue_free()
+
+	# 14) L00 T750 第 6 回合重排 40/41，西北院重新生成
+	b = _new_battle(0)
+	b.turn = 6
+	b.scenario.on_tick()
+	_check(int(b.scenario.trigger_flags.get("0x583F18", 0)) == 2,
+			"L00 第 6 回合 flag=2")
+	_check(b.unit_by_slot(40) == null and b.unit_by_slot(41) == null,
+			"L00 第 6 回合撤下 40/41")
+	_check(b.scenario._slot_pos(40) == Vector2i(1, 3),
+			"L00 40 号重排到 (1,3)")
+	p = _leader(b)
+	p.set_tile(1, 6)
+	b.scenario.on_tick()
+	_check(b.unit_by_slot(40) != null and b.unit_by_slot(41) != null,
+			"L00 西北院重新生成 40/41")
+	b.queue_free()
+
+	b = _new_battle(0)
+	b.turn = 41
+	b.scenario.on_tick()
+	_check(bool(b.finished_flag) and b.last_result == "defeat",
+			"L00 第 41 回合失败")
+	b.queue_free()
+
+	# 15) L22 三选一：放走 +5000
+	b = _new_battle(22)
+	b.remove_slot(24)
+	b.scenario.on_tick()
+	_check(not b.scenario.pending_choice.is_empty(), "L22 触发三选一")
+	_check(b.trigger_messages.any(func(m): return int(m.get("record", -1)) == 159),
+			"L22 显示投降 TXT 159")
+	b.scenario.resolve_choice(1)
+	_check(int(b.stats.get("score_bonus", 0)) == 5000, "L22 放走 +5000")
+	_check(bool(b.finished_flag) and b.last_result == "victory", "L22 放走胜利")
+	b.queue_free()
+
+	# 收编：24/25 转我方并记录入队
+	b = _new_battle(22)
+	b.remove_slot(24)
+	b.scenario.on_tick()
+	b.scenario.resolve_choice(2)
+	var r24 = b.unit_by_slot(24)
+	var r25 = b.unit_by_slot(25)
+	_check(r24 != null and r24.side == "player", "L22 收编 24 号")
+	_check(r25 != null and r25.side == "player", "L22 收编 25 号")
+	_check((b.stats.get("recruited", []) as Array).size() == 2, "L22 记录 24/25 入队")
+	b.queue_free()
+
+	# 枪毙：全军士气 +2
+	b = _new_battle(22)
+	if not b.player_units.is_empty():
+		b.player_units[0].morale = 80
+	var before: Array = []
+	for u in b.player_units:
+		before.append(int(u.morale))
+	b.remove_slot(24)
+	b.scenario.on_tick()
+	b.scenario.resolve_choice(0)
+	var gained := false
+	for i in range(b.player_units.size()):
+		if int(b.player_units[i].morale) > int(before[i]):
+			gained = true
+	_check(gained, "L22 枪毙全军士气 +2")
+	b.queue_free()
+
+	# 16) L23 34 号随机出生，占住出生格后出场胜利
+	b = _new_battle(23)
+	_check(int(b.scenario.trigger_flags.get("0x583F54", 0)) == 1,
+			"L23 第 1 回合初始化 34 号")
+	var pos34: Vector2i = b.scenario._slot_pos(34)
+	_check(pos34 in [Vector2i(0, 31), Vector2i(7, 31), Vector2i(21, 21)],
+			"L23 34 号出生点在三个预设点")
+	for u in b.enemy_units.duplicate():
+		b.remove_slot(int(u.slot))
+	p = _leader(b)
+	p.set_tile(pos34.x, pos34.y)
+	b.scenario.on_tick()
+	_check(b.unit_by_slot(34) != null, "L23 34 号在出生格生成")
+	_check(bool(b.finished_flag) and b.last_result == "victory", "L23 占出生格胜利")
+	b.queue_free()
+
+	# 17) L38 出口占格按阵营判定
+	b = _new_battle(38)
+	var e38 = b.enemy_units[0]
+	e38.set_tile(18, 40)
+	b.scenario.on_tick()
+	_check(bool(b.finished_flag) and b.last_result == "defeat",
+			"L38 敌军进入出口判负")
+	b.queue_free()
+
+	b = _new_battle(38)
+	p = _leader(b)
+	p.set_tile(18, 40)
+	b.scenario.on_tick()
+	_check(not b.finished_flag, "L38 我军进入出口不判负")
+	b.queue_free()
+
+	# 18) L18 劝降分支不可达：撤走 21 号不应直接胜利
+	b = _new_battle(18)
+	b.remove_slot(21)
+	b.scenario.on_tick()
+	if b.alive_enemies() > 0:
+		_check(not b.finished_flag, "L18 撤走 21 号不直接胜利")
 	b.queue_free()
 
 	if failures.is_empty():
