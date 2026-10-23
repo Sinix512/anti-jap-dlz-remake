@@ -23,6 +23,8 @@ var campaign_index := 0
 var campaign_completed: Array = []
 var level_scores: Dictionary = {}
 var score_total := 0
+var kills_by_gun := 0
+var kills_by_mine := 0
 var hidden_unlocked := false
 var hidden_done: Array = []
 var ending_id := 0
@@ -48,6 +50,8 @@ func new_game(m2: Dictionary) -> void:
 	campaign_completed.clear()
 	level_scores.clear()
 	score_total = 0
+	kills_by_gun = 0
+	kills_by_mine = 0
 	hidden_unlocked = false
 	hidden_done.clear()
 	ending_id = 0
@@ -369,6 +373,12 @@ func apply_battle_progress(units: Array) -> Array:
 	return levelups
 
 
+func record_battle_stats(stats: Dictionary) -> void:
+	"""累计原版 block8/9 的枪/雷歼敌数；只统计胜利结算里的敌方击杀。"""
+	kills_by_gun += max(0, int(stats.get("kills_by_gun", 0)))
+	kills_by_mine += max(0, int(stats.get("kills_by_mine", 0)))
+
+
 func material_count(mid: int) -> int:
 	return int(materials.get(str(mid), 0))
 
@@ -687,6 +697,8 @@ func to_dict() -> Dictionary:
 		"campaign_completed": campaign_completed.duplicate(),
 		"level_scores": level_scores.duplicate(true),
 		"score_total": score_total,
+		"kills_by_gun": kills_by_gun,
+		"kills_by_mine": kills_by_mine,
 		"hidden_unlocked": hidden_unlocked,
 		"hidden_done": hidden_done.duplicate(),
 		"ending_id": ending_id,
@@ -720,6 +732,8 @@ func from_dict(d: Dictionary) -> bool:
 	for k in d.get("level_scores", {}):
 		level_scores[str(k)] = int(d["level_scores"][k])
 	score_total = int(d.get("score_total", 0))
+	kills_by_gun = int(d.get("kills_by_gun", 0))
+	kills_by_mine = int(d.get("kills_by_mine", 0))
 	hidden_unlocked = bool(d.get("hidden_unlocked", false))
 	hidden_done = (d.get("hidden_done", []) as Array).duplicate()
 	ending_id = int(d.get("ending_id", 0))

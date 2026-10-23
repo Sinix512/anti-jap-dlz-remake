@@ -685,6 +685,8 @@ func _on_battle_finished(result: String, message: String) -> void:
 				joined_names.append(str(jr.get("msg", "")).replace("加入队伍", ""))
 	stats["joined"] = joined_names
 	if not current_battle_standalone:
+		if victory:
+			state.record_battle_stats(stats)
 		info = state.complete_level(idx, score, victory)
 		state.current_town = state.level_town(state.campaign_index) \
 				if not state.campaign_finished() else state.current_town

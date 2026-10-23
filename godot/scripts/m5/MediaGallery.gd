@@ -49,8 +49,8 @@ func _build() -> void:
 				_switch.bind(pair[1]), 14)
 		tabs.add_child(b)
 	_title = OriginalUI.label("", font, 16, OriginalUI.GOLD_LIGHT)
-	_title.position = Vector2(330, 40)
-	_title.size = Vector2(290, 24)
+	_title.position = Vector2(430, 40)
+	_title.size = Vector2(190, 24)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_title)
 	var scroll := ScrollContainer.new()

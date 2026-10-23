@@ -102,8 +102,8 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	b.put_u32(int(state.current_town))  # block5 town
 	b.put_u32(mini(0xFFFFFFFF, int(state.money)))  # block6 money
 	b.put_u32(int(state.score_total))  # block7 score_total
-	b.put_u32(0)  # block8 kills_by_gun（复刻暂无累计）
-	b.put_u32(0)  # block9 kills_by_mine（复刻暂无累计）
+	b.put_u32(int(state.kills_by_gun))  # block8
+	b.put_u32(int(state.kills_by_mine))  # block9
 	_pad(b, 64)
 	for i in range(19):
 		b.put_u32(1 if state.is_liberated(i) else 0)
@@ -283,6 +283,8 @@ static func apply(state, d: Dictionary, path: String) -> bool:
 	state.current_town = int(d.get("town", 0))
 	state.campaign_index = int(d.get("fight_index", 0))
 	state.score_total = int(d.get("score_total", 0))
+	state.kills_by_gun = int(d.get("kills_by_gun", 0))
+	state.kills_by_mine = int(d.get("kills_by_mine", 0))
 	state.hidden_unlocked = bool(d.get("hidden_unlocked", false))
 	state.ending_id = int(d.get("ending_id", 0))
 	state.campaign_completed.clear()

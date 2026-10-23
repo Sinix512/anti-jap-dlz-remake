@@ -77,7 +77,8 @@ var mine_texture: Texture2D
 var chest_nodes: Dictionary = {}
 var chests: Array = []
 var scenario
-var stats := {"kills": 0, "losses": 0, "chests": 0, "deployed": 0}
+var stats := {"kills": 0, "losses": 0, "chests": 0, "deployed": 0,
+		"kills_by_gun": 0, "kills_by_mine": 0}
 var ai_delay := 0.02
 var _finishing := false
 var fast_sim := false
@@ -937,7 +938,7 @@ func _perform_attack(attacker: Node2D, defender: Node2D, counter: bool = false) 
 	await _attack_anim(attacker, defender)
 	attacker.attack_count += 1
 	var dmg := compute_damage(attacker, defender)
-	var died := _apply_hp_damage(defender, dmg)
+	var died := _apply_hp_damage(defender, dmg, "gun")
 	_log("%s 攻击 %s，造成 %d 伤害（士气 %d）" % [
 		attacker.unit_name, defender.unit_name, dmg, defender.morale])
 	attacker.acted = true
@@ -972,6 +973,12 @@ func _on_unit_died(u: Node2D) -> void:
 	u.die()
 	stats["kills" if u.side == "enemy" else "losses"] = int(
 			stats.get("kills" if u.side == "enemy" else "losses", 0)) + 1
+	if u.side == "enemy":
+		var kind := str(u.last_damage_kind)
+		if kind == "gun":
+			stats["kills_by_gun"] = int(stats.get("kills_by_gun", 0)) + 1
+		elif kind == "mine":
+			stats["kills_by_mine"] = int(stats.get("kills_by_mine", 0)) + 1
 	_log("%s 阵亡" % u.unit_name)
 	if scenario != null:
 		scenario.on_unit_died(u)
@@ -1097,7 +1104,8 @@ func _morale_loss(damage: int, max_hp: int) -> int:
 	return max(1, 20 * damage / max(1, max_hp))
 
 
-func _apply_hp_damage(target: Node2D, damage: int) -> bool:
+func _apply_hp_damage(target: Node2D, damage: int, kind: String = "") -> bool:
+	target.last_damage_kind = kind
 	var died: bool = target.take_damage(damage)
 	if not died:
 		target.morale = max(0, int(target.morale) - _morale_loss(damage, target.max_hp))
@@ -1270,7 +1278,7 @@ func _trigger_mine(t: Vector2i, u: Node2D) -> bool:
 		else:
 			var dmg := maxi(1, int(base - _effective_defense(target) * 30 / 100))
 			total += dmg
-			if _apply_hp_damage(target, dmg):
+			if _apply_hp_damage(target, dmg, "mine"):
 				deaths.append(target)
 	_log("%s 引爆%s！范围伤害 %d" % [u.unit_name, m["name"], total])
 	for d in deaths:
@@ -1476,7 +1484,7 @@ func _execute_skill_at(tile: Vector2i) -> void:
 				_gain_xp(caster, 2 if affected > 0 else 0)
 			3:
 				var dmg := maxi(1, int(e1))
-				if _apply_hp_damage(target, dmg):
+				if _apply_hp_damage(target, dmg, "skill"):
 					deaths.append(target)
 				target.morale = max(0, target.morale - e2)
 				affected += 1
@@ -1678,7 +1686,7 @@ func _execute_item_at(tile: Vector2i) -> void:
 			_gain_xp(caster, 1)
 		elif kind == "throw":
 			var dmg := maxi(1, int(p1))
-			if _apply_hp_damage(target, dmg):
+			if _apply_hp_damage(target, dmg, "throw"):
 				deaths.append(target)
 			target.morale = max(0, target.morale - p2)
 			affected += 1

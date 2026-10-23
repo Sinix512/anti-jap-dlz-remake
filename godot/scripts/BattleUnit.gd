@@ -32,6 +32,7 @@ var moved := false
 var alive := true
 var selected := false
 # 战斗数值（M6）：士气/装备完整度/技能次数/装备加成/状态
+var last_damage_kind := ""  # gun / mine / skill / throw
 var morale := 100
 var integrity := 100
 var attack_count := 0
