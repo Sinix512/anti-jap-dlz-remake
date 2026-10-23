@@ -735,6 +735,14 @@ func _show_settings() -> void:
 	note.position = Vector2(100, y + 246)
 	note.size = Vector2(480, 22)
 	menu_root.add_child(note)
+	var keys := OriginalUI.label(
+		"战斗：1 攻击  2 技能  3 地雷  4 物品  5 等待  6 结束回合\n"
+		+ "鼠标左键选择/移动/攻击，右键取消，Tab 切换，Esc 菜单。",
+		font, 14, Color("#d8c39a"))
+	keys.position = Vector2(100, y + 270)
+	keys.size = Vector2(480, 44)
+	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	menu_root.add_child(keys)
 
 
 func _save_settings(edit: LineEdit, full: CheckButton, vol: HSlider,
