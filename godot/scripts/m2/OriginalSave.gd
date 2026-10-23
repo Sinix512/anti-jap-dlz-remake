@@ -139,10 +139,16 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 			3: v = int(state.ending_id)
 			4: v = state.campaign_completed.size()
 		b.put_u32(v)
-	# block13 是 95 槽的关卡/界面状态机（已确认 idx0/2/3/4/5/6/9/10/11/.../
-	# 85/86/90/91 被引用，idx90 还是 2800/3000/3300/3600 结局阈值）。
-	# 复刻没有原版的这些状态，写 0，不再用 PARY 覆盖 idx85/86。
-	_put_raw_or_pad(b, state, "block13", 380)
+	# block13 是 95 槽的关卡/界面状态机；idx90 存结算时的总分快照。
+	# 新导出至少写 idx90=score_total；导入文件则原样保留。
+	var raw13 = state.original_blocks.get("block13", null) \
+			if state.original_blocks is Dictionary else null
+	if raw13 is PackedByteArray and (raw13 as PackedByteArray).size() == 380:
+		b.put_data(raw13)
+	else:
+		var b13 := PackedByteArray(); b13.resize(380)
+		b13.encode_u32(360, int(state.score_total))
+		b.put_data(b13)
 	_put_raw_or_pad(b, state, "block14", 8192)
 	_put_raw_or_pad(b, state, "block15", 8192)
 	var people := _people_bytes(state)
