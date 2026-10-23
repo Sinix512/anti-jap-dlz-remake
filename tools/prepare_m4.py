@@ -297,7 +297,7 @@ def snap_targets(targets, reachable, w, h, blocked):
 def deploy_positions(specials, terrain, w, h, move_row, occupied, count):
     cand = []
     for s in specials:
-        if s["type"] == 0 and not s["empty"]:
+        if s["direction"] == 0 and not s["empty"]:
             cand.append((s["x"], s["y"]))
     if not cand:
         # 从下往上找可走格，靠近地图中部
@@ -571,7 +571,7 @@ def main() -> None:
         if obj_raw["type"] in ("reach", "capture_or_annihilate", "race") \
                 and "targets" not in obj_raw:
             obj_raw["targets"] = [[s["x"], s["y"]] for s in specials
-                                  if not s["empty"] and s["type"] == 2]
+                                  if not s["empty"] and s["direction"] == 2]
         if obj_raw["type"] == "reach_unit":
             obj_raw["unit_positions"] = []
             for r in active + reserves:

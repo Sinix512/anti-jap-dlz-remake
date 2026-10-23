@@ -17,7 +17,7 @@
            x, y, appearance(0..2), wupin, wupin0, wupin1, wupin2
     0x118  u32        special_count（多数关卡等于特殊位置条数；0/999 例外）
     0x11C  u8[32]     未解析
-    0x13C  Special[32] × 12 B：x, y, type(0..3)
+    0x13C  Special[32] × 12 B：x, y, direction(0=北 1=南 2=西 3=东；0x4085FD 用它设置朝向)
 
 Fighter[128] 的槽位映射（本机强验证）：
 
@@ -135,7 +135,12 @@ class SpecialPos:
     index: int
     x: int
     y: int
-    type: int
+    direction: int  # 0=北 1=南 2=西 3=东；0x4085FD 用它设置 Fighter.direction
+
+    @property
+    def type(self) -> int:
+        """旧字段名；实际是朝向，不是语义 type。"""
+        return self.direction
 
     @property
     def empty(self) -> bool:
@@ -146,7 +151,8 @@ class SpecialPos:
             "index": self.index,
             "x": self.x,
             "y": self.y,
-            "type": self.type,
+            "direction": self.direction,
+            "type": self.type,  # 兼容旧数据/调用方
             "empty": self.empty,
         }
 

@@ -301,7 +301,7 @@ Intro（700 B 全部有着落）：
 0x0A8  Chest[4] × 28 B：x, y, appearance, wupin, wupin0, wupin1, wupin2
 0x118  u32       special_count_raw（多数关卡等于特殊位置数；0/999 例外）
 0x11C  u8[32]    未解析
-0x13C  Special[32] × 12 B：x, y, type（0..3）
+0x13C  Special[32] × 12 B：x, y, direction（0=北 1=南 2=西 3=东）
 ```
 
 Fighter 槽位（强验证）：
