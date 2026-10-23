@@ -91,13 +91,21 @@ func _switch(kind: String) -> void:
 			if str(c.get("kind", "")) != "mpeg":
 				continue
 			n += 1
-			var b := OriginalUI.button("[%s] %s  %.1fs" % [
+			var entry := str(c.get("entry", "archive"))
+			var tag := "档案"
+			if entry == "level":
+				tag = "L%02d" % int(c.get("entry_level", 0))
+			elif entry == "variant_preview":
+				tag = "A版→L%02d" % int(c.get("entry_level", 0))
+			var b := OriginalUI.button("[%s] %s  %.1fs  %s" % [
 				str(c.get("id", "")).to_upper(), str(c.get("source", "")),
-				float(c.get("duration", 0.0))], font, Vector2(370, 26),
+				float(c.get("duration", 0.0)), tag], font, Vector2(370, 26),
 				_play.bind(c), 14)
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			_list.add_child(b)
-		_detail.text = "MPEG 共 %d 段。\n\n原版 352×288/4:3 已转 640×480。\nWebM 为交付格式；内嵌播放使用 OGV（Theora）。" % n
+		var missing: Array = media.get("mpeg_missing_bases", [])
+		_detail.text = "MPEG 共 %d 段。\n\n原版 352×288/4:3 已转 640×480。\nWebM 为交付格式；内嵌播放使用 OGV（Theora）。\nA 版仅预览，不是原版分支条件。\n缺失 base：%s" % [
+			n, ", ".join(missing.map(func(v): return str(v)))]
 	elif kind == "flc":
 		var n := 0
 		for c in media.get("clips", []):

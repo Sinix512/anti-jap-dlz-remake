@@ -255,6 +255,25 @@ def main() -> None:
         if media_path.exists() else {"clips": [], "flc": [], "anm": []}
     clips = media.get("clips", [])
     media["mpeg"] = [c for c in clips if c.get("kind") == "mpeg"]
+    # 过场入口显式化：base=dNN 是主线关卡入口；a 版是预览变体；
+    # 其余（KINGSOFT/KR-1/TRAIN/TEST01）归档案。原版分支条件仍未解。
+    present_bases = set()
+    for c in media["mpeg"]:
+        cid = str(c.get("id", ""))
+        if cid.startswith("d") and cid[1:].isdigit():
+            c["entry"] = "level"
+            c["entry_level"] = int(c.get("level_index", -1))
+            present_bases.add(int(cid[1:]))
+        elif cid.startswith("d") and cid.endswith("a") and cid[1:-1].isdigit():
+            c["entry"] = "variant_preview"
+            c["entry_level"] = int(c.get("level_index", -1))
+        else:
+            c["entry"] = "archive"
+    media["mpeg_missing_bases"] = [n for n in range(1, 37)
+                                   if n not in present_bases]
+    media["mpeg_entry_note"] = (
+        "base dNN 映射到 L(NN-1)；a 版仅预览，不是原版分支条件；"
+        "缺失 base 进入档案，不静默跳过。")
     media["flc"] = [c for c in clips if c.get("kind") == "flc"]
     anm_path = GODOT_DATA / "m5_anm.json"
     media["anm"] = json.loads(anm_path.read_text(encoding="utf-8")) \
