@@ -27,6 +27,12 @@ var started := false
 var finished := false
 var status_text := ""
 var _target_sprites: Array = []
+# 0x446510 逐关触发器：数据在 m4.json，逻辑只在这里解释一次。
+var trigger_rules: Array = []
+var trigger_flags: Dictionary = {}
+var trigger_done: Dictionary = {}
+var _last_dead_side := ""
+var _last_dead_slot := -1
 
 
 func setup(b, lv: Dictionary) -> void:
@@ -54,6 +60,10 @@ func setup(b, lv: Dictionary) -> void:
 	status_text = str(objective.get("label", ""))
 	if objective.get("type", "") == "reach_unit":
 		status_text = "接近 " + "、".join(objective.get("units", []))
+	var trig: Dictionary = lv.get("triggers", {})
+	trigger_rules = (trig.get("rules", []) as Array).duplicate(true)
+	trigger_flags.clear()
+	trigger_done.clear()
 
 
 func _key(text: String) -> String:
@@ -91,6 +101,7 @@ func on_start() -> void:
 		for t in targets:
 			_add_search_marker(int(t[0]), int(t[1]))
 	_update_status()
+	on_tick()
 
 
 func _add_target_marker(tx: int, ty: int) -> void:
@@ -219,6 +230,11 @@ func on_unit_moved(u) -> void:
 
 func on_unit_died(u) -> void:
 	if finished or u == null:
+		return
+	_last_dead_side = str(u.side)
+	_last_dead_slot = int(u.slot)
+	_run_triggers("death")
+	if finished:
 		return
 	var k := _key(u.unit_name)
 	if battle != null:
@@ -383,6 +399,265 @@ func ai_goal(u) -> Vector2i:
 		if u.target_x >= 0 and u.target_x < battle.map_w 				and u.target_y >= 0 and u.target_y < battle.map_h:
 			return Vector2i(u.target_x, u.target_y)
 	return Vector2i(-1, -1)
+
+
+# ---------------------------------------------------------------- triggers
+# 0x446510 的逐关函数被翻译成 m4.json 的 rules；这里只做通用解释。
+# 规则顺序重要：原版函数先判失败，再处理事件，最后判胜利。
+
+func on_tick() -> void:
+	if finished or not started:
+		return
+	_run_triggers("tick")
+
+
+func _run_triggers(event: String) -> void:
+	for r in trigger_rules:
+		if finished:
+			return
+		var rule: Dictionary = r
+		if str(rule.get("on", "tick")) != event:
+			continue
+		var rid := str(rule.get("id", ""))
+		if bool(rule.get("once", false)) and trigger_done.has(rid):
+			continue
+		if not _cond(rule.get("when", {})):
+			continue
+		if bool(rule.get("once", false)):
+			trigger_done[rid] = true
+		_apply(rule.get("then", []))
+		if finished:
+			return
+
+
+func _cond(c) -> bool:
+	if not (c is Dictionary):
+		return true
+	var d: Dictionary = c
+	if d.has("all"):
+		for x in d["all"]:
+			if not _cond(x):
+				return false
+		return true
+	if d.has("any"):
+		for x in d["any"]:
+			if _cond(x):
+				return true
+		return false
+	if d.has("not"):
+		return not _cond(d["not"])
+	if d.has("unit_stage"):
+		var q: Dictionary = d["unit_stage"]
+		return _slot_stage(int(q["slot"])) == int(q.get("eq", 0))
+	if d.has("unit_dest"):
+		var q: Dictionary = d["unit_dest"]
+		return _slot_pos(int(q["slot"])) == Vector2i(int(q["x"]), int(q["y"]))
+	if d.has("unit_dest_area"):
+		var q: Dictionary = d["unit_dest_area"]
+		var p := _slot_pos(int(q["slot"]))
+		return p.x >= int(q["x"]) and p.x < int(q["x"]) + int(q["w"]) \
+				and p.y >= int(q["y"]) and p.y < int(q["y"]) + int(q["h"])
+	if d.has("adjacent"):
+		var q: Dictionary = d["adjacent"]
+		var a := _slot_pos(int(q["a"]))
+		var b := _slot_pos(int(q["b"]))
+		return absi(a.x - b.x) + absi(a.y - b.y) == 1
+	if d.has("flag"):
+		var q: Dictionary = d["flag"]
+		var v := int(trigger_flags.get(str(q["addr"]), 0))
+		if q.has("eq") and v != int(q["eq"]):
+			return false
+		if q.has("neq") and v == int(q["neq"]):
+			return false
+		if q.has("gte") and not (v >= int(q["gte"])):
+			return false
+		return true
+	if d.has("global"):
+		var q: Dictionary = d["global"]
+		var v := int(trigger_flags.get(str(q["addr"]), 0))
+		if q.has("eq") and v != int(q["eq"]):
+			return false
+		if q.has("neq") and v == int(q["neq"]):
+			return false
+		return true
+	if d.has("turn_gt_flag"):
+		var q: Dictionary = d["turn_gt_flag"]
+		return int(battle.turn) > int(trigger_flags.get(str(q["addr"]), 0)) + int(q.get("add", 0))
+	if d.has("cell_region_gt"):
+		var q: Dictionary = d["cell_region_gt"]
+		for yy in range(int(q["y"]), int(q["y"]) + int(q["h"])):
+			for xx in range(int(q["x"]), int(q["x"]) + int(q["w"])):
+				if _cell_count(xx, yy) > int(q.get("count", 1)):
+					return true
+		return false
+	if d.has("slot_pos_cell_occupied"):
+		var q: Dictionary = d["slot_pos_cell_occupied"]
+		var p := _slot_pos(int(q["slot"]))
+		return _cell_count(p.x, p.y) == int(q.get("eq", 1))
+	if d.has("flag_bit"):
+		var q: Dictionary = d["flag_bit"]
+		var v := int(trigger_flags.get(str(q["addr"]), 0))
+		var on := (v & int(q["mask"])) != 0
+		return on == bool(q.get("set", false))
+	if d.has("all_units_dead"):
+		var want := bool(d["all_units_dead"])
+		return (battle.alive_enemies() == 0) == want
+	if d.has("map_cell_occupied"):
+		var q: Dictionary = d["map_cell_occupied"]
+		var n := _cell_count(int(q["x"]), int(q["y"]))
+		return n == int(q.get("eq", 1))
+	if d.has("turn"):
+		var q: Dictionary = d["turn"]
+		if q.has("gt") and not (int(battle.turn) > int(q["gt"])):
+			return false
+		if q.has("le") and not (int(battle.turn) <= int(q["le"])):
+			return false
+		return true
+	if d.has("unit_count"):
+		var q: Dictionary = d["unit_count"]
+		var n := _unit_count(q)
+		if q.has("eq") and n != int(q["eq"]):
+			return false
+		if q.has("lt") and not (n < int(q["lt"])):
+			return false
+		if q.has("gte") and not (n >= int(q["gte"])):
+			return false
+		return true
+	if d.has("any_player_death"):
+		return _last_dead_side == "player"
+	if d.has("unit_dead"):
+		return _last_dead_slot == int(d["unit_dead"])
+	return true
+
+
+func _slot_unit(slot: int):
+	if battle == null:
+		return null
+	for u in battle.units:
+		if is_instance_valid(u) and u.alive and int(u.slot) == slot:
+			return u
+	# 0..39 是 PEOPLE.DAT 名册槽；复刻队伍用 pid 表示同一角色。
+	if slot < 40:
+		for u in battle.units:
+			if is_instance_valid(u) and u.alive and int(u.pid) == slot:
+				return u
+	# 复刻队伍不一定带 pid 0；原版 Fighter[0] 是“主角位”，这里落到队长。
+	# 优先部署队伍（slot=-1），避免把固定剧情 NPC 当成主角。
+	if slot == 0:
+		for u in battle.units:
+			if is_instance_valid(u) and u.alive and str(u.side) == "player" \
+					and int(u.slot) < 0:
+				return u
+		for u in battle.units:
+			if is_instance_valid(u) and u.alive and str(u.side) == "player":
+				return u
+	return null
+
+
+func _slot_stage(slot: int) -> int:
+	return 1 if _slot_unit(slot) != null else 0
+
+
+func _slot_pos(slot: int) -> Vector2i:
+	var u = _slot_unit(slot)
+	if u != null:
+		return Vector2i(u.x, u.y)
+	# 未出场的 Fighter 仍然保留 dest 坐标，原版触发器用它当地图目标点。
+	for key in ["spawn_pool", "reserves", "units"]:
+		for rec in level.get(key, []):
+			if int(rec.get("slot", -1)) == slot:
+				return Vector2i(int(rec.get("x", -1)), int(rec.get("y", -1)))
+	return Vector2i(-1, -1)
+
+
+func _cell_count(x: int, y: int) -> int:
+	# 0x57BF10 的占位判定在这些关里都表示“我方占住该格”；
+	# 敌军站在目标格上不算完成（否则 L12 开局就会误判胜利）。
+	var n := 0
+	for u in battle.units:
+		if is_instance_valid(u) and u.alive and str(u.side) == "player" \
+				and int(u.x) == x and int(u.y) == y:
+			n += 1
+	return n
+
+
+func _unit_count(q: Dictionary) -> int:
+	var n := 0
+	if q.has("slots"):
+		for s in q["slots"]:
+			if _slot_stage(int(s)) != 0:
+				n += 1
+		return n
+	var lo := int(q.get("from", 0))
+	var hi := int(q.get("to", 128))
+	for u in battle.units:
+		if is_instance_valid(u) and u.alive and int(u.slot) >= lo and int(u.slot) < hi:
+			n += 1
+	return n
+
+
+func _apply(actions) -> void:
+	for a in actions:
+		if finished:
+			return
+		if not (a is Dictionary):
+			continue
+		var act: Dictionary = a
+		if act.has("sound"):
+			if battle != null:
+				battle.emit_story_event("trigger_sound", {"id": str(act["sound"])})
+		elif act.has("flag_set"):
+			trigger_flags[str(act["flag_set"]["addr"])] = int(act["flag_set"].get("value", 1))
+		elif act.has("flag_or"):
+			var addr := str(act["flag_or"]["addr"])
+			trigger_flags[addr] = int(trigger_flags.get(addr, 0)) | int(act["flag_or"]["mask"])
+		elif act.has("spawn"):
+			var su = battle.spawn_slot(int(act["spawn"]))
+			if su != null and str(su.side) == "player":
+				if _key(su.unit_name) in protected_keys:
+					su.protected = true
+				if _key(su.unit_name) in unit_keys and not target_units.has(su):
+					target_units.append(su)
+		elif act.has("spawn_range"):
+			for s in range(int(act["spawn_range"]["from"]), int(act["spawn_range"]["to"])):
+				battle.spawn_slot(s)
+		elif act.has("remove"):
+			battle.remove_slot(int(act["remove"]))
+		elif act.has("remove_range"):
+			var q: Dictionary = act["remove_range"]
+			for s in range(int(q["from"]), int(q["to"])):
+				if bool(q.get("alive_only", false)) and _slot_stage(s) == 0:
+					continue
+				battle.remove_slot(s)
+		elif act.has("set_field"):
+			var q: Dictionary = act["set_field"]
+			battle.set_slot_field(int(q["slot"]), str(q["field"]), int(q["value"]))
+		elif act.has("set_field_range"):
+			var q: Dictionary = act["set_field_range"]
+			for s in range(int(q["from"]), int(q["to"])):
+				battle.set_slot_field(s, str(q["field"]), int(q["value"]))
+		elif act.has("score"):
+			battle.stats["score_bonus"] = int(battle.stats.get("score_bonus", 0)) + int(act["score"])
+		elif act.has("global_set"):
+			trigger_flags[str(act["global_set"]["addr"])] = int(act["global_set"].get("value", 0))
+		elif act.has("global_add"):
+			var addr := str(act["global_add"]["addr"])
+			trigger_flags[addr] = int(trigger_flags.get(addr, 0)) + int(act["global_add"].get("value", 1))
+		elif act.has("flag_set_from_turn"):
+			var tq: Dictionary = act["flag_set_from_turn"]
+			trigger_flags[str(tq["addr"])] = int(battle.turn) + int(tq.get("add", 0))
+		elif act.has("set_map_cell_at_slot"):
+			# 原版写 map cell 数组；复刻用单位占位/剧情旗标等价表示。
+			trigger_flags["cell_%d" % int(act["set_map_cell_at_slot"]["slot"])] = \
+					int(act["set_map_cell_at_slot"].get("value", 1))
+		elif act.has("success_text"):
+			level["success"] = str(act["success_text"])
+		elif act.has("failure_text"):
+			level["failure"] = str(act["failure_text"])
+		elif act.has("result"):
+			_finish(str(act["result"]), str(level.get(
+					"success" if str(act["result"]) == "victory" else "failure", "")))
+			return
 
 
 func _finish(result: String, message: String) -> void:

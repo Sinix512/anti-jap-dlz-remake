@@ -17,8 +17,37 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from collections import deque
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from trigger_data import TRIGGERS as LEVEL_TRIGGERS
+
+
+def _trigger_spawn_slots(trig: dict) -> set:
+    """所有 spawn / spawn_range 槽位；这些记录必须保留给运行时生成。"""
+    out = set()
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            if "spawn" in node:
+                out.add(int(node["spawn"]))
+            if "spawn_range" in node:
+                r = node["spawn_range"]
+                out.update(range(int(r["from"]), int(r["to"])))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(trig.get("rules", []))
+    return out
+
+
+TRIGGER_SPAWN_SLOTS = {i: _trigger_spawn_slots(t)
+                       for i, t in LEVEL_TRIGGERS.items()}
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -459,6 +488,8 @@ def main() -> None:
 
         active = []
         reserves = []
+        spawn_needed = TRIGGER_SPAWN_SLOTS.get(idx, set())
+        all_recs = {}
         for f in fl["fighters"]:
             p = people[f["slot"]] if f["slot"] < 40 else lv["people"][f["slot"] - 40]
             u = units[int(p["bingzhong"])]
@@ -526,6 +557,12 @@ def main() -> None:
                 rec["side"] = "enemy"
                 rec["auto"] = False
                 rec["control"] = False
+            # 黑风寨的向天虎/向天豹是寨主，FIGHT.People.unknown_18 误标成友军；
+            # 0x40A4AF 在 24 号阵亡时直接给胜利，可反证其敌军身份。
+            if idx == 22 and f["slot"] in (24, 25):
+                rec["side"] = "enemy"
+                rec["auto"] = False
+                rec["control"] = False
             # 第 15 关的老百姓在 People 表里被标成 enemy(1)，但原版是
             # 需要保护的村民；按剧情语义改为友军 AI。
             if idx == 15 and str(f["unit"]) == "老百姓":
@@ -533,18 +570,24 @@ def main() -> None:
                 rec["auto"] = True
                 rec["control"] = False
                 rec["protected"] = True
+            all_recs[int(f["slot"])] = rec
             if f["active"]:
                 active.append(rec)
+            elif int(f["slot"]) in spawn_needed:
+                # 触发器生成的槽位不能提前进入 active/波次，否则会双重生成；
+                # 但记录必须保留在 spawn_pool 里供 0x429CC8 数据化版本使用。
+                pass
             elif str(f["unit"]) != "孙悟空" and 0 <= rec["x"] < w and 0 <= rec["y"] < h:
                 reserves.append(rec)
 
+        spawn_pool = [all_recs[s] for s in sorted(spawn_needed) if s in all_recs]
         if idx in ENEMY_CAP:
             cap = int(ENEMY_CAP[idx])
             kept = [r for r in active if r["side"] == "enemy"][:cap]
             active = [r for r in active if r["side"] != "enemy"] + kept
         # 保护名单
         protect_names = PROTECT.get(idx, [])
-        for r in active + reserves:
+        for r in active + reserves + spawn_pool:
             if r["side"] == "player" and r["key"] in {norm(n) for n in protect_names}:
                 r["protected"] = True
         # 没有任何可控友军时，把有名友军设为可控
@@ -574,7 +617,7 @@ def main() -> None:
                                   if not s["empty"] and s["direction"] == 2]
         if obj_raw["type"] == "reach_unit":
             obj_raw["unit_positions"] = []
-            for r in active + reserves:
+            for r in active + reserves + spawn_pool:
                 if r["side"] == "player" and r["key"] in obj_raw.get("unit_keys", []):
                     obj_raw["unit_positions"].append([r["x"], r["y"]])
         # 目标可达性：以部署点/固定友军为起点做一次 BFS
@@ -738,6 +781,7 @@ def main() -> None:
             "players": sum(1 for u in active if u["side"] == "player"),
             "enemies": sum(1 for u in active if u["side"] == "enemy"),
             "reserves": reserve_out,
+            "spawn_pool": spawn_pool,
             "waves": waves,
             "deploy": [[x, y] for x, y in deploy],
             "party_deploy": bool(PARTY_DEPLOY.get(idx, False)),
@@ -754,6 +798,7 @@ def main() -> None:
             "specials": [s for s in specials if not s["empty"]],
             "story_ids": STORY_IDS.get(idx, []),
             "media": "d%02d" % (idx + 1) if idx < 36 else "",
+            "triggers": LEVEL_TRIGGERS.get(idx, {}),
         })
 
     # 战斗表

@@ -87,6 +87,7 @@ var last_message := ""
 var log_history: Array = []
 var pending_story: Array = []
 var sfx_nodes: Array = []
+var _trigger_accum := 0.0
 
 
 func setup(d: Dictionary, lv: Dictionary, f: Font, ctx: Dictionary = {}) -> void:
@@ -201,6 +202,78 @@ func spawn_reserve(rec: Dictionary) -> Node2D:
 	u.acted = true
 	u.refresh()
 	return u
+
+
+func spawn_slot(slot: int) -> Node2D:
+	"""按 FIGHT 槽位生成/激活一个单位（0x429CC8 的数据化版本）。"""
+	if unit_by_slot(slot) != null:
+		return null
+	var rec: Dictionary = {}
+	for key in ["spawn_pool", "reserves", "units"]:
+		for r in level.get(key, []):
+			if int(r.get("slot", -1)) == slot:
+				rec = (r as Dictionary).duplicate(true)
+				break
+		if not rec.is_empty():
+			break
+	if rec.is_empty():
+		_log("触发器生成槽 %d 缺少 FIGHT 记录" % slot)
+		return null
+	var t := Vector2i(int(rec.get("x", 0)), int(rec.get("y", 0)))
+	if not _in_bounds(t) or _is_occupied(t) \
+			or move_cost(3, _terrain_at(t)) >= 99:
+		t = _free_tile_near(t.x, t.y)
+	if t.x < 0:
+		return null
+	rec["x"] = t.x
+	rec["y"] = t.y
+	var u := _spawn_unit(rec)
+	u.moved = true
+	u.acted = true
+	u.refresh()
+	if u.side == "enemy":
+		stats["enemies_total"] = int(stats.get("enemies_total", 0)) + 1
+	else:
+		stats["deployed"] = int(stats.get("deployed", 0)) + 1
+	_log("战场变化：%s 出现" % u.unit_name)
+	update_hud()
+	return u
+
+
+func remove_slot(slot: int) -> void:
+	"""0x429BED：撤走槽位，不触发阵亡结算。"""
+	var u = unit_by_slot(slot)
+	if u == null:
+		return
+	u.alive = false
+	u.visible = false
+	u.hp = 0
+	u.status_stun = 999
+	if u == selected:
+		selected = null
+	update_hud()
+
+
+func set_slot_field(slot: int, field_name: String, value: int) -> void:
+	var u = null
+	for x in units:
+		if is_instance_valid(x) and int(x.slot) == slot:
+			u = x
+			break
+	if u != null:
+		match field_name:
+			"behavior": u.behavior = value
+			"target_slot": u.target_slot = value
+			"target_x": u.target_x = value
+			"target_y": u.target_y = value
+			_: u.data[field_name] = value
+		return
+	for key_name in ["spawn_pool", "reserves"]:
+		for r in level.get(key_name, []):
+			if int(r.get("slot", -1)) == slot:
+				var key := "x" if field_name == "pos_x" else ("y" if field_name == "pos_y" else field_name)
+				r[key] = value
+				return
 
 
 func _free_tile_near(tx: int, ty: int) -> Vector2i:
@@ -606,6 +679,11 @@ func _process(delta: float) -> void:
 		hover_tile = t
 		if overlay != null:
 			overlay.queue_redraw()
+	if scenario != null and not finished_flag:
+		_trigger_accum += delta
+		if _trigger_accum >= 0.1:
+			_trigger_accum = 0.0
+			scenario.on_tick()
 
 
 func _unhandled_input(event: InputEvent) -> void:
