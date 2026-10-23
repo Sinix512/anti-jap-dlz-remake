@@ -23,6 +23,30 @@ ASSETS = GODOT / "assets"
 UI = ASSETS / "ui"
 GODOT_DATA = GODOT / "data"
 
+# 原版历史照片轮播：文件名表 0x447DB0，切换循环 0x42DC9E。
+# ticks 是原版计时器阈值；最后一张 npic25 是表尾，阈值 0x10A4 为推定。
+HISTORY_PHOTOS = [
+    ("918-2", "history_918_2.png", 0x113),
+    ("918-3", "history_918_3.png", 0x226),
+    ("77-1", "history_77_1.png", 0x352),
+    ("77-2", "history_77_2.png", 0x5AA),
+    ("npic18", "npic_18.png", 0x753),
+    ("npic19", "npic_19.png", 0x7D0),
+    ("npic20", "npic_20.png", 0x84D),
+    ("npic21", "npic_21.png", 0x8CA),
+    ("npic22", "npic_22.png", 0x947),
+    ("npic29", "npic_29.png", 0x9C4),
+    ("npic08", "npic_08.png", 0xB22),
+    ("npic07", "npic_07.png", 0xBD1),
+    ("npic06", "npic_06.png", 0xC80),
+    ("npic05", "npic_05.png", 0xD2F),
+    ("npic04", "npic_04.png", 0xDDE),
+    ("npic03", "npic_03.png", 0xE8D),
+    ("npic02", "npic_02.png", 0xF3C),
+    ("npic01", "npic_01.png", 0xFEB),
+    ("npic25", "npic_25.png", 0x10A4),
+]
+
 # TXT 行首的两位说话人码：00 = 主角 GG，01..39 = PEOPLE.DAT 对应角色，
 # 40+ = 敌军/旁白。这个映射由 00-39 与 40 人表的对话内容逐条对照得到。
 ENEMY_NAMES = {
@@ -258,6 +282,13 @@ def main() -> None:
                  "历史与虚构在此交汇，而人民仍在书写自己的故事。"},
     ]
 
+    history = [{
+        "index": i,
+        "id": src,
+        "path": "res://assets/ui/" + dst,
+        "ticks": ticks,
+    } for i, (src, dst, ticks) in enumerate(HISTORY_PHOTOS)]
+
     payload = {
         "meta": {
             "title": "抗日：地雷战 / M5 剧情",
@@ -274,10 +305,17 @@ def main() -> None:
         "archive": archive,
         "endings": endings,
         "media": media,
+        "history": history,
         "credits_image": "res://assets/ui/credits.png",
     }
     (GODOT_DATA / "m5.json").write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8")
+    (GODOT_DATA / "m5_history.json").write_text(
+        json.dumps({"meta": {
+            "source": "DLZ.exe filename table 0x447DB0 / loop 0x42DC9E",
+            "count": len(history),
+        }, "photos": history}, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8")
     print("records", len(records), "scenes", len(scenes),
           "archive", len(archive), "endings", len(endings))

@@ -12,6 +12,8 @@ var _list: VBoxContainer
 var _title: Label
 var _detail: Label
 var _player: Control
+var _history_player: Control
+var _history: Array = []
 var _kind := "mpeg"
 
 
@@ -19,6 +21,11 @@ func setup(f: Font, media_data: Dictionary, anm_data: Dictionary = {}) -> void:
 	font = f
 	media = media_data
 	anm = anm_data
+	var hp := "res://data/m5_history.json"
+	if FileAccess.file_exists(hp):
+		var hd = JSON.parse_string(FileAccess.get_file_as_string(hp))
+		if hd is Dictionary:
+			_history = hd.get("photos", [])
 	theme = OriginalUI.make_theme(font)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -36,7 +43,8 @@ func _build() -> void:
 	tabs.position = Vector2(14, 38)
 	tabs.add_theme_constant_override("separation", 4)
 	add_child(tabs)
-	for pair in [["过场影片", "mpeg"], ["FLC", "flc"], ["ANM", "anm"]]:
+	for pair in [["过场影片", "mpeg"], ["FLC", "flc"], ["ANM", "anm"],
+			["历史照片", "history"]]:
 		var b := OriginalUI.button(pair[0], font, Vector2(100, 28),
 				_switch.bind(pair[1]), 14)
 		tabs.add_child(b)
@@ -75,7 +83,8 @@ func _switch(kind: String) -> void:
 	_kind = kind
 	for c in _list.get_children():
 		c.queue_free()
-	_title.text = {"mpeg": "MPEG 过场", "flc": "FLC 动画", "anm": "ANM 精灵动画"}.get(kind, "")
+	_title.text = {"mpeg": "MPEG 过场", "flc": "FLC 动画",
+			"anm": "ANM 精灵动画", "history": "历史照片轮播"}.get(kind, "")
 	if kind == "mpeg":
 		var n := 0
 		for c in media.get("clips", []):
@@ -101,6 +110,16 @@ func _switch(kind: String) -> void:
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			_list.add_child(b)
 		_detail.text = "FLC 共 %d 段。\n\nKINGSOFT / KR-1 / TEST01 / TRAIN 已由 ffmpeg flic 解码，输出 WebM + OGV。" % n
+	elif kind == "history":
+		var n := 0
+		for e in _history:
+			n += 1
+			var b := OriginalUI.button("[%02d] %s" % [
+				n, str(e.get("id", ""))], font, Vector2(370, 26),
+				_open_history.bind(n - 1), 14)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			_list.add_child(b)
+		_detail.text = "历史照片共 %d 张。\n\n顺序来自原版文件名表 0x447DB0，切换循环 0x42DC9E（WM_TIMER）。\n含 918-2/918-3、77-1/77-2 与 NPIC 01–29。\n点击任意一张进入轮播，可跳过。" % n
 	else:
 		var files: Array = anm.get("files", [])
 		var n := 0
@@ -113,6 +132,18 @@ func _switch(kind: String) -> void:
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			_list.add_child(b)
 		_detail.text = "ANM 共 %d 个。\n\nLPF/ANIM 容器，320×200 调色板 + 增量 RLE；已解码为 WebM 预览。\n详见 data/m5_anm.json。" % n
+
+
+func _open_history(start: int) -> void:
+	if _history.is_empty():
+		return
+	if is_instance_valid(_history_player):
+		_history_player.queue_free()
+	var hs = load("res://scripts/m5/HistorySlideshow.gd").new()
+	add_child(hs)
+	_history_player = hs
+	hs.setup(font, _history, start)
+	hs.closed.connect(func(): _history_player = null)
 
 
 func _play(c: Dictionary) -> void:

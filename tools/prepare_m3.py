@@ -276,6 +276,16 @@ def main() -> None:
             dst = UI / f"npic_{num:02d}.png"
             shutil.copyfile(src, dst)
             manifest[dst.name] = "res://assets/ui/" + dst.name
+    # 原版历史照片轮播：918-2/918-3/77-1/77-2 + NPIC，
+    # 文件名表在 DLZ.exe 0x447DB0，切换循环在 0x42DC9E。
+    for src, dst in (("918-2", "history_918_2.png"),
+                     ("918-3", "history_918_3.png"),
+                     ("77-1", "history_77_1.png"),
+                     ("77-2", "history_77_2.png")):
+        p = OUT / "img" / f"{src}.png"
+        if p.exists():
+            shutil.copyfile(p, UI / dst)
+            manifest[dst] = "res://assets/ui/" + dst
 
     (GODOT_DATA / "m3.json").write_text(json.dumps({
         "meta": {
