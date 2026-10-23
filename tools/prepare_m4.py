@@ -681,6 +681,10 @@ def main() -> None:
             "race": "抢先到达山神庙",
             "capture_or_annihilate": "占领仓库或全歼敌人",
         }.get(obj_raw["type"], "完成任务")
+        # 0x11C：按 PEOPLE.DAT 索引解码的每关队伍候选（推断）。
+        cand_pids = sorted({int(v) for v in lv["intro"]["unknown_11c"]
+                            if int(v) != 255})
+        cand_names = [norm(people[pid]["name"]) for pid in cand_pids]
         # 胜负文本
         score = 60
         stars = (3 if idx <= 12 else 4 if idx <= 28 else 5)
@@ -741,6 +745,10 @@ def main() -> None:
             "objective": obj_raw,
             "protect": protect_names,
             "protect_all": idx in PROTECT_ALL,
+            "party_candidates": [
+                {"pid": pid, "name": name}
+                for pid, name in zip(cand_pids, cand_names)
+            ],
             "joins": JOIN_AFTER.get(idx, []),
             "chests": chests,
             "specials": [s for s in specials if not s["empty"]],

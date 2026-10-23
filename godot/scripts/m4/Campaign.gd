@@ -386,9 +386,16 @@ func _open_mission() -> void:
 		str(orig_limit) if orig_limit > 0 else "无",
 		str(lv.get("objective", {}).get("label", ""))],
 		Vector2.ZERO, Vector2(520, 108), 16, OriginalUI.INK))
-	content.add_child(_label("可出击队伍：%d 人    部署点：%d" % [
-		state.party_size(), (lv.get("deploy", []) as Array).size()],
-		Vector2.ZERO, Vector2(520, 24), 16, Color("#d8c39a")))
+	var cand_names: Array = []
+	for c in lv.get("party_candidates", []):
+		cand_names.append(str(c.get("name", "")))
+	var party_line := "可出击队伍：%d 人    部署点：%d" % [
+		state.party_size(), (lv.get("deploy", []) as Array).size()]
+	if not cand_names.is_empty():
+		party_line += "\n0x11C 候选（推断）：" + "、".join(cand_names)
+	content.add_child(_label(party_line,
+		Vector2.ZERO, Vector2(520, 44 if not cand_names.is_empty() else 24),
+		16, Color("#d8c39a")))
 	var hint := _label("战斗为原版 47 关数据；目标/增援/敌军行为已接入通用运行时。",
 			Vector2.ZERO, Vector2(520, 40), 14, Color("#b9a98b"))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
