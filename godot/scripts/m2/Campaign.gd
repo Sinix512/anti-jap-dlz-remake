@@ -27,6 +27,7 @@ var shop_kind := "junxie"
 var shop_selling := false
 var toast: Label
 var toast_bg: NinePatchRect
+var _ambient: AudioStreamPlayer
 
 
 func setup(font_ref: Font) -> void:
@@ -185,6 +186,7 @@ func _toast(msg: String) -> void:
 
 func _show_world() -> void:
 	mode = "world"
+	_stop_ambient()
 	_new_ui()
 	_bg_texture(str(m2["meta"].get("bigmap", "")), 1.0)
 	_dim(0.42)
@@ -278,9 +280,53 @@ func _show_town(index: int) -> void:
 		if i == 3 and t["shops"]["zahuo"].is_empty():
 			b.disabled = true
 		ui_root.add_child(b)
-	var hint := _label("选择建筑服务；军械/杂货/作坊是 M2 经济入口",
+	var hint := _label("选择建筑服务；军械/杂货/作坊是 M2 经济入口；点击镇内热点听环境音",
 			Vector2(8, 392), Vector2(620, 24), 16, Color("#d7dfea"))
 	ui_root.add_child(hint)
+	_setup_town_audio(t)
+
+
+func _setup_town_audio(t: Dictionary) -> void:
+	var hotspots: Array = t.get("sound_hotspots", [])
+	for h in hotspots:
+		var wave := int(h.get("wave", -1))
+		if wave < 800:
+			continue
+		var path := "res://assets/audio/wave_%04d.wav" % wave
+		if not ResourceLoader.exists(path):
+			continue
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.tooltip_text = "环境音"
+		b.position = Vector2(int(h.get("x", 0)) * 2,
+				int(h.get("y", 0)) * 2 + 44)
+		b.size = Vector2(28, 28)
+		b.pressed.connect(_play_ambient.bind(wave))
+		ui_root.add_child(b)
+	# 进入城镇先播放第一个热点，作为环境底音；点击热点可重放。
+	for h in hotspots:
+		var wave := int(h.get("wave", -1))
+		if wave >= 800:
+			_play_ambient(wave)
+			break
+
+
+func _play_ambient(wave: int) -> void:
+	var path := "res://assets/audio/wave_%04d.wav" % wave
+	if not ResourceLoader.exists(path):
+		return
+	if _ambient == null or not is_instance_valid(_ambient):
+		_ambient = AudioStreamPlayer.new()
+		_ambient.volume_db = -16.0
+		add_child(_ambient)
+	_ambient.stream = load(path)
+	_ambient.play()
+
+
+func _stop_ambient() -> void:
+	if _ambient != null and is_instance_valid(_ambient):
+		_ambient.stop()
 
 
 func _service_heal() -> void:
