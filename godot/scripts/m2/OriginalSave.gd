@@ -31,6 +31,25 @@ static func _skip(b: StreamPeerBuffer, n: int) -> void:
 	b.seek(b.get_position() + n)
 
 
+static func _read_raw(b: StreamPeerBuffer, n: int) -> PackedByteArray:
+	var got = b.get_data(n)
+	return got[1]
+
+
+static func _put_raw_or_pad(b: StreamPeerBuffer, state, key: String,
+		n: int) -> void:
+	var raw := PackedByteArray()
+	var store = state.original_blocks if state != null else null
+	if store is Dictionary:
+		var v = store.get(key, null)
+		if v is PackedByteArray and (v as PackedByteArray).size() == n:
+			raw = v
+	if raw.size() == n:
+		b.put_data(raw)
+	else:
+		_pad(b, n)
+
+
 static func _put_name(b: StreamPeerBuffer, raw: PackedByteArray, n: int) -> void:
 	var out := PackedByteArray()
 	out.resize(n)
@@ -108,7 +127,7 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	b.put_u32(int(state.score_total))  # block7 score_total
 	b.put_u32(int(state.kills_by_gun))  # block8
 	b.put_u32(int(state.kills_by_mine))  # block9
-	_pad(b, 64)
+	_put_raw_or_pad(b, state, "block10", 64)
 	for i in range(19):
 		b.put_u32(1 if state.is_liberated(i) else 0)
 	for i in range(14):
@@ -123,15 +142,15 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	# block13 是 95 槽的关卡/界面状态机（已确认 idx0/2/3/4/5/6/9/10/11/.../
 	# 85/86/90/91 被引用，idx90 还是 2800/3000/3300/3600 结局阈值）。
 	# 复刻没有原版的这些状态，写 0，不再用 PARY 覆盖 idx85/86。
-	_pad(b, 380)
-	_pad(b, 8192)
-	_pad(b, 8192)
+	_put_raw_or_pad(b, state, "block13", 380)
+	_put_raw_or_pad(b, state, "block14", 8192)
+	_put_raw_or_pad(b, state, "block15", 8192)
 	var people := _people_bytes(state)
 	b.put_data(people)
-	b.put_data(people)
+	_put_raw_or_pad(b, state, "block17", 16896)
 	for i in range(160):
 		b.put_u16(mini(65535, state.item_count(i)))
-	_pad(b, 320)
+	_put_raw_or_pad(b, state, "block19", 320)
 	# block20/21 是 4×10 物品格缓存：当前页写前 10 个库存物品。
 	var top_ids: Array = []
 	for i in range(160):
@@ -143,12 +162,18 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 		b.put_u16(state.item_count(int(top_ids[i])) if i < top_ids.size() else 0)
 	for i in range(10):
 		b.put_u32(int(top_ids[i]) if i < top_ids.size() else 0)
-	_pad(b, 32768)
-	_pad(b, 8)
-	_pad(b, 28)
-	_pad(b, 12)
-	b.put_u32(int(Time.get_unix_time_from_system()))
-	b.put_u32(0)
+	_put_raw_or_pad(b, state, "block22", 32768)
+	_put_raw_or_pad(b, state, "block23", 8)
+	_put_raw_or_pad(b, state, "block24", 28)
+	_put_raw_or_pad(b, state, "block25", 12)
+	if state.original_blocks is Dictionary and state.original_blocks.has("block26"):
+		_put_raw_or_pad(b, state, "block26", 4)
+	else:
+		b.put_u32(int(Time.get_unix_time_from_system()))
+	if state.original_blocks is Dictionary and state.original_blocks.has("block27"):
+		_put_raw_or_pad(b, state, "block27", 4)
+	else:
+		b.put_u32(0)
 	var data := b.get_data_array()
 	if data.size() != SIZE:
 		push_error("OriginalSave size %d != %d" % [data.size(), SIZE])
@@ -180,7 +205,7 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	out["score_total"] = score_total
 	out["kills_by_gun"] = kills_gun
 	out["kills_by_mine"] = kills_mine
-	_skip(b, 64)
+	var b10 := _read_raw(b, 64)
 	var liberated: Array = []
 	for i in range(19):
 		if int(b.get_u32()) != 0:
@@ -191,11 +216,11 @@ static func decode(data: PackedByteArray) -> Dictionary:
 		progress.append(int(b.get_u32()))
 	var b13_got = b.get_data(380)
 	var b13: PackedByteArray = b13_got[1]
-	_skip(b, 8192)
-	_skip(b, 8192)
+	var b14 := _read_raw(b, 8192)
+	var b15 := _read_raw(b, 8192)
 	var people_got = b.get_data(16896)
 	var people_raw: PackedByteArray = people_got[1]
-	_skip(b, 16896)
+	var b17 := _read_raw(b, 16896)
 	var people := _decode_people(people_raw)
 	out["people"] = people
 	var cangku: Array = []
@@ -206,7 +231,7 @@ static func decode(data: PackedByteArray) -> Dictionary:
 		if cangku[i] > 0:
 			items[str(i)] = cangku[i]
 	out["items"] = items
-	_skip(b, 320)
+	var b19 := _read_raw(b, 320)
 	var grid_counts: Array = []
 	for i in range(40):
 		grid_counts.append(int(b.get_u16()))
@@ -214,6 +239,19 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	for i in range(10):
 		grid_ids.append(int(b.get_u32()))
 	out["item_grid"] = {"ids": grid_ids, "counts": grid_counts.slice(0, 10)}
+	var b22 := _read_raw(b, 32768)
+	var b23 := _read_raw(b, 8)
+	var b24 := _read_raw(b, 28)
+	var b25 := _read_raw(b, 12)
+	var b26 := _read_raw(b, 4)
+	var b27 := _read_raw(b, 4)
+	out["_raw"] = {
+		"block10": b10, "block13": b13,
+		"block14": b14, "block15": b15, "block17": b17,
+		"block19": b19, "block22": b22, "block23": b23,
+		"block24": b24, "block25": b25, "block26": b26,
+		"block27": b27,
+	}
 	var members: Array = []
 	if b13.size() >= 380 and b13.decode_u32(340) == 0x50415259:
 		# 兼容旧版导出的 PARY 扩展。
@@ -293,6 +331,7 @@ static func apply(state, d: Dictionary, path: String) -> bool:
 	state.score_total = int(d.get("score_total", 0))
 	state.kills_by_gun = int(d.get("kills_by_gun", 0))
 	state.kills_by_mine = int(d.get("kills_by_mine", 0))
+	state.original_blocks = (d.get("_raw", {}) as Dictionary).duplicate(true)
 	state.hidden_unlocked = bool(d.get("hidden_unlocked", false))
 	state.ending_id = int(d.get("ending_id", 0))
 	state.campaign_completed.clear()

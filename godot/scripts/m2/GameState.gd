@@ -33,6 +33,7 @@ var player_name := "李勇"
 var story_variant := false
 var difficulty := 1
 var m4_data: Dictionary = {}
+var original_blocks: Dictionary = {}  # 原版存档导入时保留的未解析 block（不写 JSON 存档）
 
 
 func new_game(m2: Dictionary) -> void:
@@ -55,6 +56,7 @@ func new_game(m2: Dictionary) -> void:
 	hidden_unlocked = false
 	hidden_done.clear()
 	ending_id = 0
+	original_blocks.clear()
 	if player_name == "":
 		player_name = "李勇"
 	var start: Dictionary = data.get("starting", {})
