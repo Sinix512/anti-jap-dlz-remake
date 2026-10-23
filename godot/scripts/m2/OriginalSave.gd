@@ -1,9 +1,17 @@
 extends RefCounted
 
 ## 原版 85072 B 存档布局的编解码器（实验）。
-## 布局来自 dlz_save.bt / 28 个 block 尺寸；名字用 GBK 字节写入。
-## 注意：尚未用原始 DLZ.exe 回读验证；未识别的原版字段写 0。
-## 游戏内正式存档仍是 GameState 的 JSON；这里是兼容桥/校验工具。
+## 28 个 block 的尺寸/顺序由 DLZ.exe save_game@0x427C94、load_game@0x427FEF
+## 直接确认；名字用 GBK 字节写入。关键 block 的运行时全局：
+##   block1 fight_index     0x7D06A0
+##   block3 current_level   0x475AA4（战斗/结算的当前关索引）
+##   block5 town_index      0x962788（城镇初始化写 0..18）
+##   block6 money           0x7D0484（城镇“资金：”绘制 0x431704 读取）
+##   block7 score_total     0x6223A8（战斗结算累加评分）
+##   block8 kills_by_gun    0x472580（战斗结算累加）
+##   block9 kills_by_mine   0x7D069C（战斗结算累加）
+## block13 的 95×u32 仍只确认前 3 个状态机；尾部 PARY 是私有扩展，
+## 原版没有该标记。游戏内正式存档仍是 GameState 的 JSON。
 
 const SIZE := 85072
 const SKILL_KEYS := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
@@ -79,10 +87,10 @@ static func _people_bytes(state) -> PackedByteArray:
 static func encode(state, level: Dictionary) -> PackedByteArray:
 	var b := StreamPeerBuffer.new()
 	b.big_endian = false
-	b.put_u32(2)  # block0（用途未完全确认）
-	b.put_u32(0x28)  # block1 game state：战略界面
-	b.put_u32(1)  # block2 difficulty
-	b.put_u32(100)  # terrain modifier
+	b.put_u32(2)  # block0 game_mode：战略界面
+	b.put_u32(int(state.campaign_index))  # block1 fight_index
+	b.put_u32(int(state.difficulty))  # block2 difficulty
+	b.put_u32(int(state.campaign_index))  # block3 current_level（0x475AA4）
 	# Intro 700 B: 关卡名/成功/失败按 GBK 写入。
 	var intro := PackedByteArray(); intro.resize(700)
 	_write_at(intro, 0x00, _gbk(str(level.get("name_gbk_hex", ""))), 32)
@@ -93,7 +101,9 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 	b.put_data(intro)
 	b.put_u32(int(state.current_town))  # block5 town
 	b.put_u32(mini(0xFFFFFFFF, int(state.money)))  # block6 money
-	_pad(b, 12)
+	b.put_u32(int(state.score_total))  # block7 score_total
+	b.put_u32(0)  # block8 kills_by_gun（复刻暂无累计）
+	b.put_u32(0)  # block9 kills_by_mine（复刻暂无累计）
 	_pad(b, 64)
 	for i in range(19):
 		b.put_u32(1 if state.is_liberated(i) else 0)
@@ -106,9 +116,9 @@ static func encode(state, level: Dictionary) -> PackedByteArray:
 			3: v = int(state.ending_id)
 			4: v = state.campaign_completed.size()
 		b.put_u32(v)
-	# block13 用途未确认；尾部写私有 PARY 扩展保存队伍，供本工具回读。
+	# block13：前 3 个 u32 是原版 0/1/2 状态机。尾部 PARY 是私有扩展，
+	# 用于本工具保留队伍；原版没有该标记。
 	var b13 := PackedByteArray(); b13.resize(380)
-	# block13 开头是原版 0/1/2 状态机，保持 0；PARY 放到尾部 40 B。
 	b13.encode_u32(340, 0x50415259)  # PARY
 	for i in range(10):
 		b13.encode_u32(344 + i * 4, int(state.party[i]["pid"]) if i < state.party.size() else 0)
@@ -150,9 +160,12 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	var b := StreamPeerBuffer.new()
 	b.data_array = data
 	b.big_endian = false
-	b.get_u32()  # block0
-	var out := {"game_state": int(b.get_u32()), "difficulty": int(b.get_u32())}
-	b.get_u32()  # block3 terrain
+	var game_mode := int(b.get_u32())  # block0
+	var fight_index := int(b.get_u32())  # block1
+	var difficulty := int(b.get_u32())  # block2
+	var level_index := int(b.get_u32())  # block3
+	var out := {"game_state": game_mode, "difficulty": difficulty,
+			"fight_index": fight_index, "level_index": level_index}
 	var intro_got = b.get_data(700)
 	var intro: PackedByteArray = intro_got[1]
 	out["intro_name_gbk_hex"] = intro.slice(0, 32).hex_encode()
@@ -160,8 +173,12 @@ static func decode(data: PackedByteArray) -> Dictionary:
 	out["intro_failure_gbk_hex"] = intro.slice(0x68, 0x68 + 64).hex_encode()
 	out["town"] = int(b.get_u32())
 	out["money"] = int(b.get_u32())
-	out["map_width"] = 128
-	_skip(b, 12)
+	var score_total := int(b.get_u32())  # block7
+	var kills_gun := int(b.get_u32())  # block8
+	var kills_mine := int(b.get_u32())  # block9
+	out["score_total"] = score_total
+	out["kills_by_gun"] = kills_gun
+	out["kills_by_mine"] = kills_mine
 	_skip(b, 64)
 	var liberated: Array = []
 	for i in range(19):
@@ -203,8 +220,18 @@ static func decode(data: PackedByteArray) -> Dictionary:
 			if pid > 0 and pid < 40:
 				members.append(pid)
 	out["members"] = members
-	out["fight_index"] = progress[0] if progress.size() > 0 else 0
-	out["score_total"] = progress[1] if progress.size() > 1 else 0
+	# block1/3/7 是原版字段；旧版本导出文件把 40/100/0 写在这里，
+	# 这时才回退到 block12 的复刻进度。新文件不再需要回退。
+	var legacy := fight_index > 46 or level_index > 46
+	if fight_index > 46:
+		fight_index = int(progress[0]) if progress.size() > 0 else 0
+	if level_index > 46:
+		level_index = fight_index
+	if legacy and score_total == 0 and progress.size() > 1:
+		score_total = int(progress[1])
+	out["fight_index"] = fight_index
+	out["level_index"] = level_index
+	out["score_total"] = score_total
 	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
 	out["ending_id"] = progress[3] if progress.size() > 3 else 0
 	out["campaign_completed"] = progress[4] if progress.size() > 4 else 0
