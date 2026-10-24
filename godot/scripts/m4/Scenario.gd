@@ -359,6 +359,19 @@ func check_end() -> bool:
 	return false
 
 
+func primary_target_tile() -> Vector2i:
+	"""当前未完成的第一个目标格；HUD 方向提示用。"""
+	var t := str(objective.get("type", "annihilate"))
+	if t not in ["reach", "capture_or_annihilate", "collect", "race"]:
+		return Vector2i(-1, -1)
+	for i in range(targets.size()):
+		if reached.has(i) or searched.has(i):
+			continue
+		var tr: Array = targets[i]
+		return Vector2i(int(tr[0]), int(tr[1]))
+	return Vector2i(-1, -1)
+
+
 func objective_satisfied() -> bool:
 	var t := str(objective.get("type", "annihilate"))
 	match t:

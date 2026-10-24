@@ -752,6 +752,11 @@ func _on_battle_finished(result: String, message: String) -> void:
 				if not state.campaign_finished() else state.current_town
 		if victory:
 			selected_town = state.current_town
+			# 兑现存档面板“胜利后自动存档”的文案；否则回世界图
+			# 后直接退出会丢掉刚完成的关卡。无头 bot 验收不写，
+			# 避免把 99 级测试队写进玩家自动存档。
+			if DisplayServer.get_name() != "headless":
+				state.save_slot(7)
 	if victory and not current_battle_standalone and not levelups.is_empty():
 		pending_report = {"victory": victory, "message": message, "idx": idx,
 				"score": score, "info": info, "standalone": current_battle_standalone}
@@ -870,8 +875,8 @@ func _show_report(victory: bool, message: String, idx: int, score: int,
 	var bs: Dictionary = battle.stats if is_instance_valid(battle) else {}
 	var lv: Dictionary = state.m4_level(idx)
 	var values := [
-		[str(bs.get("kills", 0)), 146],
-		[str(bs.get("kills", 0)), 176],
+		[str(bs.get("kills_by_mine", 0)), 146],
+		[str(bs.get("kills_by_gun", 0)), 176],
 		[str(bs.get("enemies_total", battle_start_stats.get("enemies", 0))), 206],
 		[str(bs.get("losses", 0)), 236],
 		[str(bs.get("chests", 0)), 266],

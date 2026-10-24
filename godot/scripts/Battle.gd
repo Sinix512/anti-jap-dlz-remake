@@ -30,6 +30,9 @@ var units_root: Node2D
 var fx_root: Node2D
 var overlay: Node2D
 var camera: Camera2D
+# 选中/移动时镜头平滑跟随；WASD 手动平移会临时关闭，重新选人后恢复。
+var camera_follow := true
+var camera_follow_target: Node2D = null
 
 var hud_layer: CanvasLayer
 var hud_root: Control
@@ -37,6 +40,8 @@ var level_label: Label
 var turn_label: Label
 var phase_label: Label
 var objective_label: Label
+var objective_guide_bg: ColorRect
+var objective_guide: Label
 var enemy_label: Label
 var mine_label: Label
 var message_label: Label
@@ -651,6 +656,15 @@ func _build_hud() -> void:
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(portrait)
 	unit_label = _hud_label("", Vector2(452, 214), Vector2(178, 108), 16)
+	# 目标方向提示：目标在屏幕外时也能知道往哪走。
+	objective_guide_bg = ColorRect.new()
+	objective_guide_bg.color = Color(0.02, 0.01, 0.01, 0.68)
+	objective_guide_bg.position = Vector2(8, 55)
+	objective_guide_bg.size = Vector2(430, 21)
+	objective_guide_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.add_child(objective_guide_bg)
+	objective_guide = _hud_label("", Vector2(12, 56), Vector2(422, 18), 16,
+			OriginalUI.GOLD_LIGHT)
 
 	btn_attack = _hud_button("攻击", Vector2(450, 330), Vector2(84, 28), _on_attack)
 	btn_skill = _hud_button("技能", Vector2(542, 330), Vector2(84, 28), _on_skill)
@@ -703,6 +717,7 @@ func update_hud() -> void:
 	if scenario != null and str(scenario.status_text) != "":
 		obj_text = str(scenario.status_text)
 	objective_label.text = "目标：%s" % obj_text
+	_update_objective_guide()
 	enemy_label.text = "敌军 %d / 我军 %d" % [_alive_count(enemy_units), _alive_count(player_units)]
 	var cur_mine := "?"
 	var mine_defs: Array = data.get("mines", [])
@@ -720,9 +735,9 @@ func update_hud() -> void:
 			tag = "友军"
 		var state := "已行动" if u.acted else ("已移动" if u.moved else "待命")
 		var equip_txt := "无" if int(u.equip) < 0 else str(u.equip_name)
-		unit_label.text = "%s [%s] Lv%d\nHP %d/%d\n士气%d  攻%d 防%d\n移%d  EXP %d/100\n装备:%s\n%s" % [
+		unit_label.text = "%s [%s] Lv%d\nHP %d/%d\n士气%d  攻%d 防%d\n移%d 射程%d EXP%d/100\n装备:%s\n%s" % [
 			u.unit_name, tag, int(u.data.get("level", 1)), u.hp, u.max_hp, u.morale,
-			atk, df, u.move, int(u.gained_xp) % 100, equip_txt, state
+			atk, df, u.move, attack_radius(u), int(u.gained_xp) % 100, equip_txt, state
 		]
 		if u.data.get("face_png", "") != "" and ResourceLoader.exists(u.data["face_png"]):
 			portrait.texture = load(u.data["face_png"])
@@ -730,7 +745,7 @@ func update_hud() -> void:
 		else:
 			portrait.visible = false
 	else:
-		unit_label.text = "点击我方单位开始行动\n左键移动 / 右键取消"
+		unit_label.text = "点击我方单位开始行动\n蓝格=移动 红格=攻击\n左键移动 / 右键取消"
 		portrait.visible = false
 
 	var can_act: bool = phase == "player" and not busy and not finished_flag
@@ -841,7 +856,14 @@ func _process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 		dir.y += 1
 	if dir != Vector2.ZERO:
+		camera_follow = false
 		camera.position += dir.normalized() * 420.0 * delta / camera.zoom.x
+		_clamp_camera()
+	elif camera_follow and camera_follow_target != null \
+			and is_instance_valid(camera_follow_target) and camera_follow_target.alive:
+		var want := _focus_position(camera_follow_target.position)
+		var k := 1.0 - exp(-10.0 * delta)
+		camera.position = camera.position.lerp(want, k)
 		_clamp_camera()
 	var mouse := get_global_mouse_position()
 	var t := _tile_of(mouse)
@@ -1036,6 +1058,8 @@ func _select_unit(u: Node2D) -> void:
 	if selected != null and is_instance_valid(selected):
 		selected.set_selected(false)
 	selected = u
+	camera_follow = true
+	camera_follow_target = u
 	u.set_selected(true)
 	mode = "idle"
 	move_tiles.clear()
@@ -1052,6 +1076,8 @@ func _clear_selection() -> void:
 	if selected != null and is_instance_valid(selected):
 		selected.set_selected(false)
 	selected = null
+	camera_follow = true
+	camera_follow_target = null
 	mode = "idle"
 	move_tiles.clear()
 	attack_tiles.clear()
@@ -1094,8 +1120,9 @@ func _focus_next_side() -> void:
 		return
 	focus_cycle = (focus_cycle + 1) % alive.size()
 	var u = alive[focus_cycle]
-	camera.position = _focus_position(Vector2(u.x * TILE + TILE / 2.0,
-			u.y * TILE + TILE / 2.0))
+	camera_follow = true
+	camera_follow_target = u
+	camera.position = _focus_position(u.position)
 	_clamp_camera()
 	_log("镜头：%s" % u.unit_name)
 
@@ -1157,6 +1184,61 @@ func _path_to(t: Vector2i, start: Vector2i) -> Array:
 		cur = move_prev[cur]
 	path.reverse()
 	return path
+
+
+func _update_objective_guide() -> void:
+	if objective_guide == null or objective_guide_bg == null:
+		return
+	if scenario == null or finished_flag:
+		objective_guide.visible = false
+		objective_guide_bg.visible = false
+		return
+	var target: Vector2i = scenario.primary_target_tile()
+	if target.x < 0:
+		objective_guide.visible = false
+		objective_guide_bg.visible = false
+		return
+	var anchor = scenario.protagonist
+	if anchor == null or not is_instance_valid(anchor) or not anchor.alive:
+		for p in player_units:
+			if p.alive:
+				anchor = p
+				break
+	if anchor == null:
+		objective_guide.visible = false
+		objective_guide_bg.visible = false
+		return
+	var dx := target.x - int(anchor.x)
+	var dy := target.y - int(anchor.y)
+	var dir := ""
+	if dx > 0:
+		dir += "东"
+	elif dx < 0:
+		dir += "西"
+	if dy < 0:
+		dir += "北"
+	elif dy > 0:
+		dir += "南"
+	if dir == "":
+		dir = "目标"
+	var dist := maxi(absi(dx), absi(dy))
+	objective_guide_bg.visible = true
+	objective_guide.visible = true
+	objective_guide.text = "目标：%s %d格    蓝格=移动  红格=攻击" % [dir, dist]
+
+
+func attack_radius(u: Node2D) -> int:
+	"""SelectFanwei 矩阵的切比雪夫半径：手枪队 select=4 是八格环，射程 1。"""
+	var ranges: Dictionary = data.get("select_ranges", {})
+	var m = ranges.get(str(u.select), ranges.get("1", []))
+	if not (m is Array) or m.size() < 9:
+		return 1
+	var r := 1
+	for dy in range(-4, 5):
+		for dx in range(-4, 5):
+			if int(m[dy + 4][dx + 4]) > 0:
+				r = maxi(r, maxi(absi(dx), absi(dy)))
+	return r
 
 
 func attack_targets(u: Node2D) -> Dictionary:
