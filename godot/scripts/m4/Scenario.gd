@@ -40,6 +40,9 @@ var pending_choice: Dictionary = {}
 var _choice_rng := RandomNumberGenerator.new()
 var _last_dead_side := ""
 var _last_dead_slot := -1
+# AI behavior 运行时轨迹：手动试玩/无头回归都可读取。
+var ai_log: Array[String] = []
+var ai_trace := false
 
 
 func setup(b, lv: Dictionary) -> void:
@@ -522,18 +525,143 @@ func bot_goal(u) -> Dictionary:
 	return _nearest_enemy_goal(u)
 
 
+func _valid_ai_tile(t: Vector2i) -> bool:
+	return t.x >= 0 and t.x < int(battle.map_w) \
+			and t.y >= 0 and t.y < int(battle.map_h)
+
+
+func _set_behavior(u, value: int, reason: String) -> void:
+	if u == null or int(u.behavior) == value:
+		return
+	var old := int(u.behavior)
+	u.behavior = value
+	var line := "L%s slot %d %s behavior %d->%d (%s)" % [
+		str(level.get("index", "?")), int(u.slot), str(u.unit_name),
+		old, value, reason]
+	ai_log.append(line)
+	if ai_log.size() > 240:
+		ai_log.pop_front()
+	if ai_trace and battle != null:
+		battle._log("AI " + line)
+
+
+func _at_exact_target(u) -> bool:
+	var t := Vector2i(int(u.target_x), int(u.target_y))
+	return _valid_ai_tile(t) and int(u.x) == t.x and int(u.y) == t.y
+
+
+func _at_ai_target(u, exact_only := false) -> bool:
+	if _at_exact_target(u):
+		return true
+	if exact_only:
+		return false
+	var t := Vector2i(int(u.target_x), int(u.target_y))
+	if not _valid_ai_tile(t):
+		return false
+	# 目标格被别的单位占住时，停在相邻格也算到位；否则 behavior 4/5
+	# 会在目标旁反复找空位，永远不切守卫/待机。
+	if absi(int(u.x) - t.x) + absi(int(u.y) - t.y) == 1:
+		return battle._is_occupied(t, u)
+	return false
+
+
+func _swap_patrol(u) -> void:
+	var tx := int(u.target_x)
+	var ty := int(u.target_y)
+	u.target_x = int(u.home_x)
+	u.target_y = int(u.home_y)
+	u.home_x = tx
+	u.home_y = ty
+	ai_log.append("L%s slot %d %s patrol -> (%d,%d)" % [
+		str(level.get("index", "?")), int(u.slot), str(u.unit_name),
+		int(u.target_x), int(u.target_y)])
+	if ai_log.size() > 240:
+		ai_log.pop_front()
+	if ai_trace and battle != null:
+		battle._log("AI patrol -> (%d,%d)" % [int(u.target_x), int(u.target_y)])
+
+
+func ai_target(u):
+	"""behavior 2/3/6 的指定槽目标；目标消失时按原版切行为。"""
+	if u == null:
+		return null
+	var b := int(u.behavior)
+	if b != 2 and b != 3 and b != 6:
+		return null
+	var t = _slot_unit(int(u.target_slot))
+	if t != null and (b == 3 or t.side != u.side):
+		return t
+	_set_behavior(u, 7 if b == 3 else 1, "target_slot_%d_gone" % int(u.target_slot))
+	return null
+
+
+func ai_prepare(u) -> bool:
+	"""回合开始按 Fighter.behavior 做原版切换；返回 true 表示本回合已消耗。"""
+	if u == null:
+		return false
+	var b := int(u.behavior)
+	if b == 2 or b == 3 or b == 6:
+		var old := int(u.behavior)
+		ai_target(u)
+		return int(u.behavior) != old
+	if b == 4 or b == 5:
+		if _at_ai_target(u):
+			_set_behavior(u, 7 if b == 4 else 0, "reached_target")
+			return true
+		if not _valid_ai_tile(Vector2i(int(u.target_x), int(u.target_y))):
+			_set_behavior(u, 1, "invalid_target")
+			return true
+		return false
+	if b == 8 and _at_exact_target(u):
+		_swap_patrol(u)
+		return true
+	return false
+
+
+func ai_after_move(u) -> bool:
+	"""移动途中到达目标时立即切换，避免越过目标继续走。"""
+	if u == null:
+		return false
+	var b := int(u.behavior)
+	if b == 4 and _at_exact_target(u):
+		_set_behavior(u, 7, "reached_target_move")
+		return true
+	if b == 5 and _at_exact_target(u):
+		_set_behavior(u, 0, "reached_target_move")
+		return true
+	if b == 8 and _at_exact_target(u):
+		_swap_patrol(u)
+		return true
+	return false
+
+
 func ai_goal(u) -> Vector2i:
-	"""敌方/友军 AI 的显式目标点；返回 (-1,-1) 表示按最近敌人。"""
+	"""按 Fighter.behavior 返回显式目标点；(-1,-1) 表示按最近敌人。"""
 	if objective.get("type", "") == "race" and _key(u.unit_name) == rival_key \
 			and not targets.is_empty():
 		return Vector2i(int(targets[0][0]), int(targets[0][1]))
-	if u.target_slot > 0:
-		for o in battle.units:
-			if o.alive and o.slot == u.target_slot and o.side != u.side:
-				return Vector2i(o.x, o.y)
-	if u.target_x != 0 or u.target_y != 0:
-		if u.target_x >= 0 and u.target_x < battle.map_w 				and u.target_y >= 0 and u.target_y < battle.map_h:
-			return Vector2i(u.target_x, u.target_y)
+	var b := int(u.behavior)
+	if b == 4 or b == 5 or b == 8:
+		var t := Vector2i(int(u.target_x), int(u.target_y))
+		if _valid_ai_tile(t):
+			return t
+		if b != 8:
+			_set_behavior(u, 1, "invalid_target")
+		return Vector2i(-1, -1)
+	if b == 2 or b == 3 or b == 6:
+		var target = ai_target(u)
+		if target != null:
+			return Vector2i(int(target.x), int(target.y))
+		return Vector2i(-1, -1)
+	# behavior 1 的出场数据大量带有 +0x30/+0x34 集结点（L37/L39/L44/L45）；
+	# 非零时以集结点为持久目标，射程内有敌人就攻击；0,0 视为无集结点，
+	# 此时才追最近敌人。
+	if b == 1:
+		var t1 := Vector2i(int(u.target_x), int(u.target_y))
+		if (t1.x != 0 or t1.y != 0) and _valid_ai_tile(t1):
+			return t1
+		return Vector2i(-1, -1)
+	# behavior 0/7/9/12/13 走守卫分支，不使用 target_x/y。
 	return Vector2i(-1, -1)
 
 

@@ -23,6 +23,10 @@ var behavior := 1
 var target_slot := 0
 var target_x := 0
 var target_y := 0
+# Fighter +0x14/+0x18：原版 behavior 8 的“家”坐标，到达目标后与
+# target_x/y 交换，形成两点巡逻。对非 behavior 8 单位仅作记录。
+var home_x := 0
+var home_y := 0
 var control := true
 var auto := false
 var protected := false
@@ -81,6 +85,8 @@ func setup(d: Dictionary, b: Node) -> void:
 	target_slot = int(d.get("target_slot", 0))
 	target_x = int(d.get("target_x", 0))
 	target_y = int(d.get("target_y", 0))
+	home_x = int(d.get("home_x", x))
+	home_y = int(d.get("home_y", y))
 	control = bool(d.get("control", true))
 	auto = bool(d.get("auto", false))
 	protected = bool(d.get("protected", false))

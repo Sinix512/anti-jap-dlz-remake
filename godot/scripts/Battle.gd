@@ -84,6 +84,9 @@ var _finishing := false
 var fast_sim := false
 var last_result := ""
 var last_message := ""
+# 手动试玩模式：--playtest 时记录 AI 切换，F9 导出当前局面，
+# 每场结束追加 JSONL 战报，方便试玩后定位软锁/异常行为。
+var playtest_mode := false
 var log_history: Array = []
 var pending_story: Array = []
 var trigger_messages: Array = []
@@ -113,6 +116,11 @@ func setup(d: Dictionary, lv: Dictionary, f: Font, ctx: Dictionary = {}) -> void
 	_refresh_mine_left()
 	mine_texture = load(str(data.get("mine_png", ""))) if ResourceLoader.exists(str(data.get("mine_png", ""))) else null
 	scenario = load("res://scripts/m4/Scenario.gd").new()
+	playtest_mode = OS.get_cmdline_user_args().has("--playtest")
+	if playtest_mode:
+		scenario.ai_trace = true
+		print("PLAYTEST_MODE log=", ProjectSettings.globalize_path(
+				"user://dlz_playtest.jsonl"))
 	chests.clear()
 	for c in level.get("chests", []):
 		var cc: Dictionary = (c as Dictionary).duplicate(true)
@@ -833,6 +841,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_map_click(_tile_of(get_global_mouse_position()))
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo:
+		if (event.keycode == KEY_F9 or event.keycode == KEY_F8) and playtest_mode:
+			# macOS 默认把 F9 分给 Mission Control；F8 作为备用。
+			_dump_playtest_state()
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode == KEY_ESCAPE:
 			_cancel()
 		elif event.keycode == KEY_TAB:
@@ -849,6 +862,70 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_wait()
 		elif event.keycode == KEY_6:
 			_on_end_turn()
+
+
+func _playtest_units() -> Array:
+	var out: Array = []
+	for u in units:
+		if not is_instance_valid(u):
+			continue
+		out.append({
+			"slot": int(u.slot), "pid": int(u.pid), "name": str(u.unit_name),
+			"side": str(u.side), "alive": bool(u.alive),
+			"x": int(u.x), "y": int(u.y), "hp": int(u.hp),
+			"behavior": int(u.behavior), "target_slot": int(u.target_slot),
+			"target": [int(u.target_x), int(u.target_y)],
+			"home": [int(u.home_x), int(u.home_y)],
+			"acted": bool(u.acted), "auto": bool(u.auto),
+		})
+	return out
+
+
+func _playtest_snapshot() -> Dictionary:
+	var trig := {}
+	if scenario != null:
+		trig = {
+			"flags": (scenario.trigger_flags as Dictionary).duplicate(true),
+			"done": (scenario.trigger_done as Dictionary).duplicate(true),
+			"pending_choice": (scenario.pending_choice as Dictionary).duplicate(true),
+			"ai_log": (scenario.ai_log as Array).duplicate(),
+		}
+	return {
+		"level_index": int(level.get("index", -1)),
+		"level_name": str(level.get("name", "")),
+		"turn": turn, "phase": phase, "finished": finished_flag,
+		"result": last_result, "message": last_message,
+		"stats": stats.duplicate(true),
+		"units": _playtest_units(),
+		"triggers": trig,
+		"log": log_history.duplicate(),
+	}
+
+
+func _dump_playtest_state() -> void:
+	var path := ProjectSettings.globalize_path("user://dlz_playtest_state.txt")
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		_log("试玩状态导出失败：%s" % path)
+		return
+	f.store_string(JSON.stringify(_playtest_snapshot(), "\t"))
+	f.close()
+	_log("试玩状态已导出：%s" % path)
+	print("PLAYTEST_STATE ", path)
+
+
+func _append_playtest_report(result: String, message: String) -> void:
+	var path := ProjectSettings.globalize_path("user://dlz_playtest.jsonl")
+	var mode := FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE
+	var f := FileAccess.open(path, mode)
+	if f == null:
+		return
+	f.seek_end()
+	var rec := _playtest_snapshot()
+	rec["result"] = result
+	rec["message"] = message
+	f.store_line(JSON.stringify(rec))
+	f.close()
 
 
 func _zoom_at(factor: float) -> void:
@@ -2163,20 +2240,33 @@ func _ai_act(u, enemy_side: String) -> void:
 		u.acted = true
 		u.refresh()
 		return
-	var target = _nearest_side(u, enemy_side)
+	# 原版 behavior 切换在 AI 行动开始时结算：4→7、5→0、
+	# 2/6 目标消失→1、3 目标消失→7、8 到达后两点互换。
+	if scenario != null and scenario.ai_prepare(u):
+		u.acted = true
+		u.refresh()
+		return
+	var target = null
+	if scenario != null:
+		target = scenario.ai_target(u)
+	if target == null:
+		target = _nearest_side(u, enemy_side)
 	var goal := Vector2i(-1, -1)
-	if u.side == "enemy" and scenario != null:
+	if scenario != null:
 		goal = scenario.ai_goal(u)
+	# behavior 8 是原版的两点巡逻，不是“百姓逃跑”；只有没有巡逻
+	# 目标时才退回躲避逻辑。
+	var patrol: bool = int(u.behavior) == 8 and goal.x >= 0
 	var peaceful: bool = u.auto and u.protected and int(u.data.get("gongji", 0)) <= 0
-	if peaceful:
+	if peaceful and not patrol:
 		# 非战斗人员：只躲，不主动攻击，避免被反击致死。
 		if target != null:
 			var dx := int(sign(u.x - target.x))
 			var dy := int(sign(u.y - target.y))
 			goal = Vector2i(clampi(u.x + dx * 4, 0, map_w - 1),
 					clampi(u.y + dy * 4, 0, map_h - 1))
-	elif u.auto and (u.behavior == 8 or u.key in ["村民", "老百姓"]):
-		# 村民/百姓：往远离敌人的方向躲
+	elif u.auto and not patrol and u.key in ["村民", "老百姓"]:
+		# 村民/百姓：没有 behavior 8 巡逻点时往远离敌人的方向躲
 		if target != null:
 			var dx := int(sign(u.x - target.x))
 			var dy := int(sign(u.y - target.y))
@@ -2228,8 +2318,13 @@ func _ai_act(u, enemy_side: String) -> void:
 			return
 		if scenario != null:
 			scenario.on_unit_moved(u)
-		if finished_flag:
-			return
+			if finished_flag:
+				return
+			if scenario.ai_after_move(u):
+				u.moved = true
+				u.acted = true
+				u.refresh()
+				return
 	u.moved = not steps.is_empty()
 	u.refresh()
 	if not peaceful and target != null and _in_attack_range(u, target):
@@ -2474,7 +2569,10 @@ func _bot_unit(u: Node2D) -> void:
 				u.acted = true
 				return
 			if dist > 1:
-				moved = _bot_move_to(u, Vector2i(tu.x, tu.y))
+				# reach_unit 的目标单位通常被友军围住；bot 允许从友军
+				# 之间穿过，否则 L01 会在最后一格前反复卡住到回合上限。
+				moved = _bot_move_to(u, Vector2i(tu.x, tu.y),
+						obj_type == "reach_unit")
 	elif str(goal.get("kind", "")) == "tile":
 		var tt: Vector2i = goal.get("tile", Vector2i(-1, -1))
 		moved = _bot_move_to(u, tt, true)
@@ -2661,5 +2759,7 @@ func _finish(result: String, message: String) -> void:
 	stats["enemies_left"] = _alive_count(enemy_units)
 	stats["players_left"] = _alive_count(player_units)
 	stats["log"] = log_history.duplicate()
+	if playtest_mode:
+		_append_playtest_report(result, message)
 	update_hud()
 	finished.emit(result, message)

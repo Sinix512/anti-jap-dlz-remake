@@ -211,7 +211,9 @@ python3 tools/verify_m5_media.py    # 1292 项检查，RESULT: PASS
 
 M3 只改表现；M4 扩关卡；M5 接剧情；M6 接战斗系统。旧文档里的“M3 剧情过场”已废弃。
 M4 的“目标/保护名单/城镇映射”是可玩性复刻；47 关原版触发器已接入并权威判胜，
-剩余差异（AI behavior 4/5/6、`0x406C8C` 阵营等）见 [GAPS.md](GAPS.md) §12。
+behavior 4/5/6 的到达/目标切换也已接入；剩余差异（behavior 0/1/9/12/13 动作表、
+`0x406C8C` 阵营等）见 [GAPS.md](GAPS.md) §12，手动试玩清单见
+[MANUAL_PLAYTEST.md](MANUAL_PLAYTEST.md)。
 
 ## 已确认格式
 
@@ -482,8 +484,8 @@ EXE 里也没有 `dlz-01.pal` 字面量；地图用通用调色板渲染后地�
 - M2 的初始队伍/资金/材料/招募费用是复刻设计；M2 基础城镇页全开放，M4 战役世界图才按进度解锁。
 - M4 的 47 关已全部可装载/可实例化；但逐关目标/保护/城镇顺序是可玩性映射。
 - M3 的 UI 是“原味重制”，不是逐像素复刻原版每个界面；原版 BUTTON 的透明/悬停语义仍可细修。
-- M4 的目标/保护名单/城镇顺序是**可玩性复刻**；原版 EXE 的逐关触发器、增援回合、
-  敌军行为树尚未完全反汇编，当前用关卡文本 + Fighter/People 字段做可玩实现。
+- M4 的目标/保护名单/城镇顺序是**可玩性复刻**；原版 EXE 的逐关触发器已反汇编，
+  增援/behavior 4/5/6 已接入；behavior 0/1/9/12/13 的动作表仍是近似。
 - M5 的 ANM 容器已解出事实并可解码为 WebM 预览；Godot 4.7 只能内嵌 Theora，
   因此播放链路用 OGV，WebM 作为交付格式。
 
@@ -493,6 +495,7 @@ EXE 里也没有 `dlz-01.pal` 字面量；地图用通用调色板渲染后地�
 python3 extract_all.py     # → out/img、out/map、out/face…、out/wave、data/*.json
 python3 verify.py          # 17,453 条断言，逐条校验格式结论与产物
 ./run_game.sh              # → M1-M6 数据/UI/剧情/字库，打开完整游戏
+./run_playtest.sh          # 手动试玩：--playtest + F9 局面导出
 ./verify_all.sh            # M1-M6 全量无头回归
 ./run_m1.sh                # M1 纵切
 ./run_m2.sh                # 兼容入口：等同 run_game.sh
