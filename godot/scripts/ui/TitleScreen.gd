@@ -85,11 +85,17 @@ func _build() -> void:
 	_add_button("退出", func(): quit_game.emit())
 	_select(0)
 
-	# 右侧题记
+	# 右侧题记：背景龙纹太花，加一层暗底保证 16px 点阵字能读。
+	var quote_bg := ColorRect.new()
+	quote_bg.color = Color(0.02, 0.01, 0.01, 0.46)
+	quote_bg.position = Vector2(332, 226)
+	quote_bg.size = Vector2(278, 94)
+	quote_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(quote_bg)
 	var quote := OriginalUI.label(
 		"“地雷战，是群众创造的战法。\n"
 		+ "  每一颗雷，都埋在自己的土地上。”", font, 16,
-		Color("#e5d4ad"))
+		Color("#f0dfb8"))
 	quote.position = Vector2(340, 232)
 	quote.size = Vector2(270, 90)
 	quote.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

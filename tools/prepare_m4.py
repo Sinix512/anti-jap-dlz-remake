@@ -178,6 +178,9 @@ PROTECT = {
 }
 
 MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
+# 第一关是主角 GG 孤身侦察；不把整支队伍摆进出战列表，避免玩家
+# 以为可以带赵虎/李向阳等人。-100 = 运行时生成的自定义主角。
+FIXED_DEPLOY = {0: [-100]}
 # 5 个代表关的关卡初始化函数（DLZ.exe 0x4465D0 表）：
 # 这些函数只做开场音效/旗标，不包含逐回合触发器。用于 TRIGGERS.md 的证据。
 TRIGGER_FUNCTIONS = {
@@ -872,6 +875,7 @@ def main() -> None:
             "deploy": [[x, y] for x, y in deploy],
             "party_deploy": bool(PARTY_DEPLOY.get(idx, False)),
             "max_deploy": max_deploy,
+            "fixed_deploy": FIXED_DEPLOY.get(idx, []),
             "objective": obj_raw,
             "protect": protect_names,
             "protect_all": idx in PROTECT_ALL,

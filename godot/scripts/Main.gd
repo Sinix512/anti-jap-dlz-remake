@@ -439,8 +439,13 @@ func _show_character_create() -> void:
 	var tip := OriginalUI.label("形象/兵种：默认（后续开放）", font, 14,
 			Color("#e5d4ad"))
 	tip.position = Vector2(52, 168)
-	tip.size = Vector2(260, 20)
+	tip.size = Vector2(300, 20)
 	menu_root.add_child(tip)
+	var name_tip := OriginalUI.label("此姓名就是主角 GG；张嘎等仍是原作队员。",
+			font, 16, Color("#c8b88f"))
+	name_tip.position = Vector2(52, 360)
+	name_tip.size = Vector2(470, 20)
+	menu_root.add_child(name_tip)
 	creation_difficulty = int(cfg.get_value("gameplay", "difficulty", 1))
 	_diff_buttons.clear()
 	for i in range(3):
@@ -690,7 +695,7 @@ func _show_settings() -> void:
 	variant.button_pressed = bool(cfg.get_value("video", "story_variant", false))
 	variant.position = Vector2(320, y + 76)
 	variant.add_theme_font_override("font", font)
-	variant.add_theme_font_size_override("font_size", 14)
+	variant.add_theme_font_size_override("font_size", 16)
 	menu_root.add_child(variant)
 	var full := CheckButton.new()
 	full.text = "全屏"

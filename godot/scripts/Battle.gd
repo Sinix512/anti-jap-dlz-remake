@@ -138,9 +138,21 @@ func setup(d: Dictionary, lv: Dictionary, f: Font, ctx: Dictionary = {}) -> void
 	stats["deployed"] = player_units.size()
 	stats["enemies_total"] = enemy_units.size()
 	_begin_player_phase("第 1 回合，我方行动")
+	# 开局自动选中主角/队长，直接显示移动范围和单位信息；否则玩家
+	# 只看到一整张地图，很难发现 48px 的小人。
+	var start_unit = scenario.protagonist if scenario != null else null
+	if start_unit == null:
+		for u in player_units:
+			if u.alive and u.control:
+				start_unit = u
+				break
+	if start_unit != null and start_unit.alive and start_unit.control and not start_unit.acted:
+		_select_unit(start_unit)
 
 
 func _build_world() -> void:
+	# 地图边角允许镜头露出边界；用深色底而不是引擎默认灰底。
+	RenderingServer.set_default_clear_color(Color("#15170f"))
 	map_sprite = Sprite2D.new()
 	map_sprite.centered = false
 	map_sprite.position = Vector2.ZERO
@@ -167,12 +179,9 @@ func _build_world() -> void:
 
 	camera = Camera2D.new()
 	camera.enabled = true
-	# 让 640×480 的可见地图区（左侧 440×450）尽量多看到战场：
-	# 小图整图入镜，大图至少 20+ tile，避免 65×60 的关卡只看到一角。
-	var fit := minf(440.0 / float(max(1, map_w * TILE)),
-			450.0 / float(max(1, map_h * TILE)))
-	var z := clampf(fit, 0.35, 1.0)
-	camera.zoom = Vector2(z, z)
+	# 原版战斗视口约 440×450，48px 一格；固定 1:1 才能看清单位和格子。
+	# 旧版把整张大图缩到 0.35，人物只剩 16px，且在底边会被战报条盖住。
+	camera.zoom = Vector2.ONE
 	camera.position = _initial_camera()
 	add_child(camera)
 	camera.make_current()
@@ -501,47 +510,59 @@ func _after_unit_step(u) -> void:
 		update_hud()
 
 
+func _camera_focus_unit():
+	# 优先选主角/部署队长，而不是所有我方的平均点。后者在多单位关卡
+	# 会把镜头拉到空地中间，玩家开局看不到自己的人。
+	for u in player_units:
+		if u.alive and bool(u.data.get("hero", false)):
+			return u
+	for u in player_units:
+		if u.alive and int(u.slot) < 0:
+			return u
+	for u in player_units:
+		if u.alive:
+			return u
+	return null
+
+
+func _focus_screen() -> Vector2:
+	# 可见地图区是左侧 440×450（右边栏 200px、顶栏 54px、底部战报 66px）。
+	# y=370 让单位站在战报条上沿；地图一直铺到战报条，不露黑边。
+	return Vector2(220.0, 370.0)
+
+
+func _focus_position(world: Vector2) -> Vector2:
+	var z := camera.zoom.x if camera != null else 1.0
+	return world + (Vector2(320.0, 240.0) - _focus_screen()) / maxf(0.01, z)
+
+
 func _initial_camera() -> Vector2:
-	if not player_units.is_empty():
-		var sx := 0.0
-		var sy := 0.0
-		for u in player_units:
-			sx += float(u.x)
-			sy += float(u.y)
-		return Vector2(sx / player_units.size() * TILE + TILE / 2.0 + _cam_shift(),
-				sy / player_units.size() * TILE + TILE / 2.0 - _cam_shift_y())
+	var focus = _camera_focus_unit()
+	if focus != null:
+		return _focus_position(Vector2(focus.x * TILE + TILE / 2.0,
+				focus.y * TILE + TILE / 2.0))
 	var p = level["map"].get("player_focus", [0, 0])
-	return Vector2(float(p[0]) * TILE + TILE / 2.0,
-			float(p[1]) * TILE + TILE / 2.0)
-
-
-func _cam_shift() -> float:
-	if camera == null:
-		return SIDEBAR_SHIFT
-	return SIDEBAR_SHIFT / maxf(0.01, camera.zoom.x)
-
-
-func _cam_shift_y() -> float:
-	if camera == null:
-		return TOP_SHIFT
-	return TOP_SHIFT / maxf(0.01, camera.zoom.y)
+	return _focus_position(Vector2(float(p[0]) * TILE + TILE / 2.0,
+			float(p[1]) * TILE + TILE / 2.0))
 
 
 func _clamp_camera() -> void:
 	if camera == null:
 		return
-	var half := Vector2(220.0, 225.0) / camera.zoom
 	var w := map_w * TILE
 	var h := map_h * TILE
+	var half := Vector2(220.0, 225.0) / camera.zoom
 	var pos := camera.position
+	# 允许镜头中心走到地图边缘（边上会露出黑底），换取地图边角的
+	# 单位也能完整落在左侧可见区，而不是被右边栏/底部战报盖住。
 	if w <= half.x * 2.0:
-		pos.x = w / 2.0 + _cam_shift()
+		pos.x = w / 2.0
 	else:
-		pos.x = clampf(pos.x, half.x, w - half.x)
+		pos.x = clampf(pos.x, 0.0, w)
 	if h <= half.y * 2.0:
-		pos.y = h / 2.0 - _cam_shift_y()
+		pos.y = h / 2.0
 	else:
-		pos.y = clampf(pos.y, half.y, h - half.y)
+		pos.y = clampf(pos.y, 0.0, h)
 	camera.position = pos
 
 
@@ -554,8 +575,9 @@ func _hud_label(text: String, pos: Vector2, size: Vector2,
 	l.position = pos
 	l.size = size
 	l.add_theme_font_override("font", font)
-	l.add_theme_font_size_override("font_size", fs)
+	l.add_theme_font_size_override("font_size", maxi(fs, OriginalUI.MIN_TEXT_SIZE))
 	l.add_theme_color_override("font_color", color)
+	l.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(l)
 	return l
@@ -628,15 +650,15 @@ func _build_hud() -> void:
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(portrait)
-	unit_label = _hud_label("", Vector2(452, 214), Vector2(178, 82), 14)
+	unit_label = _hud_label("", Vector2(452, 214), Vector2(178, 108), 16)
 
-	btn_attack = _hud_button("攻击", Vector2(450, 300), Vector2(84, 28), _on_attack)
-	btn_skill = _hud_button("技能", Vector2(542, 300), Vector2(84, 28), _on_skill)
-	btn_mine = _hud_button("埋雷", Vector2(450, 334), Vector2(84, 28), _on_mine)
-	btn_item = _hud_button("物品", Vector2(542, 334), Vector2(84, 28), _on_item)
-	btn_wait = _hud_button("待机", Vector2(450, 368), Vector2(84, 28), _on_wait)
-	btn_cancel = _hud_button("取消", Vector2(542, 368), Vector2(84, 28), _on_cancel)
-	btn_end = _hud_button("结束回合", Vector2(450, 404), Vector2(176, 28), _on_end_turn)
+	btn_attack = _hud_button("攻击", Vector2(450, 330), Vector2(84, 28), _on_attack)
+	btn_skill = _hud_button("技能", Vector2(542, 330), Vector2(84, 28), _on_skill)
+	btn_mine = _hud_button("埋雷", Vector2(450, 364), Vector2(84, 28), _on_mine)
+	btn_item = _hud_button("物品", Vector2(542, 364), Vector2(84, 28), _on_item)
+	btn_wait = _hud_button("待机", Vector2(450, 398), Vector2(84, 28), _on_wait)
+	btn_cancel = _hud_button("取消", Vector2(542, 398), Vector2(84, 28), _on_cancel)
+	btn_end = _hud_button("结束回合", Vector2(450, 434), Vector2(176, 28), _on_end_turn)
 	btn_end.add_theme_color_override("font_color", OriginalUI.GOLD_LIGHT)
 
 	# 底部战斗记录
@@ -698,7 +720,7 @@ func update_hud() -> void:
 			tag = "友军"
 		var state := "已行动" if u.acted else ("已移动" if u.moved else "待命")
 		var equip_txt := "无" if int(u.equip) < 0 else str(u.equip_name)
-		unit_label.text = "%s [%s] Lv%d\nHP %d/%d  士气%d\n攻%d 防%d 移%d\nEXP %d/100  装备:%s\n%s" % [
+		unit_label.text = "%s [%s] Lv%d\nHP %d/%d\n士气%d  攻%d 防%d\n移%d  EXP %d/100\n装备:%s\n%s" % [
 			u.unit_name, tag, int(u.data.get("level", 1)), u.hp, u.max_hp, u.morale,
 			atk, df, u.move, int(u.gained_xp) % 100, equip_txt, state
 		]
@@ -1072,8 +1094,8 @@ func _focus_next_side() -> void:
 		return
 	focus_cycle = (focus_cycle + 1) % alive.size()
 	var u = alive[focus_cycle]
-	camera.position = Vector2(u.x * TILE + 24 + _cam_shift(),
-			u.y * TILE + 24 - _cam_shift_y())
+	camera.position = _focus_position(Vector2(u.x * TILE + TILE / 2.0,
+			u.y * TILE + TILE / 2.0))
 	_clamp_camera()
 	_log("镜头：%s" % u.unit_name)
 

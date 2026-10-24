@@ -268,7 +268,7 @@ func _build_archive() -> void:
 	toggle.position = Vector2(390, 2)
 	toggle.size = Vector2(150, 26)
 	toggle.add_theme_font_override("font", font)
-	toggle.add_theme_font_size_override("font_size", 14)
+	toggle.add_theme_font_size_override("font_size", 16)
 	toggle.toggled.connect(func(v: bool):
 		archive_levels_only = v
 		_rebuild_archive())

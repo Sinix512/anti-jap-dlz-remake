@@ -33,6 +33,10 @@ static var _sfx: AudioStreamPlayer
 static var _hover_sfx: AudioStreamPlayer
 
 
+## HZK16 是 16px 点阵；12/14px 会被小数缩放成灰边，先统一回 16。
+const MIN_TEXT_SIZE := 16
+
+
 static func make_theme(font: Font) -> Theme:
 	if _theme != null and _theme.default_font == font:
 		return _theme
@@ -40,6 +44,8 @@ static func make_theme(font: Font) -> Theme:
 	t.default_font = font
 	t.default_font_size = 16
 	t.set_color("font_color", "Label", INK)
+	# HZK16 笔画只有 1px；保留 1px 黑影保证在石纹/地图上的对比度，
+	# 但不再给 12/14px 小字使用（已统一到 16px）。
 	t.set_color("font_shadow_color", "Label", Color(0, 0, 0, 0.85))
 	t.set_constant("shadow_offset_x", "Label", 1)
 	t.set_constant("shadow_offset_y", "Label", 1)
@@ -52,9 +58,10 @@ static func make_theme(font: Font) -> Theme:
 	t.set_color("font_color", "Button", INK)
 	t.set_color("font_hover_color", "Button", GOLD_LIGHT)
 	t.set_color("font_pressed_color", "Button", GOLD)
-	t.set_color("font_disabled_color", "Button", Color("#b0a28a"))
+	t.set_color("font_disabled_color", "Button", Color("#d6c7a3"))
 	t.set_color("font_hover_pressed_color", "Button", GOLD)
-	t.set_constant("outline_size", "Button", 0)
+	t.set_color("font_outline_color", "Button", Color(0, 0, 0, 0.92))
+	t.set_constant("outline_size", "Button", 1)
 	t.set_font_size("font_size", "Button", 16)
 
 	t.set_stylebox("panel", "PanelContainer", _style("panel_red.png"))
@@ -65,7 +72,7 @@ static func make_theme(font: Font) -> Theme:
 	t.set_stylebox("background", "ProgressBar", _style("slot.png"))
 	t.set_stylebox("fill", "ProgressBar", StyleBoxFlat.new())
 	t.set_color("font_color", "ProgressBar", INK)
-	t.set_font_size("font_size", "ProgressBar", 12)
+	t.set_font_size("font_size", "ProgressBar", MIN_TEXT_SIZE)
 	return t
 
 
@@ -97,11 +104,12 @@ static func label(text: String, font: Font, size: int = 16,
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", font)
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", maxi(size, MIN_TEXT_SIZE))
 	l.add_theme_color_override("font_color", color)
 	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 	l.add_theme_constant_override("shadow_offset_x", 1)
 	l.add_theme_constant_override("shadow_offset_y", 1)
+	l.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
 
@@ -122,7 +130,8 @@ static func button(text: String, font: Font, size: Vector2 = Vector2(160, 34),
 	b.custom_minimum_size = size
 	b.size = size
 	b.add_theme_font_override("font", font)
-	b.add_theme_font_size_override("font_size", fs)
+	b.add_theme_font_size_override("font_size", maxi(fs, MIN_TEXT_SIZE))
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var style_name := "button_normal.png"

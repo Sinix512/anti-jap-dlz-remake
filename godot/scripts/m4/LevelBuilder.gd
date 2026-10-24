@@ -68,6 +68,10 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary,
 	var pid := int(m.get("pid", -1))
 	var p: Dictionary = people[pid] if pid >= 0 and pid < people.size() else {}
 	var u: Dictionary = p.get("unit", {})
+	if u.is_empty():
+		# 自定义主角（pid<0）不在 PEOPLE.DAT，用兵种表补基础属性。
+		u = (m2.get("units", {}) as Dictionary).get(
+				str(m.get("bingzhong", 0)), {})
 	var lv := maxi(int(m.get("level", 1)), int(level_floor))
 	var max_hp := int(m.get("max_hp", max(1, int(u.get("tili", 50)))))
 	if lv > int(m.get("level", 1)):
@@ -82,7 +86,7 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary,
 					"defense": max(0, int(equip_item.get("para4", 0)))}
 	return {
 		"pid": pid,
-		"hero": pid == 0,
+		"hero": pid == 0 or bool(m.get("hero", false)),
 		"slot": -1,
 		"side": "player",
 		"name": str(m.get("name", "游击队员")),
@@ -115,7 +119,7 @@ static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary,
 		"target_y": 0,
 		"face": int(m.get("face", 0)),
 		"face_png": str(m.get("face_png", "")),
-		"army_png": str(p.get("army_png", "")),
+		"army_png": str(m.get("army_png", p.get("army_png", ""))),
 		"select": int(u.get("select", 1)),
 		"apply": int(u.get("apply", 0)),
 		"move": int(u.get("yidong", 4)),

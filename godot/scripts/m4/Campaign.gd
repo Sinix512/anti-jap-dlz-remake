@@ -257,10 +257,11 @@ func _show_world() -> void:
 		var status := "已解放" if state.is_liberated(i) else ("可进入" if unlocked else "未开放")
 		var b := _button("%s\n%s" % [t["name"], status], Vector2.ZERO,
 				Vector2(94, 46), _select_town.bind(i), 14)
-		if not unlocked:
-			b.disabled = true
-			b.modulate = Color(0.55, 0.55, 0.55, 0.8)
-		elif i == selected_town:
+		# 锁定状态只写在第二行“未开放”，地名仍用正常亮色，
+		# 保证 16px 点阵字能读；点击由 _select_town 拦下并提示。
+		b.add_theme_color_override("font_color", OriginalUI.INK)
+		b.add_theme_color_override("font_hover_color", OriginalUI.GOLD_LIGHT)
+		if i == selected_town:
 			b.modulate = Color(1.15, 1.0, 0.62)
 		grid.add_child(b)
 
@@ -278,8 +279,14 @@ func _show_world() -> void:
 	var drill := _button("战斗演练 / 47 关", Vector2(238, 356), Vector2(180, 30),
 			_open_battle_select, 14)
 	ui_root.add_child(drill)
+	var hint_bg := ColorRect.new()
+	hint_bg.color = Color(0.02, 0.01, 0.01, 0.58)
+	hint_bg.position = Vector2(232, 388)
+	hint_bg.size = Vector2(400, 24)
+	hint_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(hint_bg)
 	var hint := _label("选择城镇 → 进入；指挥部出击当前关卡。", Vector2(238, 392),
-			Vector2(390, 20), 14, Color("#d8c39a"))
+			Vector2(390, 20), 16, Color("#f0dfb8"))
 	ui_root.add_child(hint)
 
 
@@ -343,8 +350,14 @@ func _show_town(index: int) -> void:
 		if i == 3 and t["shops"]["zahuo"].is_empty():
 			b.disabled = true
 		ui_root.add_child(b)
+	var foot_bg := ColorRect.new()
+	foot_bg.color = Color(0.02, 0.01, 0.01, 0.58)
+	foot_bg.position = Vector2(0, 390)
+	foot_bg.size = Vector2(640, 26)
+	foot_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(foot_bg)
 	var foot := _label("民房回血 / 指挥部作战 / 军械/杂货/作坊补给 / 队伍转职 / 出口回地图",
-			Vector2(8, 396), Vector2(620, 20), 14, Color("#d8c39a"))
+			Vector2(8, 396), Vector2(620, 20), 16, Color("#f0dfb8"))
 	ui_root.add_child(foot)
 
 
@@ -379,25 +392,17 @@ func _open_mission() -> void:
 	var content := _panel_shell("作战会议 / L%02d %s" % [
 		int(lv["index"]), str(lv["name"])], 560, 300)
 	var limit := int(lv.get("turn_limit", 0))
-	var orig_limit := int(lv.get("original_turn_limit", 0))
-	content.add_child(_label("胜利：%s\n失败：%s\n回合上限：复刻 %s / 原版 %s\n目标：%s" % [
+	content.add_child(_label("胜利：%s\n失败：%s\n回合上限：%s\n目标：%s" % [
 		str(lv.get("success", "")), str(lv.get("failure", "")),
 		str(limit) if limit > 0 else "无",
-		str(orig_limit) if orig_limit > 0 else "无",
 		str(lv.get("objective", {}).get("label", ""))],
-		Vector2.ZERO, Vector2(520, 108), 16, OriginalUI.INK))
-	var cand_names: Array = []
-	for c in lv.get("party_candidates", []):
-		cand_names.append(str(c.get("name", "")))
+		Vector2.ZERO, Vector2(520, 92), 16, OriginalUI.INK))
 	var party_line := "可出击队伍：%d 人    部署点：%d" % [
 		state.party_size(), (lv.get("deploy", []) as Array).size()]
-	if not cand_names.is_empty():
-		party_line += "\n0x11C 候选（推断）：" + "、".join(cand_names)
 	content.add_child(_label(party_line,
-		Vector2.ZERO, Vector2(520, 44 if not cand_names.is_empty() else 24),
-		16, Color("#d8c39a")))
-	var hint := _label("战斗为原版 47 关数据；目标/增援/敌军行为已接入通用运行时。",
-			Vector2.ZERO, Vector2(520, 40), 14, Color("#b9a98b"))
+		Vector2.ZERO, Vector2(520, 24), 16, Color("#d8c39a")))
+	var hint := _label("敌军会按关卡脚本行动；目标与增援已接入。",
+			Vector2.ZERO, Vector2(520, 40), 16, Color("#e5d4ad"))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(hint)
 	var row := HBoxContainer.new()
@@ -439,21 +444,32 @@ func _show_deployment(idx: int) -> void:
 	bg.size = Vector2(640, 480)
 	ui_root.add_child(bg)
 	var lv: Dictionary = state.m4_level(idx)
+	var fixed_pids: Array = (lv.get("fixed_deploy", []) as Array).duplicate()
+	var fixed := not fixed_pids.is_empty()
 	var max_dep := mini(int(lv.get("max_deploy", 10)), state.party_size())
 	max_dep = maxi(1, max_dep)
-	# 过滤已不在队伍/已阵亡的旧选择
-	var valid: Array = []
-	for pid in deploy_selected:
-		for m in state.party:
-			if int(m["pid"]) == int(pid) and int(m.get("hp", 0)) > 0:
-				valid.append(int(pid))
-	deploy_selected = valid
-	if deploy_selected.is_empty():
-		for m in state.party:
-			if deploy_selected.size() >= max_dep:
-				break
-			if int(m.get("hp", 0)) > 0:
-				deploy_selected.append(int(m["pid"]))
+	if fixed:
+		# L00 等固定出战关：只允许剧情指定角色，列表不展示整支队伍。
+		max_dep = fixed_pids.size()
+		deploy_selected.clear()
+		for pid in fixed_pids:
+			var fm = state.deploy_member(int(pid))
+			if fm != null and int(fm.get("hp", 0)) > 0:
+				deploy_selected.append(int(pid))
+	else:
+		# 过滤已不在队伍/已阵亡的旧选择
+		var valid: Array = []
+		for pid in deploy_selected:
+			for m in state.party:
+				if int(m["pid"]) == int(pid) and int(m.get("hp", 0)) > 0:
+					valid.append(int(pid))
+		deploy_selected = valid
+		if deploy_selected.is_empty():
+			for m in state.party:
+				if deploy_selected.size() >= max_dep:
+					break
+				if int(m.get("hp", 0)) > 0:
+					deploy_selected.append(int(m["pid"]))
 	ui_root.add_child(OriginalUI.header("出 战 / L%02d %s" % [idx, lv.get("name", "")],
 			font, Rect2(0, 0, 640, 30)))
 	var left := VBoxContainer.new()
@@ -461,27 +477,41 @@ func _show_deployment(idx: int) -> void:
 	left.size = Vector2(268, 292)
 	left.add_theme_constant_override("separation", 3)
 	ui_root.add_child(left)
-	for m in state.party:
-		var pid := int(m["pid"])
-		var mark := "✓" if deploy_selected.has(pid) else "·"
-		var b := OriginalUI.button("%s %s  Lv%d %s" % [mark, m.get("name", ""),
-				int(m.get("level", 1)), m.get("unit_name", "")], font,
-				Vector2(262, 24), _toggle_deploy.bind(pid, idx), 14)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.disabled = int(m.get("hp", 0)) <= 0
-		left.add_child(b)
+	if fixed:
+		for pid in fixed_pids:
+			var fm = state.deploy_member(int(pid))
+			if fm == null:
+				continue
+			var line := OriginalUI.label("★ %s  Lv%d %s（主角）" % [
+					fm.get("name", ""), int(fm.get("level", 1)),
+					fm.get("unit_name", "")], font, 16, OriginalUI.GOLD_LIGHT)
+			line.custom_minimum_size = Vector2(262, 24)
+			line.size = Vector2(262, 24)
+			left.add_child(line)
+	else:
+		for m in state.party:
+			var pid := int(m["pid"])
+			var mark := "✓" if deploy_selected.has(pid) else "·"
+			var b := OriginalUI.button("%s %s  Lv%d %s" % [mark, m.get("name", ""),
+					int(m.get("level", 1)), m.get("unit_name", "")], font,
+					Vector2(262, 24), _toggle_deploy.bind(pid, idx), 16)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.disabled = int(m.get("hp", 0)) <= 0
+			left.add_child(b)
 	var right := VBoxContainer.new()
 	right.position = Vector2(372, 84)
 	right.size = Vector2(224, 292)
 	right.add_theme_constant_override("separation", 3)
 	ui_root.add_child(right)
-	right.add_child(OriginalUI.label("出战 %d/%d" % [deploy_selected.size(), max_dep],
-			font, 14, OriginalUI.GOLD_LIGHT))
+	right.add_child(OriginalUI.label("本关固定出战" if fixed else
+			"出战 %d/%d" % [deploy_selected.size(), max_dep],
+			font, 16, OriginalUI.GOLD_LIGHT))
 	for pid in deploy_selected:
-		var m = state.get_member(int(pid))
+		var m = state.deploy_member(int(pid))
 		if m != null:
-			right.add_child(OriginalUI.label("%s  Lv%d" % [m.get("name", ""),
-					int(m.get("level", 1))], font, 14, Color("#f0e4c8")))
+			right.add_child(OriginalUI.label("%s  Lv%d%s" % [m.get("name", ""),
+					int(m.get("level", 1)), "（主角）" if fixed else ""],
+					font, 16, Color("#f0e4c8")))
 	right.add_child(OriginalUI.label("目标：%s" % lv.get("objective", {}).get("label", ""),
 			font, 12, Color("#e5d4ad")))
 	right.add_child(OriginalUI.label("敌军：%d" % int(lv.get("enemies", 0)),
@@ -492,8 +522,15 @@ func _show_deployment(idx: int) -> void:
 	var back := _button("返 回", Vector2(300, 398), Vector2(120, 34),
 			_show_world, 16)
 	ui_root.add_child(back)
-	var hint := OriginalUI.label("K00 出战 / 选择出战队员 / 自动检查点已保存",
-			font, 12, Color("#c8b88f"))
+	var fixed_name := ""
+	if fixed:
+		var fm0 = state.deploy_member(int(fixed_pids[0]))
+		if fm0 != null:
+			fixed_name = str(fm0.get("name", ""))
+	var hint := OriginalUI.label(
+			"本关固定：%s（主角）/ 自动检查点已保存" % fixed_name if fixed else
+			"K00 出战 / 选择出战队员 / 自动检查点已保存",
+			font, 16, Color("#e5d4ad"))
 	hint.position = Vector2(120, 440)
 	ui_root.add_child(hint)
 
@@ -610,7 +647,11 @@ func _launch_level(idx: int, standalone: bool, deploy_pids: Array = []) -> void:
 	var selected: Array = deploy_pids
 	if selected.is_empty() and not standalone:
 		selected = current_deploy_pids
-	var level: Dictionary = LevelBuilder.build(m4, m2, idx, state.party, false, -1, selected)
+	var roster: Array = state.party
+	if selected.has(state.PROTAGONIST_PID):
+		# 自定义主角不在 5 人队列表里；出战时临时放进 roster 首位。
+		roster = [state.protagonist_member()] + state.party
+	var level: Dictionary = LevelBuilder.build(m4, m2, idx, roster, false, -1, selected)
 	if level.is_empty():
 		_toast("关卡数据缺失")
 		return

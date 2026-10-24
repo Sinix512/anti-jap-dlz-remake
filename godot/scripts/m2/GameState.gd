@@ -4,6 +4,9 @@ extends RefCounted
 ## 纯逻辑，不依赖场景；Campaign/面板调用。
 
 const SAVE_VERSION := 5
+# 玩家自定义主角（剧情里的 GG）。不占 PEOPLE.DAT 的 0–39 槽，
+# 也不写进 5 人初始队伍；出战时可作为固定 leader 临时加入 roster。
+const PROTAGONIST_PID := -100
 const CombatRules = preload("res://scripts/battle/CombatRules.gd")
 const OriginalSave = preload("res://scripts/m2/OriginalSave.gd")
 
@@ -143,6 +146,49 @@ func get_member(pid: int):
 		if int(m["pid"]) == pid:
 			return m
 	return null
+
+
+func protagonist_member() -> Dictionary:
+	"""剧情主角 GG：姓名来自角色创建/设置，属性取手枪队基准。"""
+	var nm := player_name.strip_edges()
+	if nm == "":
+		nm = "李勇"
+	var lv := 5
+	var hp := max_hp_for(1, lv)
+	var zero_skills := {}
+	for k in ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
+			"weishe", "saorao", "pohuai", "lueduo", "fanjian", "yibing",
+			"duzhan", "ansha", "shidu", "kongxi"]:
+		zero_skills[k] = 0
+	return {
+		"pid": PROTAGONIST_PID,
+		"name": nm,
+		"face": 3,
+		"face_png": "res://assets/face/face_003.png",
+		"army_png": "res://assets/army/army_030.png",
+		"bingzhong": 1,
+		"unit_name": "手枪队",
+		"level": lv,
+		"wuli": 80,
+		"zhili": 80,
+		"xp": 0,
+		"level_cap": 99,
+		"skills": zero_skills.duplicate(),
+		"skill_counts": zero_skills.duplicate(),
+		"attack_count": 0,
+		"item_slots": [0, 0, 0, 0, 0, 0, 0, 0],
+		"mine_slots": [0, 0, 0, 0, 0, 0, 0, 0],
+		"equip": -1,
+		"hp": hp,
+		"max_hp": hp,
+		"hero": true,
+	}
+
+
+func deploy_member(pid: int):
+	if pid == PROTAGONIST_PID:
+		return protagonist_member()
+	return get_member(pid)
 
 
 func people() -> Array:

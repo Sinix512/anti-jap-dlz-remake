@@ -74,7 +74,7 @@ func _label(text: String, pos: Vector2, size: Vector2,
 	l.position = pos
 	l.size = size
 	l.add_theme_font_override("font", font)
-	l.add_theme_font_size_override("font_size", fs)
+	l.add_theme_font_size_override("font_size", maxi(fs, OriginalUI.MIN_TEXT_SIZE))
 	l.add_theme_color_override("font_color", color)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
@@ -88,7 +88,7 @@ func _button(text: String, pos: Vector2, size: Vector2,
 	b.size = size
 	b.custom_minimum_size = size
 	b.add_theme_font_override("font", font)
-	b.add_theme_font_size_override("font_size", fs)
+	b.add_theme_font_size_override("font_size", maxi(fs, OriginalUI.MIN_TEXT_SIZE))
 	b.focus_mode = Control.FOCUS_NONE
 	if cb.is_valid():
 		b.pressed.connect(cb)
@@ -693,11 +693,16 @@ func _open_party() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 2)
 	scroll.add_child(list)
-	if not state.party.is_empty() and state.get_member(party_selected) == null:
-		party_selected = int(state.party[0]["pid"])
-	for m in state.party:
-		var b := _button("%s  Lv%d\n%s" % [m["name"], m["level"], m["unit_name"]],
-				Vector2.ZERO, Vector2(220, 44), _party_select.bind(int(m["pid"])), 16)
+	var roster: Array = [state.protagonist_member()] + state.party
+	if state.deploy_member(party_selected) == null:
+		party_selected = state.PROTAGONIST_PID
+	for m in roster:
+		var is_hero := int(m.get("pid", -1)) < 0
+		var label := "%s  Lv%d\n%s" % [m["name"], m["level"], m["unit_name"]]
+		if is_hero:
+			label = "★ " + label + "（主角）"
+		var b := _button(label, Vector2.ZERO, Vector2(220, 44),
+				_party_select.bind(int(m["pid"])), 16)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		if int(m["pid"]) == party_selected:
 			b.modulate = Color(1, 0.88, 0.55)
@@ -706,7 +711,7 @@ func _open_party() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 4)
 	body.add_child(right)
-	var m = state.get_member(party_selected)
+	var m = state.deploy_member(party_selected)
 	if m == null:
 		right.add_child(_label("队伍为空", Vector2.ZERO, Vector2(260, 30), 16))
 		return
@@ -732,42 +737,47 @@ func _open_party() -> void:
 	right.add_child(_label("攻击 %d   防御 %d   移动 %d" % [
 		atk, df, int(u.get("yidong", 0))],
 		Vector2.ZERO, Vector2(300, 24), 16))
-	var eq_id := int(m.get("equip", -1))
-	var eq_text := "未装备"
-	if eq_id >= 0:
-		var eq_b: Dictionary = state.equip_bonus(eq_id)
-		eq_text = "%s  攻+%d 防+%d" % [state.item(eq_id).get("name", "?"),
-				int(eq_b["attack"]), int(eq_b["defense"])]
-	right.add_child(_label("装备：" + eq_text, Vector2.ZERO, Vector2(300, 22), 14,
-			Color("#e8ba4c") if eq_id >= 0 else Color("#b8c4d4")))
-	var eq_row := HBoxContainer.new()
-	eq_row.add_theme_constant_override("separation", 6)
-	right.add_child(eq_row)
-	var eb := _button("换装备", Vector2.ZERO, Vector2(100, 28),
-			_open_equip_panel.bind(int(m["pid"])), 14)
-	eb.custom_minimum_size = Vector2(100, 28)
-	eq_row.add_child(eb)
-	if eq_id >= 0:
-		var ub := _button("卸下", Vector2.ZERO, Vector2(80, 28),
-				_unequip.bind(int(m["pid"])), 14)
-		ub.custom_minimum_size = Vector2(80, 28)
-		eq_row.add_child(ub)
-	var c: Dictionary = state.can_promote(m)
-	if bool(c.get("ok", false)):
-		right.add_child(_label("可转职：%s → %s" % [m["unit_name"], c["target_name"]],
-				Vector2.ZERO, Vector2(300, 24), 16, Color("#8fd18f")))
-		var item_id := int(c.get("item_id", -1))
-		if item_id >= 0:
-			right.add_child(_label("需要：%s ×1（库存 %d）" % [
-				state.item(item_id).get("name", "道具"), state.item_count(item_id)],
-				Vector2.ZERO, Vector2(300, 24), 16, Color("#c8d3e2")))
-		var pb := _button("转职", Vector2.ZERO, Vector2(100, 30),
-				_promote.bind(int(m["pid"])), 16)
-		pb.custom_minimum_size = Vector2(100, 30)
-		right.add_child(pb)
+	if int(m.get("pid", -1)) < 0:
+		var hero_note := _label("出征队长，不占队伍槽位。\n姓名只用于剧情 GG。\n装备/转职仍用原作队员。",
+				Vector2.ZERO, Vector2(300, 64), 16, Color("#e5d4ad"))
+		right.add_child(hero_note)
 	else:
-		right.add_child(_label(str(c.get("msg", "无转职路线")), Vector2.ZERO,
-				Vector2(300, 24), 12, Color("#b8c4d4")))
+		var eq_id := int(m.get("equip", -1))
+		var eq_text := "未装备"
+		if eq_id >= 0:
+			var eq_b: Dictionary = state.equip_bonus(eq_id)
+			eq_text = "%s  攻+%d 防+%d" % [state.item(eq_id).get("name", "?"),
+					int(eq_b["attack"]), int(eq_b["defense"])]
+		right.add_child(_label("装备：" + eq_text, Vector2.ZERO, Vector2(300, 22), 16,
+				Color("#e8ba4c") if eq_id >= 0 else Color("#b8c4d4")))
+		var eq_row := HBoxContainer.new()
+		eq_row.add_theme_constant_override("separation", 6)
+		right.add_child(eq_row)
+		var eb := _button("换装备", Vector2.ZERO, Vector2(100, 28),
+				_open_equip_panel.bind(int(m["pid"])), 16)
+		eb.custom_minimum_size = Vector2(100, 28)
+		eq_row.add_child(eb)
+		if eq_id >= 0:
+			var ub := _button("卸下", Vector2.ZERO, Vector2(80, 28),
+					_unequip.bind(int(m["pid"])), 16)
+			ub.custom_minimum_size = Vector2(80, 28)
+			eq_row.add_child(ub)
+		var c: Dictionary = state.can_promote(m)
+		if bool(c.get("ok", false)):
+			right.add_child(_label("可转职：%s → %s" % [m["unit_name"], c["target_name"]],
+					Vector2.ZERO, Vector2(300, 24), 16, Color("#8fd18f")))
+			var item_id := int(c.get("item_id", -1))
+			if item_id >= 0:
+				right.add_child(_label("需要：%s ×1（库存 %d）" % [
+					state.item(item_id).get("name", "道具"), state.item_count(item_id)],
+					Vector2.ZERO, Vector2(300, 24), 16, Color("#c8d3e2")))
+			var pb := _button("转职", Vector2.ZERO, Vector2(100, 30),
+					_promote.bind(int(m["pid"])), 16)
+			pb.custom_minimum_size = Vector2(100, 30)
+			right.add_child(pb)
+		else:
+			right.add_child(_label(str(c.get("msg", "无转职路线")), Vector2.ZERO,
+					Vector2(300, 24), 16, Color("#b8c4d4")))
 
 
 func _open_equip_panel(pid: int) -> void:
