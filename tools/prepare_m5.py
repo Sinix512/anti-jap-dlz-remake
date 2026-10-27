@@ -1,4 +1,4 @@
-"""M5 剧情数据：478 条 TXT、说话人/头像、关卡剧情、结局与过场索引。
+"""M5 剧情数据：稀疏 TXT 槽、说话人/头像、章节分支、结局与过场索引。
 
 只读 data/、out/、godot/data/m4.json，写 godot/data/m5.json + 结局图。
 产物不入库。
@@ -23,9 +23,51 @@ ASSETS = GODOT / "assets"
 UI = ASSETS / "ui"
 GODOT_DATA = GODOT / "data"
 
+# DLZ.exe 4294BE: entry uses gate4476D8 and TXT[521+2*level];
+# victory has already incremented level, uses gate447798 and TXT[520+2*new].
+# These are NOT difficulty-dependent A/base variants.
+CHAPTER_ENTRY_ENABLED = {0, 6, 9, 13, 27}
+CHAPTER_VICTORY_ENABLED = set(range(22)) | {24} | set(range(27, 37))
+
+
+def chapter_transitions(by_n: dict, levels: list[dict], media: dict) -> dict:
+    """Exact 47-level chapter MPEG/TXT branch facts; no guessed fallback."""
+    clips = {str(c.get("id", "")): c for c in media.get("mpeg", [])}
+    by_level = {int(lv["index"]): lv for lv in levels}
+    result = {}
+    for level in range(47):
+        entries = {}
+        for kind, loaded_level, text_id, enabled, movie in (
+            ("entry", level, 521 + 2 * level,
+             level in CHAPTER_ENTRY_ENABLED, f"d{level + 1:02d}a"),
+            ("victory", level + 1, 522 + 2 * level,
+             level + 1 in CHAPTER_VICTORY_ENABLED, f"d{level + 1:02d}"),
+        ):
+            clip = clips.get(movie, {})
+            text = by_n.get(text_id)
+            entries[kind] = {
+                "enabled": enabled,
+                "loaded_level_index": loaded_level,
+                "speaker_level": loaded_level,
+                "mpeg_id": movie,
+                "mpeg_path": clip.get("ogv_path", clip.get("path", "")),
+                "mpeg_available": bool(clip),
+                "text_id": text_id,
+                "text_table_address": f"0x{0x472588 + text_id * 4:x}",
+                "text_present": text is not None,
+                "text_empty": text is None or not bool(text.get("lines")),
+            }
+        entries["entry"]["initial_entry_only"] = True
+        entries["entry"]["guard"] = "global583F54==0"
+        entries["victory"]["phase_calls"] = bool(by_level.get(level, {}).get(
+            "victory_phase", {}).get("plays_base_transition", False))
+        result[str(level)] = entries
+    return result
+
 # 原版历史照片轮播：文件名表 0x447DB0，切换循环 0x42DC9E。
-# ticks 是原版计时器阈值；最后一张 npic25 是表尾，阈值 0x10A4 为推定。
+# ticks 是照片开始显示的计时器阈值；55ms/tick，npic25在tick0显示。
 HISTORY_PHOTOS = [
+    ("npic25", "npic_25.png", 0),
     ("918-2", "history_918_2.png", 0x113),
     ("918-3", "history_918_3.png", 0x226),
     ("77-1", "history_77_1.png", 0x352),
@@ -44,7 +86,6 @@ HISTORY_PHOTOS = [
     ("npic03", "npic_03.png", 0xE8D),
     ("npic02", "npic_02.png", 0xF3C),
     ("npic01", "npic_01.png", 0xFEB),
-    ("npic25", "npic_25.png", 0x10A4),
 ]
 
 # TXT 行首的两位说话人码：00 = 主角 GG，01..39 = PEOPLE.DAT 对应角色，
@@ -105,20 +146,31 @@ def speaker_for(code: int, people: list[dict], n: int = -1) -> tuple[str, int]:
     return "敌军", 69
 
 
+def native_segments(stream: str) -> list[tuple[int, str]]:
+    """43CC96: physical lines are already removed by43C9EC, not boundaries."""
+    raw = stream.encode("gb18030"); cursor = 0; result = []
+    while cursor + 1 < len(raw) and raw[cursor] != 0:
+        head = raw[cursor:cursor+2]; cursor += 2
+        code = int(head) if len(head) == 2 and all(48 <= b <= 57 for b in head) else -1
+        start = cursor
+        while cursor < len(raw) and raw[cursor] != 0:
+            value = raw[cursor]
+            if value >= 128 or value in b"ABCD": cursor += 1
+            elif value in b"GT": cursor += 2 # original does not validate second byte
+            else: break
+        result.append((code, raw[start:cursor].decode("gb18030")))
+    return result
+
+
 def parse_record(rec: dict, people: list[dict]) -> dict:
+    if "native_stream" not in rec:
+        raise ValueError("Missing native_stream: rerun extract_all.prepare_txt(); physical lines are not native records")
     lines = []
-    for raw in rec["text"].splitlines():
-        m = re.match(r"^(\d{2})(.*)$", raw)
-        if m:
-            code = int(m.group(1))
-            text = m.group(2)
-            name, face = speaker_for(code, people, int(rec["n"]))
-            lines.append({"code": code, "speaker": name, "face": face,
-                          "text": text})
-        elif raw.strip():
-            lines.append({"code": -1, "speaker": "旁白", "face": -1,
-                          "text": raw})
-    return {"n": int(rec["n"]), "lines": lines, "raw": rec["text"]}
+    for code, text in native_segments(rec["native_stream"]):
+        name, face = speaker_for(code, people, int(rec["n"])) if code >= 0 else ("旁白", -1)
+        lines.append({"code": code, "speaker": name, "face": face, "text": text})
+    return {"n": int(rec["n"]), "lines": lines, "raw": rec["text"],
+            "native_stream": rec["native_stream"]}
 
 
 def main() -> None:
@@ -132,16 +184,21 @@ def main() -> None:
     records = [parse_record(r, people) for r in txt]
     by_n = {r["n"]: r for r in records}
 
-    # 结局图：END00 640×480；END01-05 320×200，放大到 640×400 居中
+    # 40E709 uses426059 pixel-only loads: END keeps live KUANG04, not the
+    # embedded END palette. END01..05 remain320x200 on black at(160,80).
+    original = ROOT.parent / "dlz" / "ANTI-JAP"
+    end_palette = bytes(v * 4 for v in (original / "KUANG04.IMG").read_bytes()[-768:])
     for i in range(6):
-        src = OUT / "img" / f"END{i:02d}.png"
+        src = original / f"END{i:02d}.IMG"
         if not src.exists():
             continue
-        im = Image.open(src).convert("RGB")
+        size = (640, 480) if i == 0 else (320, 200)
+        im = Image.frombytes("P", size, src.read_bytes()[16:16 + size[0] * size[1]])
+        im.putpalette(end_palette)
+        im = im.convert("RGB")
         if im.size != (640, 480):
-            im = im.resize((640, 400), Image.NEAREST)
             canvas = Image.new("RGB", (640, 480), (0, 0, 0))
-            canvas.paste(im, (0, 40))
+            canvas.paste(im, (160, 80))
             im = canvas
         im.save(UI / f"end_{i:02d}.png")
     for src, dst in (("JZ-1", "jz1.png"), ("JZ-2", "jz2.png"),
@@ -255,25 +312,27 @@ def main() -> None:
         if media_path.exists() else {"clips": [], "flc": [], "anm": []}
     clips = media.get("clips", [])
     media["mpeg"] = [c for c in clips if c.get("kind") == "mpeg"]
-    # 过场入口显式化：base=dNN 是主线关卡入口；a 版是预览变体；
-    # 其余（KINGSOFT/KR-1/TRAIN/TEST01）归档案。原版分支条件仍未解。
+    # 4294BE: A版是初次战斗入口，base是上一关胜利后的章节过渡。
+    # 动画flag只在MPEG与对应TXT间选择，不在A/base间选择。
     present_bases = set()
     for c in media["mpeg"]:
         cid = str(c.get("id", ""))
         if cid.startswith("d") and cid[1:].isdigit():
-            c["entry"] = "level"
-            c["entry_level"] = int(c.get("level_index", -1))
+            c["entry"] = "victory_transition"
+            c["entry_level"] = int(cid[1:]) - 1
+            c["loaded_level_index"] = int(cid[1:])
             present_bases.add(int(cid[1:]))
         elif cid.startswith("d") and cid.endswith("a") and cid[1:-1].isdigit():
-            c["entry"] = "variant_preview"
-            c["entry_level"] = int(c.get("level_index", -1))
+            c["entry"] = "battle_entry"
+            c["entry_level"] = int(cid[1:-1]) - 1
+            c["loaded_level_index"] = int(cid[1:-1]) - 1
         else:
             c["entry"] = "archive"
     media["mpeg_missing_bases"] = [n for n in range(1, 37)
                                    if n not in present_bases]
     media["mpeg_entry_note"] = (
-        "base dNN 映射到 L(NN-1)；a 版仅预览，不是原版分支条件；"
-        "缺失 base 进入档案，不静默跳过。")
+        "base dNN在L(NN-1)胜利并加载下一关后播放；A版是初次战斗入口。"
+        "7D06BC=0播放MPEG，=1显示章节TXT；缺失影片静默跳过，不自动文字fallback。")
     media["flc"] = [c for c in clips if c.get("kind") == "flc"]
     anm_path = GODOT_DATA / "m5_anm.json"
     media["anm"] = json.loads(anm_path.read_text(encoding="utf-8")) \
@@ -286,39 +345,30 @@ def main() -> None:
             if ogv and (GODOT / ogv.replace("res://", "")).exists():
                 dec["ogv_path"] = ogv
 
-    endings = [
-        {"id": 0, "score": 0, "image": "res://assets/ui/end_00.png",
-         "title": "未竟之路",
-         "text": "平阳的硝烟未散，游击队的名字却已传遍冀中。\n"
-                 "你们还会回来。"},
-        {"id": 1, "score": 2800, "image": "res://assets/ui/end_01.png",
-         "title": "初出茅庐",
-         "text": "平阳根据地站稳了脚跟。\n"
-                 "地雷战、地道战，从这片土地上传向整个华北。"},
-        {"id": 2, "score": 3000, "image": "res://assets/ui/end_02.png",
-         "title": "继往开来",
-         "text": "敌人被赶出了平阳。\n"
-                 "新的任务在等着这支从群众中走出来的队伍。"},
-        {"id": 3, "score": 3300, "image": "res://assets/ui/end_03.png",
-         "title": "战斗英雄",
-         "text": "平阳的铁路回到了人民手中。\n"
-                 "那些埋在土地里的雷，见证了人民战争的力量。"},
-        {"id": 4, "score": 3600, "image": "res://assets/ui/end_05.png",
-         "title": "支前模范",
-         "text": "从平阳到华北，从游击到反攻。\n"
-                 "每一座村庄、每一条地道，都是胜利的根基。"},
-        {"id": 5, "score": 2800, "image": "res://assets/ui/end_04.png",
-         "title": "部队休整",
-         "text": "隐藏关的硝烟散去。\n"
-                 "历史与虚构在此交汇，而人民仍在书写自己的故事。"},
-    ]
+    endings = [{"id":i, "image":f"res://assets/ui/end_{i:02d}.png",
+                "records":records, "title":f"原版后记 {i+1}"}
+               for i,records in enumerate([[401],[403],[402],[404],[405,406],[407]])]
 
-    history = [{
-        "index": i,
-        "id": src,
-        "path": "res://assets/ui/" + dst,
-        "ticks": ticks,
-    } for i, (src, dst, ticks) in enumerate(HISTORY_PHOTOS)]
+
+    history = []
+    for i, (src, dst, ticks) in enumerate(HISTORY_PHOTOS):
+        # 42E0F1/42DC9E center unscaled native IMG dimensions and fill with
+        # the nearest palette black. Every one of these 19 shipped palettes
+        # has an exact RGB(0,0,0), so its first match is the weighted minimum
+        # independent of the positive channel weights used by 421D10.
+        original = (ROOT.parent / "dlz" / "ANTI-JAP" / (src.upper() + ".IMG")).read_bytes()
+        raw_palette = original[-768:]
+        scale = 1 if max(raw_palette) > 63 else 4
+        colors = [list(raw_palette[p:p+3]) for p in range(0,768,3)]
+        colors = [[min(255, c*scale) for c in rgb] for rgb in colors]
+        black = colors.index([0,0,0])
+        with Image.open(UI / dst) as image:
+            width, height = image.size
+        history.append({
+            "index": i, "id": src, "path": "res://assets/ui/" + dst,
+            "ticks": ticks, "width": width, "height": height,
+            "background_rgb": colors[black], "background_index": black,
+        })
 
     payload = {
         "meta": {
@@ -326,8 +376,11 @@ def main() -> None:
             "version": 1,
             "font": "res://assets/font/hzk16.fnt",
             "player_default": "李勇",
-            "placeholder_note": "GG=主角名；AA/BB/CC/DD/TT=原版强调/地名/物品/时间占位符，运行时去标记。",
+            "placeholder_note": "GG=主角名，TT=当前关卡名；AA/BB/CC/DD强调下一个字。",
             "record_count": len(records),
+            "text_table_base": "0x472588",
+            "text_table_slot_count": 640,
+            "record_index_note": "records只含非空槽；n是原TXT槽号，不是此数组下标，无偏移。",
             "hidden_unlock_score": 2800,
             "ending_thresholds": [2800, 3000, 3300, 3600],
         },
@@ -336,6 +389,16 @@ def main() -> None:
         "archive": archive,
         "endings": endings,
         "media": media,
+        "chapter_transitions": chapter_transitions(by_n, m4.get("levels", []), media),
+        "chapter_branch": {
+            "function": "0x4294be",
+            "animation_flag": "0x7d06bc",
+            "flag0": "MPEG",
+            "flag1": "TXT",
+            "missing_mpeg": "skip; never automatically substitute TXT",
+            "entry_text_formula": "521+2*level",
+            "victory_text_formula": "522+2*old_level",
+        },
         "history": history,
         "credits_image": "res://assets/ui/credits.png",
     }

@@ -7,7 +7,10 @@
 本机已复核：
   * `goods_junxie[12]` 的取值都在 81..142，正好落在 GAME.DAT WuPin 的武器区；
   * `goods_zahuo[12]` 的取值都在 1..80，落在食物/书籍区；
-  * `goods_material[12]` 的取值都在 0..9，正好是 Material[10] 的索引；
+  * `goods_material[10]` 对应原杂货铺的 5×2 材料货单。此前仅按值域
+    错推为 12 项，把后面两个零 DWORD 当作 material0，产生两份粘土。
+    K01 合同已确认只读 10 项（research_k01_shop_ui_20261025.md）；
+    尾部两 DWORD 的语义未定，仍完整保留在 raw_u32 中；
   * `goods_what[10]` 19 个城镇全是 -1（GAME.DAT 里也只有 10 种材料，
     模板注释称「代码里没有使用」，与本机一致）。
 
@@ -41,11 +44,11 @@ FLAG_COUNT = 11
 _RAW = struct.Struct("<81i")
 _FLAGS = struct.Struct("<11H")
 
-# 各商品列表在 raw_u32 里的切片（模板推算，且已被上面的 ID 范围印证）
+# 商品字段宽度：军械/杂货各 12 项，材料 10 项；不可仅凭尾部零值推宽。
 GOODS_WHAT = slice(35, 45)
 GOODS_JUNXIE = slice(45, 57)
 GOODS_ZAHUO = slice(57, 69)
-GOODS_MATERIAL = slice(69, 81)
+GOODS_MATERIAL = slice(69, 79)
 
 # 前 35 个 int32
 PAD = slice(0, 2)

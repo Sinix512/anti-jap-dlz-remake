@@ -1,0 +1,404 @@
+{
+  "source": "Same DLZ.exe sha256 and static-analysis basis as combat_facts.json",
+  "entry": "0x402DDC",
+  "behavior_dispatch": "0x403F8E tries commands from behavior table in order; first return1 wins; clear per-target records before each command; all fail=>wait",
+  "behavior_commands": {
+    "0": [
+      2,
+      12,
+      21,
+      31,
+      41,
+      51,
+      61,
+      71,
+      3,
+      13,
+      8,
+      18,
+      0
+    ],
+    "1": [
+      1,
+      11,
+      22,
+      42,
+      52,
+      72,
+      61,
+      31,
+      6,
+      16,
+      7,
+      17,
+      0
+    ],
+    "2": [
+      1,
+      11,
+      23,
+      22,
+      42,
+      52,
+      72,
+      61,
+      31,
+      5,
+      15,
+      33,
+      0
+    ],
+    "3": [
+      23,
+      5,
+      15,
+      33,
+      0
+    ],
+    "4": [
+      1,
+      11,
+      22,
+      42,
+      52,
+      72,
+      31,
+      4,
+      14,
+      32,
+      0
+    ],
+    "5": [
+      4,
+      14,
+      32,
+      31,
+      41,
+      71,
+      0
+    ],
+    "6": [
+      1,
+      11,
+      23,
+      22,
+      42,
+      52,
+      72,
+      61,
+      31,
+      5,
+      15,
+      33,
+      0
+    ],
+    "7": [
+      1,
+      11,
+      22,
+      42,
+      52,
+      72,
+      61,
+      31,
+      6,
+      16,
+      7,
+      17,
+      0
+    ],
+    "8": [
+      32,
+      0
+    ],
+    "9": [
+      2,
+      12,
+      31,
+      61,
+      41,
+      51,
+      21,
+      71,
+      3,
+      13,
+      8,
+      18,
+      0
+    ],
+    "10": [
+      1,
+      11,
+      22,
+      31,
+      42,
+      52,
+      72,
+      4,
+      14,
+      32,
+      0
+    ],
+    "11": [
+      0
+    ],
+    "12": [
+      31,
+      2,
+      12,
+      61,
+      41,
+      51,
+      21,
+      71,
+      3,
+      13,
+      8,
+      18,
+      0
+    ],
+    "13": [
+      0
+    ],
+    "14": [
+      0
+    ],
+    "15": [
+      0
+    ]
+  },
+  "actions": {
+    "0": {
+      "effect": "wait; plan.move_mode=2; succeed"
+    },
+    "1": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "HP<maxHP//4",
+      "effect": "move to retreat candidate (or current tile if unavailable), cast on self"
+    },
+    "2": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "HP<maxHP*3//5",
+      "effect": "stand, cast on self"
+    },
+    "3": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "HP!=maxHP",
+      "effect": "stand, cast on self"
+    },
+    "4": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "HP!=maxHP",
+      "effect": "move toward target_x/y by40124C, cast on self at chosen destination"
+    },
+    "5": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "HP!=maxHP",
+      "effect": "move toward target_slot coordinates by40124C, cast on self at chosen destination"
+    },
+    "6": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "HP!=maxHP",
+      "effect": "move to retreat candidate (or current tile if unavailable), cast on self"
+    },
+    "7": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "find friend by healing selector",
+      "effect": "find first reachable casting station and first qualifying friend, move and heal"
+    },
+    "8": {
+      "kind": "heal_hp",
+      "skill": "0 if caster.usage[0]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "find friend by healing selector",
+      "effect": "stand, heal first qualifying friend"
+    },
+    "11": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "morale<25",
+      "effect": "move to retreat candidate (or current tile if unavailable), cast on self"
+    },
+    "12": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "morale<60",
+      "effect": "stand, cast on self"
+    },
+    "13": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "morale!=100",
+      "effect": "stand, cast on self"
+    },
+    "14": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "morale!=100",
+      "effect": "move toward target_x/y by40124C, cast on self at chosen destination"
+    },
+    "15": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "morale!=100",
+      "effect": "move toward target_slot coordinates by40124C, cast on self at chosen destination"
+    },
+    "16": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "morale!=100",
+      "effect": "move to retreat candidate (or current tile if unavailable), cast on self"
+    },
+    "17": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "find friend by healing selector",
+      "effect": "find first reachable casting station and first qualifying friend, move and heal"
+    },
+    "18": {
+      "kind": "heal_morale",
+      "skill": "1 if caster.usage[1]!=0 else 2 if caster.usage[2]!=0 else fail",
+      "condition": "find friend by healing selector",
+      "effect": "stand, heal first qualifying friend"
+    },
+    "21": {
+      "kind": "normal_attack",
+      "effect": "only current station; build target records then40115A score select"
+    },
+    "22": {
+      "kind": "normal_attack",
+      "effect": "enumerate all reachable stations row-major and record enemies, then record current station last; select target40115A"
+    },
+    "23": {
+      "kind": "normal_attack",
+      "effect": "enumerate reachable stations row-major; choose first from which target_slot is selectable; no ordinary score"
+    },
+    "31": {
+      "kind": "skill",
+      "skill": 15,
+      "condition": "caster.usage[15]!=0",
+      "effect": "current station only; record selectable enemy targets with airstrike score, then40115A select"
+    },
+    "32": {
+      "kind": "move",
+      "effect": "40124C toward target_x/y; fail on return -1 or0; move only on1"
+    },
+    "33": {
+      "kind": "move",
+      "effect": "40124C toward target_slot coordinates; always succeeds, using default current coordinates if blocked"
+    },
+    "41": {
+      "kind": "skill",
+      "skill": 13,
+      "condition": "caster.usage[13]!=0",
+      "effect": "current station only; first selectable different-side target with target.INT+5<=caster.INT"
+    },
+    "42": {
+      "kind": "skill",
+      "skill": 13,
+      "condition": "caster.usage[13]!=0",
+      "effect": "enumerate reachable stations row-major until first with qualifying target; first selectable different-side target with target.INT+5<=caster.INT"
+    },
+    "51": {
+      "kind": "skill",
+      "skill": 14,
+      "condition": "caster.usage[14]!=0",
+      "effect": "current station only; first selectable different-side target with target.INT+5<=caster.INT"
+    },
+    "52": {
+      "kind": "skill",
+      "skill": 14,
+      "condition": "caster.usage[14]!=0",
+      "effect": "enumerate reachable stations row-major until first with qualifying target; first selectable different-side target with target.INT+5<=caster.INT"
+    },
+    "61": {
+      "kind": "skill",
+      "skill": 12,
+      "condition": "caster.usage[12]!=0",
+      "effect": "current station only; first selectable same-side target with moveable==0"
+    },
+    "62": {
+      "kind": "skill",
+      "skill": 12,
+      "condition": "caster.usage[12]!=0",
+      "effect": "enumerate reachable stations row-major until first with qualifying target; first selectable same-side target with moveable==0"
+    },
+    "71": {
+      "kind": "skill",
+      "skill": 6,
+      "condition": "caster.usage[6]!=0",
+      "effect": "current station only; first selectable different-side target with target.INT+5<=caster.INT"
+    },
+    "72": {
+      "kind": "skill",
+      "skill": 6,
+      "condition": "caster.usage[6]!=0",
+      "effect": "enumerate reachable stations row-major until first with qualifying target; first selectable different-side target with target.INT+5<=caster.INT"
+    }
+  },
+  "selectors": {
+    "reachable_station_order": "418E29 with base movement+42B192 item bonus. Friendly occupied cells passable but not landing; enemy occupied blocked. Entering a cell orthogonally adjacent to any enemy stops expansion, but empty cell is landable. Starting cell bypasses initial ZOC stop. Iterate landing cells globally y outer,x inner. Current occupied cell excluded;22 adds current scan last, mobile skill/heal wrappers do not.",
+    "first_target_order": "Build 9x9 selection mask with418A70(skill,station); iterate y=station.y-4..+4 outer,x=station.x-4..+4 inner; require on-map occupied cell and mask==0; return first qualifying target, not greatest missing HP/lowest INT.",
+    "heal_hp": "same side AND HP<=maxHP*4//5; skill0 or fallback2; 401708",
+    "heal_morale": "same side AND morale<81; skill1 or fallback2;401AA4",
+    "offensive_skill": "different side AND target.INT+5<=caster.INT; skill13/14/6;401E1C; this is AI eligibility only, then actual cast still rolls42ABB0",
+    "rally": "same side AND moveable==0; no integrity or HP threshold;4021A8; actual type45 immunity happens at cast",
+    "ordinary_attack": "For each selected enemy, record station and score=max(1,ATK-DEF)*10000//target.HP. All later station records overwrite earlier even if score same. 40115A scans slots0..127: immediately picks first score>9999; otherwise strict max score, equal scores keep lowest slot. If current station can hit target, explicit final scan makes it stationary.",
+    "airstrike": "current station only; score=(skill15.para1*caster.INT//100)*10000//target.HP. Ignores skill level/application percent/target INT. 40115A same low-slot kill-first/max-score picker.",
+    "move_toward": "40124C: default result=-1 and destination=current; if already exact target return0; otherwise enumerate reachable noncurrent stations row-major. Only accept strictly smaller Manhattan distance to target than current best; tie keeps first. Return1 if improved; no improvement=-1. Does not find globally shortest obstacle path or move sideways to escape local minimum.",
+    "retreat": "40144E: requires last_attacker slot>=0 and still stage!=0, else fail. For each reachable noncurrent tile, score=Manhattan(tile,last_attacker.pos)+9 if terrain id in9,10,11; pick strict maximum, row-major tie. Not safety against every enemy.",
+    "movement_evidence": [
+      "418e29.json",
+      "418c7c.json",
+      "4198e5.json"
+    ]
+  },
+  "behavior_transitions": {
+    "2/6": "if target stage0 ->behavior1 and return1 without action selection",
+    "3": "if target stage0 ->behavior7 and return1",
+    "4": "if current==target_x/y ->behavior7 and return1",
+    "5": "if current==target_x/y ->behavior0 and return1",
+    "7": "after plan selected, if move_mode<2 and action_kind==attack, behavior2,target_slot=target cell map high byte",
+    "8/10": "on exact arrival swap target_x/y with home_x/y and return1;10 can attack/heal en route,8 only move",
+    "1": "never reads target_x/y; no rally fallback",
+    "13": "wait only"
+  },
+  "execution": "4043EA executes movement first; if stepped on mine, explode and return before planned attack/skill. Otherwise wait consumes action, attack/skill then consume action. No synchronous counterattack.",
+  "limitations": [
+    "Case7/17 original has apparent bug checking selected skill<0 rather than selected target<0; do not copy potential out-of-bounds access; fail gracefully when target=-1."
+  ],
+  "evidence_files": [
+    "act.json",
+    "40124c.json",
+    "40144e.json",
+    "401708.json",
+    "4018fb.json",
+    "401aa4.json",
+    "401c73.json",
+    "401e1c.json",
+    "401fff.json",
+    "4021a8.json",
+    "402374.json",
+    "40251a.json",
+    "402693.json",
+    "402967.json",
+    "402b3c.json",
+    "401035.json",
+    "4010d1.json",
+    "40115a.json",
+    "403f8e.json",
+    "404004.json",
+    "40479d.json",
+    "402d3f.json",
+    "418e29.json",
+    "418c7c.json",
+    "4198e5.json"
+  ],
+  "turn_loop": "40479D: rebuild actor list402D3F each iteration, first slot0..127 with stage!=0 AND moveable==1, no side filter. do{404004(actor)}while(return!=0), so behavior transitions reevaluate immediately without consuming turn. Execute selected plan; treasure hook429A4A;T510; repeat actor scan. Rally can reactivate earlier slots in same AI phase."
+}

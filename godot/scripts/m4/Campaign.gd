@@ -6,8 +6,17 @@ extends "res://scripts/m2/Campaign.gd"
 const M4_PATH := "res://data/m4.json"
 const M5_PATH := "res://data/m5.json"
 const M3_PATH := "res://data/m3.json"
+const TownRules = preload("res://scripts/m4/TownRules.gd")
+# Original JZ completion posts WM_CLOSE, unlike ordinary world/defeat exit.
+signal game_close_requested
+var pending_town_command: Dictionary = {}
+# Only the actual L35 victory continuation records; ending previews never do.
+var highscore_path := "user://hiscore.dat"
+
 const LevelBuilder = preload("res://scripts/m4/LevelBuilder.gd")
 
+var qa_mode := DisplayServer.get_name() == "headless"
+var _story_generation := 0
 var m4: Dictionary = {}
 var m5: Dictionary = {}
 var m3: Dictionary = {}
@@ -23,13 +32,31 @@ var battle_story_queue: Array = []
 var battle_story_seen: Dictionary = {}
 var story_layer: CanvasLayer
 var deploy_selected: Array = []
+var deploy_pages := [0,0]
+var deploy_page_level := -1
 var current_deploy_pids: Array = []
-var levelup_layer: CanvasLayer
-var pending_report: Dictionary = {}
+var deployment_screen: Control
+var strategic_screen: Control
+var strategic_palette_key := "BIGMAP"
+# 96A790 target palette changes only on full IMG loads, not PLACE fades.
+var native_scene_palette_key := "BIGMAP"
 var credits_layer: CanvasLayer
+var pending_battle_result: Dictionary = {}
+var _play_accum := 0.0
+var ending_steps: Array = []
+var ending_step := 0
+var ending_preview := false
+var ending_flow_events:Array=[]
+var battle_baseline: Dictionary = {}
+var pending_save_snapshot: Dictionary = {}
+var modal_layer: CanvasLayer
+var modal_previous_busy := false
+var battle_visual_active := false
+var battle_visual_sequences := 0
 
 
-func setup(font_ref: Font) -> void:
+func setup(font_ref: Font,creation:Dictionary={}) -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	font = font_ref
 	ui_theme = OriginalUI.make_theme(font)
 	self.theme = ui_theme
@@ -47,11 +74,24 @@ func setup(font_ref: Font) -> void:
 	state.player_name = _load_player_name()
 	var vcfg := ConfigFile.new()
 	if vcfg.load("user://dlz_config.cfg") == OK:
+		state.configure_protagonist(int(vcfg.get_value("player", "face", 103)),
+				int(vcfg.get_value("player", "unit", 1)),
+				int(vcfg.get_value("player", "wuli", 80)))
 		state.story_variant = bool(vcfg.get_value("video", "story_variant", false))
 		state.difficulty = int(vcfg.get_value("gameplay", "difficulty", 1))
+	if not creation.is_empty():
+		state.player_name=str(creation.get("name","主　角"))
+		state.configure_protagonist(int(creation.get("face",103)),int(creation.get("unit",1)),int(creation.get("wuli",80)))
+		state.difficulty=clampi(int(creation.get("difficulty",1)),0,2)
 	selected_town = state.level_town(state.campaign_index)
 	state.current_town = selected_town
+	_music(state.town_bgm_scene)
 	_show_world()
+
+
+func _music(scene: int, restart := true) -> void:
+	var player = get_node_or_null("/root/Music")
+	if player != null: player.play_scene(scene,restart)
 
 
 func _load_player_name() -> String:
@@ -62,29 +102,106 @@ func _load_player_name() -> String:
 
 
 func _process(_delta: float) -> void:
-	if not is_instance_valid(battle) or battle.finished_flag \
-			or battle_story_queue.is_empty() or is_instance_valid(story_player) \
-			or is_instance_valid(cutscene):
+	if state != null:
+		_play_accum += _delta
+		if _play_accum >= 1:
+			state.play_seconds += int(_play_accum)
+			_play_accum -= int(_play_accum)
+	if not is_instance_valid(battle) or is_instance_valid(story_player) or is_instance_valid(cutscene) or battle_visual_active:
 		return
-	if battle.busy or battle.phase != "player":
+	if battle.progress_fx_active or battle.action_resolution_depth>0:
 		return
-	var ids: Array = battle_story_queue.pop_front()
+	if battle_story_queue.is_empty():
+		if not pending_battle_result.is_empty():
+			var r := pending_battle_result
+			pending_battle_result = {}
+			_settle_battle(str(r["result"]), str(r["message"]))
+		return
+	if not battle.finished_flag and not battle.scenario.start_phase_pending and battle_visual_sequences==0 and (battle.busy or battle.phase != "player"):
+		return
+	var entry = battle_story_queue.pop_front()
+	if entry is Dictionary:
+		if entry.has("phase_end"):
+			battle_visual_active = true
+			await battle.scenario.complete_start_phase()
+			battle_visual_active = false
+			battle.update_hud()
+		elif entry.has("phase_movie"):
+			_play_cutscene("res://assets/m5/flc/%s.ogv" % entry["phase_movie"], Callable())
+		elif entry.has("phase_flm"):
+			_play_script_flm(entry["phase_flm"])
+		elif entry.has("phase_mine"):
+			_play_script_mine(entry["phase_mine"])
+		elif entry.has("visual_end"):
+			battle_visual_sequences=maxi(0,battle_visual_sequences-1)
+			battle.busy=battle.finished_flag or battle.scenario.start_phase_pending or battle_visual_sequences>0
+			battle.update_hud()
+		elif entry.has("message_record"):
+			_play_battle_text([int(entry["message_record"])])
+		elif entry.has("message"):
+			_play_battle_text([int(battle.scenario.trigger_texts.get(str(entry["message"]),-1))])
+		else:
+			await battle.scenario._apply([entry])
+	else:
+		_play_battle_text(entry)
+
+
+func _play_script_mine(effect:Dictionary) -> void:
+	battle_visual_active=true
+	var generation:=_story_generation
+	var current=battle
+	await current.scripted_mine(Vector2i(int(effect.tile[0]),int(effect.tile[1])),int(effect.type),int(effect.slot))
+	if generation!=_story_generation:return
+	battle_visual_active=false
+	if is_instance_valid(current):current.busy=current.finished_flag or current.scenario.start_phase_pending or battle_visual_sequences>0
+
+
+func _play_script_flm(effect:Dictionary) -> void:
+	# Guard before awaiting: _process must not consume the next line each frame.
+	battle_visual_active=true
+	battle.busy=true
+	var generation:=_story_generation
+	var current=battle
+	var tile: Array=effect.get("tile",[0,0])
+	var world:=Vector2((int(tile[0])+0.5)*current.TILE,(int(tile[1])+0.5)*current.TILE)
+	if bool(effect.get("camera",false)):
+		current.camera.position=current._focus_position(world)
+		current._clamp_camera()
+	var duration:float=current._play_single_cell_flm(int(effect.get("index",0)),world)
+	if not qa_mode and not current.fast_sim:
+		await current._wait_presentation_time(duration+float(effect.get("wait_ms",0))/1000.0)
+	if generation!=_story_generation:return
+	battle_visual_active=false
+	if is_instance_valid(current):
+		current.busy=current.finished_flag or current.scenario.start_phase_pending or battle_visual_sequences>0
+
+
+func _play_battle_text(ids: Array) -> void:
 	if ids.is_empty():
 		return
 	battle.busy = true
-	var b = battle
+	var generation := _story_generation
 	_play_story(ids, func():
-		if is_instance_valid(b):
-			b.busy = false
-	)
+		if generation == _story_generation and is_instance_valid(battle):
+			battle.busy = battle.finished_flag or battle.scenario.start_phase_pending or battle_visual_sequences>0)
 
 
 func load_campaign_slot(slot: int) -> bool:
-	if not state.load_slot(slot):
+	if not preload("res://scripts/ui/OriginalSaveSlots.gd").load_slot(state,slot):
 		return false
 	state.setup_m4(m4)
 	selected_town = state.current_town
-	_show_world()
+	_close_panel()
+	if is_instance_valid(battle): battle.queue_free(); battle = null
+	if not state.battle_resume.is_empty():
+		var record: Dictionary = state.battle_resume
+		current_deploy_pids = record.get("deploy",[]).duplicate()
+		current_battle_standalone = bool(record.get("standalone",false))
+		battle_baseline = record.get("baseline",{}).duplicate(true)
+		_resume_battle(record.get("snapshot",{}))
+	else:
+		_music(state.town_bgm_scene)
+		_show_town(selected_town)
 	return true
 
 
@@ -107,6 +224,9 @@ func _button(text: String, pos: Vector2, size: Vector2,
 
 
 func _bg_texture(path: String, alpha: float = 1.0) -> void:
+	for key in ["K00","K01","K02","K03","K04"]:
+		if path.ends_with("/"+key.to_lower()+".png"):
+			native_scene_palette_key=key;strategic_palette_key=key
 	var tr := TextureRect.new()
 	tr.position = Vector2.ZERO
 	tr.size = Vector2(640, 480)
@@ -124,7 +244,14 @@ func _panel_shell(title: String, w: int = 560, h: int = 390) -> VBoxContainer:
 	panel_root = Control.new()
 	panel_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	panel_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	ui_root.add_child(panel_root)
+	if is_instance_valid(battle):
+		modal_previous_busy = battle.busy
+		battle.busy = true
+		modal_layer = CanvasLayer.new()
+		modal_layer.layer = 110
+		add_child(modal_layer)
+		modal_layer.add_child(panel_root)
+	else: ui_root.add_child(panel_root)
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.66)
 	dim.position = Vector2.ZERO
@@ -167,6 +294,14 @@ func _panel_shell(title: String, w: int = 560, h: int = 390) -> VBoxContainer:
 	return content
 
 
+func _close_panel() -> void:
+	super._close_panel()
+	if is_instance_valid(modal_layer):
+		modal_layer.queue_free()
+		if is_instance_valid(battle): battle.busy = modal_previous_busy
+	modal_layer = null
+
+
 func _top_status(title: String) -> void:
 	ui_root.add_child(OriginalUI.header(title, font, Rect2(0, 0, 640, 30)))
 
@@ -181,122 +316,77 @@ func _new_ui() -> Control:
 
 # ---------------- 世界地图 ----------------
 
+func _service_palette(key:String) -> void:
+	strategic_palette_key=key;native_scene_palette_key=key
+
+func _service_input_blocked() -> bool:
+	return _strategic_input_blocked()
+
+func _strategic_input_blocked() -> bool:
+	# Native _input must not swallow GUI-based report/info/developer overlays.
+	return is_instance_valid(panel_root) or is_instance_valid(result_canvas) or is_instance_valid(story_player) or is_instance_valid(cutscene) or is_instance_valid(info_panel)
+
+
 func _show_world() -> void:
-	mode = "world"
+	mode="world"
 	_new_ui()
-	_bg_texture(str(m2["meta"].get("bigmap", "")), 1.0)
-	_dim(0.22)
-	_top_status("战 役 / 平 阳")
-	var lv: Dictionary = state.campaign_level()
-	var title := "第 %d / 36 关" % (state.campaign_index + 1)
-	if state.campaign_finished():
-		title = "主线完成"
-	if state.hidden_unlocked:
-		title += "    隐藏关已解锁"
-	var chapter := _label(title, Vector2(10, 36), Vector2(420, 24), 16,
-			OriginalUI.GOLD_LIGHT)
-	ui_root.add_child(chapter)
-	var info := _label("累计得分 %d    资金 %d    队伍 %d/%d" % [
-		state.score_total, state.money, state.party_size(), state.max_party()],
-		Vector2(330, 36), Vector2(300, 24), 16, OriginalUI.INK)
-	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	ui_root.add_child(info)
+	strategic_palette_key="BIGMAP";native_scene_palette_key="BIGMAP"
+	strategic_screen=preload("res://scripts/ui/OriginalStrategicScreen.gd").new();ui_root.add_child(strategic_screen)
+	strategic_screen.input_blocked=_strategic_input_blocked
+	strategic_screen.setup(font,"world",state)
+	strategic_screen.town_enter.connect(_select_town)
+	strategic_screen.system_requested.connect(_world_system)
 
-	# 当前任务牌
-	var card := OriginalUI.nine_patch(OriginalUI.PANEL_RED,
-			Rect2(10, 66, 214, 306), 10)
-	ui_root.add_child(card)
-	var head := OriginalUI.header("当前任务", font, Rect2(16, 72, 202, 26))
-	ui_root.add_child(head)
-	var mission := "全部关卡已完成"
-	var mission2 := "可进入隐藏关 / 战斗演练"
-	if not lv.is_empty():
-		mission = "L%02d %s" % [int(lv["index"]), str(lv["name"])]
-		mission2 = "目标：%s" % str(lv.get("objective", {}).get("label", lv["success"]))
-	var ml := _label(mission, Vector2(20, 104), Vector2(194, 48), 16,
-			OriginalUI.GOLD_LIGHT)
-	ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ui_root.add_child(ml)
-	var m2l := _label(mission2, Vector2(20, 154), Vector2(194, 70), 14,
-			OriginalUI.INK)
-	m2l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ui_root.add_child(m2l)
-	var st := _label("出击城镇：%s" % state.town_name(selected_town),
-			Vector2(20, 228), Vector2(194, 24), 16, Color("#d8c39a"))
-	ui_root.add_child(st)
-	var enter := _button("进入城镇", Vector2(20, 254), Vector2(194, 32),
-			_enter_town, 16)
-	ui_root.add_child(enter)
-	var archive := _button("剧情回顾", Vector2(20, 290), Vector2(94, 28),
-			_open_story_archive, 14)
-	ui_root.add_child(archive)
-	var party := _button("队伍", Vector2(120, 290), Vector2(94, 28),
-			_open_party, 14)
-	ui_root.add_child(party)
-	var save := _button("存档", Vector2(20, 322), Vector2(94, 28),
-			_open_save, 14)
-	ui_root.add_child(save)
-	var loadb := _button("读档", Vector2(120, 322), Vector2(94, 28),
-			_open_save_load, 14)
-	ui_root.add_child(loadb)
-	var back := _button("返回标题", Vector2(20, 354), Vector2(194, 28),
-			func(): exit_requested.emit(), 14)
-	ui_root.add_child(back)
 
-	# 19 城镇，右侧石牌
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 4)
-	grid.add_theme_constant_override("v_separation", 4)
-	grid.position = Vector2(238, 70)
-	ui_root.add_child(grid)
-	var towns: Array = m2.get("towns", [])
-	for i in range(towns.size()):
-		var t: Dictionary = towns[i]
-		var unlocked: bool = state.town_unlocked(i)
-		var status := "已解放" if state.is_liberated(i) else ("可进入" if unlocked else "未开放")
-		var b := _button("%s\n%s" % [t["name"], status], Vector2.ZERO,
-				Vector2(94, 46), _select_town.bind(i), 14)
-		# 锁定状态只写在第二行“未开放”，地名仍用正常亮色，
-		# 保证 16px 点阵字能读；点击由 _select_town 拦下并提示。
-		b.add_theme_color_override("font_color", OriginalUI.INK)
-		b.add_theme_color_override("font_hover_color", OriginalUI.GOLD_LIGHT)
-		if i == selected_town:
-			b.modulate = Color(1.15, 1.0, 0.62)
-		grid.add_child(b)
+func _world_system(point:Vector2) -> void:
+	_close_panel()
+	modal_layer=CanvasLayer.new();modal_layer.layer=125;add_child(modal_layer)
+	panel_root=preload("res://scripts/ui/OriginalChoice.gd").new();modal_layer.add_child(panel_root)
+	panel_root.setup(font,["退  出","音  乐","音  效","读  档","存  档"],Vector2(minf(point.x,551),minf(point.y,343)))
+	panel_root.cancelled.connect(_close_panel)
+	panel_root.chosen.connect(_world_system_chosen)
 
-	# 隐藏关 / 彩蛋入口
-	if state.hidden_unlocked:
-		var sim := _button("隐藏关 模拟", Vector2(238, 322), Vector2(120, 30),
-				_start_hidden.bind("simulation"), 14)
-		ui_root.add_child(sim)
-		var fic := _button("隐藏关 虚构", Vector2(364, 322), Vector2(120, 30),
-				_start_hidden.bind("fiction"), 14)
-		ui_root.add_child(fic)
-		var egg := _button("彩蛋关", Vector2(490, 322), Vector2(110, 30),
-				_open_easter, 14)
-		ui_root.add_child(egg)
-	var drill := _button("战斗演练 / 47 关", Vector2(238, 356), Vector2(180, 30),
-			_open_battle_select, 14)
-	ui_root.add_child(drill)
-	var hint_bg := ColorRect.new()
-	hint_bg.color = Color(0.02, 0.01, 0.01, 0.58)
-	hint_bg.position = Vector2(232, 388)
-	hint_bg.size = Vector2(400, 24)
-	hint_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui_root.add_child(hint_bg)
-	var hint := _label("选择城镇 → 进入；指挥部出击当前关卡。", Vector2(238, 392),
-			Vector2(390, 20), 16, Color("#f0dfb8"))
-	ui_root.add_child(hint)
+
+func _world_system_chosen(choice:int) -> void:
+	_close_panel()
+	match choice:
+		0:_strategy_confirm("退出吗？",func():exit_requested.emit(),Vector2(300,200))
+		1:
+			var music=get_node_or_null("/root/Music")
+			if music!=null:music.toggle()
+		2:OriginalUI.sfx_enabled=not OriginalUI.sfx_enabled
+		3,4:_world_save_picker(choice==3)
+
+
+func _strategy_confirm(prompt:String,accepted:Callable,origin:=Vector2(320,200)) -> void:
+	_close_panel()
+	modal_layer=CanvasLayer.new();modal_layer.layer=125;add_child(modal_layer)
+	panel_root=preload("res://scripts/ui/OriginalConfirm.gd").new();modal_layer.add_child(panel_root)
+	var palette:Array=preload("res://scripts/ui/OriginalPalette.gd").colors(strategic_palette_key)
+	panel_root.setup(font,prompt,origin,preload("res://scripts/ui/OriginalPalette.gd").color_at(palette,OriginalUI.native_text_index),palette)
+	panel_root.answered.connect(func(yes:bool):
+		_close_panel()
+		if yes:accepted.call())
+
+
+func _world_save_picker(load_first:bool) -> void:
+	_close_panel()
+	modal_layer=CanvasLayer.new();modal_layer.layer=125;add_child(modal_layer)
+	panel_root=preload("res://scripts/ui/OriginalSavePicker.gd").new();modal_layer.add_child(panel_root)
+	panel_root.setup(font,preload("res://scripts/ui/OriginalPalette.gd").colors("BIGMAP"),preload("res://scripts/ui/OriginalSaveSlots.gd").previews(state),load_first)
+	panel_root.chosen.connect(func(slot:int):
+		_close_panel()
+		if slot<0:return
+		_strategy_confirm("取档吗？" if load_first else "存档吗？",func():
+			if load_first:
+				if load_campaign_slot(slot) and not is_instance_valid(battle):_show_world()
+			else:_save_slot(slot),Vector2(300,200)))
 
 
 func _select_town(i: int) -> void:
-	if not state.town_unlocked(i):
-		_toast("该城镇尚未开放")
-		return
-	selected_town = i
-	state.current_town = i
-	_show_world()
+	if not state.town_unlocked(i):return
+	selected_town=i;state.current_town=i
+	_show_town(i)
 
 
 func _enter_town() -> void:
@@ -304,261 +394,190 @@ func _enter_town() -> void:
 
 
 func _show_town(index: int) -> void:
-	var t: Dictionary = state.town(index)
-	if t.is_empty():
-		return
-	mode = "town"
-	selected_town = index
-	state.current_town = index
+	if state.town(index).is_empty():return
+	mode="town";selected_town=index;state.current_town=index
 	_new_ui()
-	_bg_texture(str(t.get("bg", "")), 1.0)
-	_dim(0.10)
-	_top_status("L%02d %s / %s" % [index, t["name"], "已解放" if state.is_liberated(index) else "未解放"])
-	var lv: Dictionary = state.campaign_level()
-	var same: bool = not lv.is_empty() and state.level_town(state.campaign_index) == index
-	var banner := OriginalUI.nine_patch(OriginalUI.PANEL_RED,
-			Rect2(10, 38, 620, 58), 8)
-	ui_root.add_child(banner)
-	var mission := "本镇暂无当前战事，可整训队伍。"
-	if same:
-		mission = "当前任务：L%02d %s    目标：%s" % [
-			int(lv["index"]), str(lv["name"]),
-			str(lv.get("objective", {}).get("label", lv["success"]))]
-	var ml := _label(mission, Vector2(20, 44), Vector2(480, 44), 16,
-			OriginalUI.GOLD_LIGHT)
-	ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ui_root.add_child(ml)
-	if same:
-		var go := _button("出击", Vector2(520, 50), Vector2(96, 34),
-				_open_mission, 16)
-		ui_root.add_child(go)
+	strategic_palette_key="PLACE%02d"%index
+	strategic_screen=preload("res://scripts/ui/OriginalStrategicScreen.gd").new();ui_root.add_child(strategic_screen)
+	strategic_screen.input_blocked=_strategic_input_blocked
+	strategic_screen.setup(font,"town",state,index)
+	strategic_screen.building_enter.connect(_town_building)
 
-	var services := [
-		["民房", _service_heal],
-		["指挥部", _open_command],
-		["军械部", _service_junxie],
-		["杂货铺", _service_zahuo],
-		["作坊", _open_forge],
-		["队伍", _open_party],
-		["出口", _show_world],
-	]
-	for i in range(services.size()):
-		var b := _button(services[i][0], Vector2(8 + i * 86, 424),
-				Vector2(82, 44), services[i][1], 16)
-		if i == 2 and t["shops"]["junxie"].is_empty():
-			b.disabled = true
-		if i == 3 and t["shops"]["zahuo"].is_empty():
-			b.disabled = true
-		ui_root.add_child(b)
-	var foot_bg := ColorRect.new()
-	foot_bg.color = Color(0.02, 0.01, 0.01, 0.58)
-	foot_bg.position = Vector2(0, 390)
-	foot_bg.size = Vector2(640, 26)
-	foot_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui_root.add_child(foot_bg)
-	var foot := _label("民房回血 / 指挥部作战 / 军械/杂货/作坊补给 / 队伍转职 / 出口回地图",
-			Vector2(8, 396), Vector2(620, 20), 16, Color("#f0dfb8"))
-	ui_root.add_child(foot)
+
+func _town_building(slot:int) -> void:
+	if slot!=4:OriginalUI.play_native_sfx(9)
+	match slot:
+		0:_service_heal()
+		1:_open_command()
+		2:_service_junxie()
+		3:_service_zahuo()
+		4:_show_world()
+		5:_open_forge()
+
+
+func _show_room(kind:String) -> void:
+	mode=kind
+	_new_ui()
+	if kind=="command":native_scene_palette_key="BACK19"
+	strategic_palette_key=native_scene_palette_key
+	strategic_screen=preload("res://scripts/ui/OriginalStrategicScreen.gd").new();ui_root.add_child(strategic_screen)
+	strategic_screen.input_blocked=_strategic_input_blocked
+	strategic_screen.setup(font,kind,state,selected_town,native_scene_palette_key)
+	strategic_screen.room_exit.connect(func():_show_town(selected_town))
 
 
 func _open_command() -> void:
-	var lv: Dictionary = state.campaign_level()
-	if not lv.is_empty() and state.level_town(state.campaign_index) == selected_town:
-		_open_mission()
-		return
-	# 非前线：保留 M2 的招募/队伍入口
-	var content := _panel_shell("指挥部 / 整训", 430, 300)
-	content.add_child(_label("招募新兵 / 转职 / 战斗演练", Vector2.ZERO,
-			Vector2(390, 24), 16, Color("#d8c39a")))
-	var b1 := _button("招募新兵", Vector2.ZERO, Vector2(220, 34),
-			_open_recruit, 16)
-	content.add_child(b1)
-	var b2 := _button("队伍 / 转职", Vector2.ZERO, Vector2(220, 34),
-			_open_party, 16)
-	content.add_child(b2)
-	var b3 := _button("战斗演练（47 关）", Vector2.ZERO, Vector2(260, 34),
-			_open_battle_select, 16)
-	content.add_child(b3)
-	var b4 := _button("返回城镇", Vector2.ZERO, Vector2(160, 30),
-			func(): _close_panel(); _show_town(selected_town), 14)
-	content.add_child(b4)
+	_open_mission()
+
+
+func _service_heal() -> void:
+	_show_room("resident")
+	var visit: Dictionary = TownRules.visit_resident(state, selected_town)
+	_play_story(visit.get("messages", []), func():
+		if visit.has("easter"):
+			_launch_level(int(visit["easter"]), false)
+		elif bool(visit.get("first_deploy", false)):
+			_show_first_departure()
+		)
+
+
+func _show_first_departure() -> void:
+	_strategy_confirm("出战吗？",func():
+		TownRules.set_flag(state,0,2);pending_town_command={}
+		_launch_campaign_level())
 
 
 func _open_mission() -> void:
-	var lv: Dictionary = state.campaign_level()
-	if lv.is_empty():
-		_toast("没有可出击的关卡")
-		return
-	var content := _panel_shell("作战会议 / L%02d %s" % [
-		int(lv["index"]), str(lv["name"])], 560, 300)
-	var limit := int(lv.get("turn_limit", 0))
-	content.add_child(_label("胜利：%s\n失败：%s\n回合上限：%s\n目标：%s" % [
-		str(lv.get("success", "")), str(lv.get("failure", "")),
-		str(limit) if limit > 0 else "无",
-		str(lv.get("objective", {}).get("label", ""))],
-		Vector2.ZERO, Vector2(520, 92), 16, OriginalUI.INK))
-	var party_line := "可出击队伍：%d 人    部署点：%d" % [
-		state.party_size(), (lv.get("deploy", []) as Array).size()]
-	content.add_child(_label(party_line,
-		Vector2.ZERO, Vector2(520, 24), 16, Color("#d8c39a")))
-	var hint := _label("敌军会按关卡脚本行动；目标与增援已接入。",
-			Vector2.ZERO, Vector2(520, 40), 16, Color("#e5d4ad"))
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(hint)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	var go := _button("出 击", Vector2.ZERO, Vector2(160, 40),
-			_launch_campaign_level, 16)
-	row.add_child(go)
-	var story := _button("剧情", Vector2.ZERO, Vector2(100, 40),
-			_play_current_story, 16)
-	row.add_child(story)
-	var back := _button("返回", Vector2.ZERO, Vector2(100, 40),
-			func(): _close_panel(); _show_town(selected_town), 16)
-	row.add_child(back)
-	content.add_child(row)
+	_show_room("command")
+	# Original town0 commander is an empty function, not a resident shortcut.
+	if selected_town==0:return
+	pending_town_command=TownRules.prepare_command(state,selected_town)
+	var messages:Array=pending_town_command.get("messages",[])
+	if bool(pending_town_command.get("no_choice",false)):
+		_play_story(messages,func():pass)
+	else:_play_story(messages,_show_mission_brief)
+
+
+func _show_mission_brief() -> void:
+	if state.campaign_level().is_empty():return
+	if pending_town_command.has("choice_options"):
+		_show_solo_choice()
+	else:_strategy_confirm("出战吗？",_launch_campaign_level)
+
+
+func _show_solo_choice() -> void:
+	_close_panel()
+	modal_layer=CanvasLayer.new();modal_layer.layer=125;add_child(modal_layer)
+	panel_root=preload("res://scripts/ui/OriginalChoice.gd").new();modal_layer.add_child(panel_root)
+	panel_root.setup(font,["肖  飞","李霜泗"],Vector2(320,200),true,preload("res://scripts/ui/OriginalPalette.gd").colors(strategic_palette_key))
+	panel_root.cancelled.connect(_close_panel)
+	panel_root.chosen.connect(func(choice:int):_close_panel();_accept_solo(choice))
 
 
 func _launch_campaign_level() -> void:
 	current_battle_standalone = false
-	if state.campaign_finished():
-		_toast("主线已完成；请从世界图进入隐藏关或战斗演练")
+	if state.campaign_level().is_empty():
+		_toast("当前路线已完成")
 		return
 	_close_panel()
-	var idx: int = state.campaign_index
-	if not current_battle_standalone:
+	if not pending_town_command.is_empty():
+		if pending_town_command.has("choice_options"):
+			_show_solo_choice()
+			return
+		TownRules.accept_command(state, selected_town, pending_town_command)
+		pending_town_command.clear()
+	if not qa_mode:
 		state.save_checkpoint()
-	_play_media(idx, func():
-		_play_story_then(idx, func(): _show_deployment(idx)))
+	_show_deployment(state.campaign_index)
+
+
+func _accept_solo(choice: int) -> void:
+	var result: Dictionary = TownRules.accept_command(state, selected_town, pending_town_command, choice)
+	pending_town_command.clear()
+	var slot := int(result.get("solo", 8))
+	current_deploy_pids = [slot]
+	var level: Dictionary = state.m4_level(state.campaign_index)
+	# 本关仅部署所选角色，敌40..47指定目标改为该slot。
+	state.next_battle_overrides = {"solo": slot}
+	_play_media(state.campaign_index, func(): _launch_level(state.campaign_index, false, [slot]))
 
 
 func _show_deployment(idx: int) -> void:
-	_new_ui()
-	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/k00.png") \
-			if ResourceLoader.exists("res://assets/ui/k00.png") else null
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bg.size = Vector2(640, 480)
-	ui_root.add_child(bg)
-	var lv: Dictionary = state.m4_level(idx)
-	var fixed_pids: Array = (lv.get("fixed_deploy", []) as Array).duplicate()
-	var fixed := not fixed_pids.is_empty()
-	var max_dep := mini(int(lv.get("max_deploy", 10)), state.party_size())
-	max_dep = maxi(1, max_dep)
-	if fixed:
-		# L00 等固定出战关：只允许剧情指定角色，列表不展示整支队伍。
-		max_dep = fixed_pids.size()
-		deploy_selected.clear()
-		for pid in fixed_pids:
-			var fm = state.deploy_member(int(pid))
-			if fm != null and int(fm.get("hp", 0)) > 0:
-				deploy_selected.append(int(pid))
-	else:
-		# 过滤已不在队伍/已阵亡的旧选择
-		var valid: Array = []
-		for pid in deploy_selected:
-			for m in state.party:
-				if int(m["pid"]) == int(pid) and int(m.get("hp", 0)) > 0:
-					valid.append(int(pid))
-		deploy_selected = valid
-		if deploy_selected.is_empty():
-			for m in state.party:
-				if deploy_selected.size() >= max_dep:
-					break
-				if int(m.get("hp", 0)) > 0:
-					deploy_selected.append(int(m["pid"]))
-	ui_root.add_child(OriginalUI.header("出 战 / L%02d %s" % [idx, lv.get("name", "")],
-			font, Rect2(0, 0, 640, 30)))
-	var left := VBoxContainer.new()
-	left.position = Vector2(44, 84)
-	left.size = Vector2(268, 292)
-	left.add_theme_constant_override("separation", 3)
-	ui_root.add_child(left)
-	if fixed:
-		for pid in fixed_pids:
-			var fm = state.deploy_member(int(pid))
-			if fm == null:
-				continue
-			var line := OriginalUI.label("★ %s  Lv%d %s（主角）" % [
-					fm.get("name", ""), int(fm.get("level", 1)),
-					fm.get("unit_name", "")], font, 16, OriginalUI.GOLD_LIGHT)
-			line.custom_minimum_size = Vector2(262, 24)
-			line.size = Vector2(262, 24)
-			left.add_child(line)
-	else:
-		for m in state.party:
-			var pid := int(m["pid"])
-			var mark := "✓" if deploy_selected.has(pid) else "·"
-			var b := OriginalUI.button("%s %s  Lv%d %s" % [mark, m.get("name", ""),
-					int(m.get("level", 1)), m.get("unit_name", "")], font,
-					Vector2(262, 24), _toggle_deploy.bind(pid, idx), 16)
-			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			b.disabled = int(m.get("hp", 0)) <= 0
-			left.add_child(b)
-	var right := VBoxContainer.new()
-	right.position = Vector2(372, 84)
-	right.size = Vector2(224, 292)
-	right.add_theme_constant_override("separation", 3)
-	ui_root.add_child(right)
-	right.add_child(OriginalUI.label("本关固定出战" if fixed else
-			"出战 %d/%d" % [deploy_selected.size(), max_dep],
-			font, 16, OriginalUI.GOLD_LIGHT))
-	for pid in deploy_selected:
-		var m = state.deploy_member(int(pid))
-		if m != null:
-			right.add_child(OriginalUI.label("%s  Lv%d%s" % [m.get("name", ""),
-					int(m.get("level", 1)), "（主角）" if fixed else ""],
-					font, 16, Color("#f0e4c8")))
-	right.add_child(OriginalUI.label("目标：%s" % lv.get("objective", {}).get("label", ""),
-			font, 12, Color("#e5d4ad")))
-	right.add_child(OriginalUI.label("敌军：%d" % int(lv.get("enemies", 0)),
-			font, 12, Color("#e5d4ad")))
-	var go := _button("出 击", Vector2(120, 398), Vector2(140, 34),
-			_deploy_go.bind(idx), 16)
-	ui_root.add_child(go)
-	var back := _button("返 回", Vector2(300, 398), Vector2(120, 34),
-			_show_world, 16)
-	ui_root.add_child(back)
-	var fixed_name := ""
-	if fixed:
-		var fm0 = state.deploy_member(int(fixed_pids[0]))
-		if fm0 != null:
-			fixed_name = str(fm0.get("name", ""))
-	var hint := OriginalUI.label(
-			"本关固定：%s（主角）/ 自动检查点已保存" % fixed_name if fixed else
-			"K00 出战 / 选择出战队员 / 自动检查点已保存",
-			font, 16, Color("#e5d4ad"))
-	hint.position = Vector2(120, 440)
-	ui_root.add_child(hint)
-
-
-func _deploy_go(idx: int) -> void:
-	current_deploy_pids = deploy_selected.duplicate()
-	_launch_level(idx, false, current_deploy_pids)
-
-
-func _toggle_deploy(pid: int, idx: int) -> void:
-	var lv: Dictionary = state.m4_level(idx)
-	var max_dep := maxi(1, mini(int(lv.get("max_deploy", 10)), state.party_size()))
-	if deploy_selected.has(pid):
-		deploy_selected.erase(pid)
-	elif deploy_selected.size() >= max_dep:
-		_toast("最多出战 %d 人" % max_dep)
+	var dep:Dictionary=state.m4_level(idx).get("deployment",{})
+	var limit:=int(dep.get("max_units",0))
+	if not bool(state.m4_level(idx).get("party_deploy",limit not in [0,999])) or limit==999 or limit==0:
+		current_deploy_pids=[]
+		_play_media(idx,func():_launch_level(idx,false,[]))
 		return
-	else:
-		deploy_selected.append(pid)
-	_show_deployment(idx)
+	mode="deployment";strategic_palette_key="K00";native_scene_palette_key="K00"
+	_new_ui()
+	deployment_screen=preload("res://scripts/ui/OriginalDeployment.gd").new();ui_root.add_child(deployment_screen)
+	deployment_screen.setup(font,state,idx)
+	deploy_page_level=idx
+	deployment_screen.selection_changed.connect(_sync_deployment)
+	deployment_screen.confirmed.connect(func(slots:Array):
+		current_deploy_pids=slots.duplicate()
+		_play_media(idx,func():_launch_level(idx,false,current_deploy_pids)))
+	_sync_deployment()
+
+
+func _sync_deployment() -> void:
+	if not is_instance_valid(deployment_screen):return
+	deploy_pages=deployment_screen.pages.duplicate()
+	deploy_selected=deployment_screen.selected_slots().filter(func(pid):return int(pid)!=-999)
+
+
+func _deploy_page(side: int, _idx: int) -> void:
+	if is_instance_valid(deployment_screen):deployment_screen.set_page(side)
+
+
+func _deploy_go(_idx: int) -> void:
+	if is_instance_valid(deployment_screen):deployment_screen.submit()
+
+
+# Diagnostic helper only; the normal UI uses native drag/drop or doubleclick.
+func _toggle_deploy(pid: int, _idx: int) -> void:
+	if not is_instance_valid(deployment_screen):return
+	for side in [1,0]:
+		for slot in range(32):
+			var m:Dictionary=deployment_screen.member(side,slot)
+			if not m.is_empty() and int(m.pid)==pid:
+				deployment_screen.transfer(side,slot);return
+
+
+func _silence_media_until(cb:Callable) -> Callable:
+	var music=get_node_or_null("/root/Music")
+	if music==null:return cb
+	var token:int=music.suspend_playback()
+	# Bound methods compare as the same signal target even when their bound
+	# tokens differ. Entry MPEG owns both an entry and a chapter suspension;
+	# each must have its own closure so leaving the tree releases both.
+	var release:Callable=func():music.resume_playback(token)
+	tree_exiting.connect(release,CONNECT_ONE_SHOT)
+	return func():
+		if tree_exiting.is_connected(release):tree_exiting.disconnect(release)
+		release.call()
+		if cb.is_valid():cb.call()
 
 
 func _play_media(idx: int, cb: Callable) -> void:
-	var path := _media_for(idx)
-	if path == "":
+	# 41B8E9 stops the old track before both MPEG and alternative TXT entry.
+	_play_chapter(idx,"entry",_silence_media_until(cb))
+
+func _play_chapter(idx: int, branch: String, cb: Callable) -> void:
+	var entry: Dictionary = m5.get("chapter_transitions",{}).get(str(idx),{}).get(branch,{})
+	if not bool(entry.get("enabled",false)):
 		cb.call()
 		return
-	_play_cutscene(path, cb)
+	if state.story_variant:
+		var record := int(entry.get("text_id",-1))
+		if record < 0 or bool(entry.get("text_empty",true)): cb.call()
+		else: _play_story([record],cb)
+	else:
+		var path:=str(entry.get("mpeg_path",""))
+		# 4294BE closes the CD device only for a file that actually plays.
+		# This is deliberately NOT a generic FLC/VideoStreamPlayer rule.
+		_play_cutscene(path,_silence_media_until(cb) if path!="" and ResourceLoader.exists(path) else cb)
 
 
 func _play_story_then(idx: int, cb: Callable) -> void:
@@ -569,7 +588,8 @@ func _play_story_then(idx: int, cb: Callable) -> void:
 	_play_story(ids, cb)
 
 
-func _media_for(idx: int) -> String:
+func _media_for(idx: int, entry := true) -> String:
+	# 4294BE(param0)进入战斗播dNN a；param1胜后播dNN。不是设置变体。
 	var media: Dictionary = m5.get("media", {})
 	if (media.get("clips", []) as Array).is_empty():
 		var f := FileAccess.open("res://data/m5_media.json", FileAccess.READ)
@@ -577,25 +597,13 @@ func _media_for(idx: int) -> String:
 			var parsed = JSON.parse_string(f.get_as_text())
 			if parsed is Dictionary:
 				media = parsed
-	var base := ""
-	var variant := ""
-	for c in media.get("clips", []):
-		if str(c.get("kind", "mpeg")) != "mpeg":
-			continue
-		var lvl := int(c.get("level_index", c.get("level", -1)))
-		var cid := str(c.get("id", ""))
-		if lvl != idx and cid != ("d%02d" % (idx + 1)):
-			continue
-		var p := str(c.get("ogv_path", c.get("ogv", "")))
-		if p == "" or not ResourceLoader.exists(p):
-			continue
-		if bool(c.get("variant", false)):
-			variant = p
-		else:
-			base = p
-	if state.story_variant and variant != "":
-		return variant
-	return base
+	var wanted := "d%02d%s" % [idx + 1, "a" if entry else ""]
+	for clip in media.get("clips", []):
+		if str(clip.get("id", "")) == wanted:
+			var path := str(clip.get("ogv_path", clip.get("ogv", "")))
+			if ResourceLoader.exists(path):
+				return path
+	return ""
 
 
 func _play_current_story() -> void:
@@ -643,19 +651,62 @@ func _open_battle_select() -> void:
 		list.add_child(b)
 
 
+# One factory for launch and resume; tests may wrap permissions without
+# duplicating the real campaign loading, checkpoint or settlement path.
+func _create_battle() -> Node2D:
+	return preload("res://scripts/Battle.gd").new()
+
+
 func _launch_level(idx: int, standalone: bool, deploy_pids: Array = []) -> void:
+	_story_generation += 1
+	battle_visual_active=false
+	battle_visual_sequences=0
+	if is_instance_valid(story_player):
+		story_player.queue_free()
+	story_player = null
+	if is_instance_valid(story_layer):
+		story_layer.queue_free()
+	story_layer = null
+	if is_instance_valid(result_canvas):
+		result_canvas.queue_free()
+	result_canvas = null
 	var selected: Array = deploy_pids
-	if selected.is_empty() and not standalone:
+	if not bool(state.m4_level(idx).get("party_deploy",true)):
+		selected=[]
+	elif selected.is_empty() and not standalone:
 		selected = current_deploy_pids
-	var roster: Array = state.party
-	if selected.has(state.PROTAGONIST_PID):
-		# 自定义主角不在 5 人队列表里；出战时临时放进 roster 首位。
-		roster = [state.protagonist_member()] + state.party
+	current_deploy_pids = selected.duplicate()
+	if not standalone: state.save_checkpoint(not qa_mode)
+	state.apply_phase_state(state.m4_level(idx).get("start_phase", {}))
+	var roster: Array = []
+	for slot in range(40):
+		roster.append(state.person(slot))
 	var level: Dictionary = LevelBuilder.build(m4, m2, idx, roster, false, -1, selected)
 	if level.is_empty():
 		_toast("关卡数据缺失")
 		return
 	state.apply_difficulty(level)
+	if state.next_battle_overrides.has("solo"):
+		var solo := int(state.next_battle_overrides["solo"])
+		var existing: Array = []
+		for rec in level.get("units", []):
+			if str(rec.get("side", "")) != "player" or int(rec.get("slot", -1)) == solo:
+				if int(rec.get("slot", -1)) >= 40 and int(rec.get("slot", -1)) < 48:
+					rec["target_slot"] = solo
+				existing.append(rec)
+		if not existing.any(func(rec): return int(rec.get("slot", -1)) == solo):
+			var point: Array = level.get("deploy", [[0,0]])[0]
+			existing.append(LevelBuilder.member_unit(m2,state.person(solo),{"x":point[0],"y":point[1]}))
+		level["units"] = existing
+	for slot in state.next_battle_overrides.get("hp", {}):
+		for rec in level.get("units", []):
+			if int(rec.get("slot", -1)) == int(slot):
+				rec["hp"] = int(state.next_battle_overrides["hp"][slot])
+	for slot in state.next_battle_overrides.get("behavior", {}):
+		for rec in level.get("units", []):
+			if int(rec.get("slot", -1)) == int(slot):
+				rec["behavior"] = int(state.next_battle_overrides["behavior"][slot])
+	state.next_battle_overrides.clear()
 	_close_panel()
 	current_battle_index = idx
 	current_battle_standalone = standalone
@@ -663,44 +714,183 @@ func _launch_level(idx: int, standalone: bool, deploy_pids: Array = []) -> void:
 		ui_root.visible = false
 	if is_instance_valid(battle):
 		battle.queue_free()
-	battle = preload("res://scripts/Battle.gd").new()
+	battle = _create_battle()
 	add_child(battle)
 	battle.finished.connect(_on_battle_finished)
+	battle.toolbar_requested.connect(_battle_toolbar)
 	battle.looted.connect(_on_loot)
 	battle.story_event.connect(_on_battle_story_event)
 	battle_story_queue.clear()
 	battle_story_seen.clear()
+	pending_battle_result.clear()
 	var ctx: Dictionary = state.battle_context()
+	ctx["campaign_story"] = not standalone
 	battle.setup(m4, level, font, ctx)
+	battle.sfx_enabled=OriginalUI.sfx_enabled
+	native_scene_palette_key="KUANG04"
+	battle_baseline = battle.initial_state.duplicate(true)
+	_music(int(level.get("bgm_scene",34)))
 	battle_start_stats = {"enemies": battle.enemy_units.size(),
 			"players": battle.player_units.size()}
+	if battle.scenario.start_phase_pending:
+		battle.busy = true
+
+
+func _battle_toolbar(action: String) -> void:
+	if battle == null or battle.busy: return
+	match action:
+		"movie_toggle":
+			state.story_variant = not state.story_variant
+			var cfg := ConfigFile.new();cfg.load("user://dlz_config.cfg")
+			cfg.set_value("video","story_variant",state.story_variant);cfg.save("user://dlz_config.cfg")
+			_toast("过场使用文字" if state.story_variant else "过场使用影片")
+		"save":
+			if not battle.can_save(): battle._log("请先取消当前指令，再保存。索敌/选择目标时不能保存。 "); return
+			pending_save_snapshot = battle.snapshot()
+			_open_save_impl(false)
+		"load": _open_save_impl(true)
+		"restart", "exit":
+			_close_panel()
+			modal_layer=CanvasLayer.new();modal_layer.layer=125;add_child(modal_layer)
+			modal_previous_busy=battle.busy;battle.busy=true
+			panel_root=preload("res://scripts/ui/OriginalConfirm.gd").new();modal_layer.add_child(panel_root)
+			panel_root.setup(font,"重来吗？" if action=="restart" else "退出吗？",Vector2(300,200))
+			panel_root.answered.connect(func(yes:bool):
+				_close_panel()
+				if not yes:return
+				if action=="restart":_restart_current_battle()
+				else:exit_requested.emit())
+
+
+func _open_save_impl(load_first:bool) -> void:
+	_close_panel()
+	modal_layer=CanvasLayer.new();modal_layer.layer=125;add_child(modal_layer)
+	if is_instance_valid(battle):modal_previous_busy=battle.busy;battle.busy=true
+	panel_root=preload("res://scripts/ui/OriginalSavePicker.gd").new();modal_layer.add_child(panel_root)
+	var key:=strategic_palette_key
+	if is_instance_valid(battle):key="KUANG04"
+	panel_root.setup(font,preload("res://scripts/ui/OriginalPalette.gd").colors(key),preload("res://scripts/ui/OriginalSaveSlots.gd").previews(state),load_first)
+	panel_root.chosen.connect(func(slot:int):
+		_close_panel()
+		if slot<0:return
+		if load_first:_load_slot(slot)
+		else:_save_slot(slot))
+
+
+func _save_slot(slot: int) -> void:
+	if is_instance_valid(battle):
+		if pending_save_snapshot.is_empty(): return
+		state.battle_resume = {"snapshot":pending_save_snapshot,"baseline":battle_baseline,
+			"checkpoint":state.checkpoint_data,"deploy":current_deploy_pids,
+			"standalone":current_battle_standalone}
+	else: state.battle_resume.clear()
+	var ok: bool = state.save_slot(slot)
+	if ok and not is_instance_valid(battle) and slot>=0 and slot<5:
+		preload("res://scripts/ui/OriginalSaveSlots.gd").save_strategy_native(state,slot)
+	# Native picker is a one-shot operation and restores the caller, not a
+	# self-reopening save manager. Direct diagnostic calls retain visibility.
+	_close_panel()
+	if slot>=5:_open_save_impl(false)
+	if not ok:_toast("存档失败")
+
+
+func _load_slot(slot: int) -> void:
+	if not load_campaign_slot(slot): _toast("读档失败：存档为空或版本不兼容")
+
+
+func _load_auto_save() -> void:
+	_load_slot(7)
+
+
+func _resume_battle(encoded: Dictionary, restart := false) -> void:
+	var snap: Dictionary = preload("res://scripts/battle/StateCodec.gd").unpack(encoded)
+	var lv: Dictionary = snap.get("level",{})
+	if lv.is_empty(): return
+	_story_generation += 1
+	battle_visual_active=false
+	battle_visual_sequences=0
+	battle_story_queue.clear(); battle_story_seen.clear(); pending_battle_result.clear()
+	if is_instance_valid(story_player): story_player.queue_free(); story_player = null
+	if is_instance_valid(story_layer): story_layer.queue_free(); story_layer = null
+	if is_instance_valid(cutscene): cutscene.queue_free(); cutscene = null
+	if is_instance_valid(result_canvas): result_canvas.queue_free(); result_canvas = null
+	if is_instance_valid(battle): battle.queue_free()
+	current_battle_index = int(lv.get("index",0))
+	if is_instance_valid(ui_root): ui_root.visible = false
+	battle = _create_battle()
+	add_child(battle)
+	battle.finished.connect(_on_battle_finished)
+	battle.toolbar_requested.connect(_battle_toolbar)
+	battle.looted.connect(_on_loot)
+	battle.story_event.connect(_on_battle_story_event)
+	battle.setup(m4,lv,font,snap.get("context",{}),encoded)
+	battle_start_stats = {"enemies":battle.stats.get("enemies_total",0),"players":battle.stats.get("deployed",0)}
+	_music(int(lv.get("bgm_scene",34)))
+	if restart:
+		battle.scenario.on_start()
+		battle._begin_player_phase("第 1 回合，我方行动")
+		if battle.scenario.start_phase_pending: battle.busy = true
+		else: battle._focus_player()
+
+
+func _restart_current_battle() -> void:
+	if battle_baseline.is_empty(): return
+	var now := {}
+	for record in battle.level.get("slot_pool",[]) + battle.units.map(func(unit): return unit.state_record()):
+		now[int(record.get("slot",-1))] = record
+	state.apply_battle_progress(battle.units)
+	if not current_battle_standalone: state.load_checkpoint()
+	var snap: Dictionary = preload("res://scripts/battle/StateCodec.gd").unpack(battle_baseline)
+	for pool in ["units","slot_pool","spawn_pool"]:
+		for record in snap.level.get(pool,[]):
+			var slot := int(record.get("slot",-1))
+			var recent: Dictionary = now.get(slot,{})
+			if state.difficulty == 0:
+				if int(record.get("faction",1)) == 0:
+					for key in ["level","xp"]: record[key] = recent.get(key,record.get(key,0))
+				record["attack_count"] = recent.get("attack_count",record.get("attack_count",0))
+			if state.difficulty < 2:
+				for key in record.get("skill_counts",{}):
+					if int(record.skill_counts[key]) > 0:
+						record.skill_counts[key] = recent.get("skill_counts",{}).get(key,record.skill_counts[key])
+				record["skills"] = record.get("skill_counts",{}).duplicate()
+	for chest in snap.level.get("chests",[]):
+		var roll := randi_range(0,99)
+		chest["wupin"] = chest.get("wupin0" if roll < 50 else ("wupin1" if roll < 80 else "wupin2"),chest.get("wupin",0))
+		chest["opened"] = false
+	snap["context"] = state.battle_context()
+	snap.context["campaign_story"] = not current_battle_standalone
+	snap.scenario["trigger_flags"] = state.script_globals.duplicate(true)
+	for addr in range(0x583f18,0x583f58,4): snap.scenario.trigger_flags["0x%x"%addr] = 0
+	_resume_battle(preload("res://scripts/battle/StateCodec.gd").pack(snap),true)
 
 
 func _on_battle_story_event(kind: String, data: Dictionary) -> void:
 	if current_battle_standalone or current_battle_index < 0:
 		return
-	if kind == "trigger_message":
+	if kind == "person_side":
+		if int(data["slot"]) < 40:
+			state.set_person_side(int(data["slot"]), int(data["faction"]))
+	elif kind == "person_field":
+		if int(data["slot"]) < 40:
+			state.person(int(data["slot"]))[str(data["field"])] = int(data["value"])
+	elif kind == "money":
+		state.money += int(data["amount"])
+	elif kind == "global":
+		state.script_globals[str(data["addr"])] = int(data["value"])
+	elif kind == "phase_steps":
+		battle_story_queue.append_array(data.get("steps", []))
+		battle_story_queue.append({"phase_end": true})
+	elif kind == "visual_steps":
+		battle_visual_sequences+=1
+		battle.busy=true
+		battle_story_queue.append_array(data.get("steps",[]))
+		battle_story_queue.append({"visual_end":true})
+	elif kind == "trigger_message":
 		var rec := int(data.get("record", -1))
 		if rec >= 0:
 			battle_story_queue.append([rec])
-		return
-	var scenes: Dictionary = m5.get("scenes", {})
-	var sc: Dictionary = scenes.get(str(current_battle_index), {})
-	var events: Array = sc.get("events", [])
-	for i in range(events.size()):
-		var ev: Dictionary = events[i]
-		if str(ev.get("trigger", "")) != kind:
-			continue
-		if kind == "turn" and int(ev.get("turn", -1)) != int(data.get("turn", -2)):
-			continue
-		if kind == "unit_died":
-			if _norm(str(ev.get("key", ""))) != _norm(str(data.get("key", ""))):
-				continue
-		var key := "%d:%d" % [current_battle_index, i]
-		if battle_story_seen.has(key):
-			continue
-		battle_story_seen[key] = true
-		battle_story_queue.append((ev.get("ids", []) as Array).duplicate())
+	# 不再播放按剧情猜测的turn/unit_died/chest事件，四阶段原脚本为唯一来源。
 
 
 func _norm(text: String) -> String:
@@ -710,214 +900,116 @@ func _norm(text: String) -> String:
 func _on_loot(item_id: int) -> void:
 	if item_id >= 0 and not state.item(item_id).is_empty():
 		state.add_item(item_id, 1)
+		# The battle's permanent store is native u16, including overflow on
+		# a full-bag chest. Mirror it instead of retaining an impossible 65536.
+		var key:=str(item_id)
+		state.items[key]=int(state.items.get(key,0))&0xffff
+		if int(state.items[key])==0:state.items.erase(key)
 
 
 func _on_battle_finished(result: String, message: String) -> void:
-	battle_story_queue.clear()
+	# T510 胜败分支会先发 TXT，再发 finished。不能清空队列或拒绝
+	# finished_flag，否则主角讣告/L00胜利对白等必定丢失。
+	pending_battle_result = {"result": result, "message": message}
+
+
+func _settle_battle(result: String, message: String) -> void:
 	var victory := result == "victory"
 	var stats: Dictionary = {}
-	var levelups: Array = []
 	if is_instance_valid(battle):
 		stats = (battle.stats as Dictionary).duplicate(true)
 		stats["turn"] = battle.turn
+		state.battle_turn = battle.turn
 		stats["enemies_total"] = max(int(battle_start_stats.get("enemies", 0)),
 				int(stats.get("enemies_total", 0)))
 		var units: Array = []
 		for u in battle.player_units:
-			if int(u.data.get("pid", -1)) >= 0:
+			if state.deploy_member(int(u.data.get("pid", -1))) != null:
 				units.append({"pid": int(u.data.get("pid", -1)), "hp": int(u.hp)})
 		state.apply_battle_health(units)
 		state.apply_battle_context(battle.battle_context)
-		state.grant_battle_experience(battle.player_units, victory)
-		levelups = state.apply_battle_progress(battle.player_units)
+		state.apply_battle_progress(battle.units)
 	var idx := current_battle_index
 	var score := _score_for(stats, victory, idx)
-	var info: Dictionary = {}
-	var joined_names: Array = []
-	if victory and not current_battle_standalone:
-		for pid in state.m4_level(idx).get("joins", []):
-			var jr: Dictionary = state.join_member(int(pid))
-			if bool(jr.get("ok", false)):
-				joined_names.append(str(jr.get("msg", "")).replace("加入队伍", ""))
-		for pid in stats.get("recruited", []):
-			var rr: Dictionary = state.join_member(int(pid))
-			if bool(rr.get("ok", false)):
-				joined_names.append(str(rr.get("msg", "")).replace("加入队伍", ""))
-	stats["joined"] = joined_names
-	if not current_battle_standalone:
-		if victory:
-			state.record_battle_stats(stats)
-		info = state.complete_level(idx, score, victory)
-		state.current_town = state.level_town(state.campaign_index) \
-				if not state.campaign_finished() else state.current_town
-		if victory:
-			selected_town = state.current_town
-			# 兑现存档面板“胜利后自动存档”的文案；否则回世界图
-			# 后直接退出会丢掉刚完成的关卡。无头 bot 验收不写，
-			# 避免把 99 级测试队写进玩家自动存档。
-			if DisplayServer.get_name() != "headless":
-				state.save_slot(7)
-	if victory and not current_battle_standalone and not levelups.is_empty():
-		pending_report = {"victory": victory, "message": message, "idx": idx,
-				"score": score, "info": info, "standalone": current_battle_standalone}
-		_show_levelups(levelups)
-		return
+	# HP/XP/source-slot changes above already occurred in the battle's People
+	# model. Bridging them is not permission to advance the campaign early.
+	# 41DEAA waits for the victory notice, then42B49A adds score; index,
+	# accumulated kills, warehouse loot and the phase hook all wait for MENU10.
+	var info: Dictionary = {"total":state.score_total}
 	_show_report(victory, message, idx, score, info, current_battle_standalone)
+	_last_report["settlement_pending"]=true
+	_last_report["stats"]=stats.duplicate(true)
 
 
 func _score_for(stats: Dictionary, victory: bool, idx: int) -> int:
 	if not victory:
 		return 0
-	var total: int = max(1, int(stats.get("enemies_total", 1)))
-	var killed: int = total - int(stats.get("enemies_left", 0))
-	var kr := clampf(float(killed) / float(total), 0.0, 1.0)
-	var chest_ratio := 0.0
-	var lv: Dictionary = state.m4_level(idx)
-	var chests := (lv.get("chests", []) as Array).size()
-	if chests > 0:
-		chest_ratio = clampf(float(stats.get("chests", 0)) / float(chests), 0.0, 1.0)
-	var limit := int(lv.get("turn_limit", 0))
-	var speed := 1.0
-	if limit > 0:
-		speed = clampf(1.0 - float(max(0, int(stats.get("turn", 1)) - 1)) / float(limit),
-				0.0, 1.0)
-	var no_loss := 1.0 if int(stats.get("losses", 0)) == 0 else 0.0
-	var score := 55.0 + 20.0 * kr + 10.0 * chest_ratio + 10.0 * speed + 5.0 * no_loss
-	if idx >= 36:
-		score += 4.0
-	return clampi(int(round(score)), 0, 100)
-
-
-func _show_levelups(levelups: Array) -> void:
-	if is_instance_valid(levelup_layer):
-		levelup_layer.queue_free()
-	levelup_layer = CanvasLayer.new()
-	levelup_layer.layer = 101
-	add_child(levelup_layer)
-	var layer := Control.new()
-	layer.theme = ui_theme
-	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	levelup_layer.add_child(layer)
-	var bg := ColorRect.new()
-	bg.color = Color(0.045, 0.03, 0.02, 0.96)
-	bg.position = Vector2.ZERO
-	bg.size = Vector2(640, 480)
-	layer.add_child(bg)
-	layer.add_child(OriginalUI.nine_patch(OriginalUI.PANEL_BLUE,
-			Rect2(28, 46, 584, 360), 12))
-	layer.add_child(OriginalUI.header("升 级 / 战 斗 结 算", font,
-			Rect2(0, 0, 640, 30)))
-	var list_bg := ColorRect.new()
-	list_bg.color = Color(0, 0, 0, 0.58)
-	list_bg.position = Vector2(40, 62)
-	list_bg.size = Vector2(376, 132)
-	list_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(list_bg)
-	var y := 76
-	for lu in levelups:
-		var l := OriginalUI.label("%s  Lv%d → Lv%d   HP %d/%d" % [
-			lu.get("name", ""), int(lu.get("from", 1)), int(lu.get("to", 1)),
-			int(lu.get("hp", 0)), int(lu.get("max_hp", 0))], font, 15,
-			Color("#f0e4c8"))
-		l.position = Vector2(56, y)
-		l.size = Vector2(360, 24)
-		layer.add_child(l)
-		y += 30
-		if y > 330:
-			break
-	var go := _button("继 续", Vector2(250, 390), Vector2(140, 34),
-			_close_levelups, 16)
-	layer.add_child(go)
-	var note := OriginalUI.label("战斗经验结算", font, 12, Color("#9a8a6a"))
-	note.position = Vector2(56, 440)
-	layer.add_child(note)
-
-
-func _close_levelups() -> void:
-	if is_instance_valid(levelup_layer):
-		levelup_layer.queue_free()
-		levelup_layer = null
-	if pending_report.is_empty():
-		return
-	var r := pending_report
-	pending_report = {}
-	_show_report(bool(r.get("victory", false)), str(r.get("message", "")),
-			int(r.get("idx", 0)), int(r.get("score", 0)),
-			r.get("info", {}), bool(r.get("standalone", false)))
+	var gun := int(stats.get("kills_by_gun", 0))
+	var mine := int(stats.get("kills_by_mine", 0))
+	var raw := maxi(0, gun * 10 + mine * 10 + 50 - int(stats.get("losses", 0)) * 40 - int(stats.get("turn", 1)))
+	var denominator := maxi(1, int(state.m4_level(idx).get("difficulty", 1)))
+	return raw * 100 / denominator + state.difficulty * 2
 
 
 func _show_report(victory: bool, message: String, idx: int, score: int,
 		info: Dictionary, standalone: bool) -> void:
+	_last_report = {"victory": victory, "idx": idx, "score": score,
+			"info": info, "standalone": standalone}
 	if is_instance_valid(result_canvas):
+		result_canvas.process_mode=Node.PROCESS_MODE_DISABLED
+		for child in result_canvas.get_children():
+			if child is CanvasItem:child.hide()
 		result_canvas.queue_free()
 	result_canvas = CanvasLayer.new()
 	result_canvas.layer = 100
 	add_child(result_canvas)
-	var layer := Control.new()
-	layer.theme = ui_theme
-	result_canvas.add_child(layer)
-	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/report_red.png") \
-			if ResourceLoader.exists("res://assets/ui/report_red.png") else null
-	bg.position = Vector2.ZERO
-	bg.size = Vector2(640, 480)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	layer.add_child(bg)
-	var title := OriginalUI.title("胜  利" if victory else "失  败", font, 18,
-			OriginalUI.GOLD if victory else Color("#ff6b6b"))
-	title.position = Vector2(0, 410)
-	title.size = Vector2(640, 28)
-	layer.add_child(title)
-	# 原版战报的 8 个黑框
-	var bs: Dictionary = battle.stats if is_instance_valid(battle) else {}
-	var lv: Dictionary = state.m4_level(idx)
-	var values := [
-		[str(bs.get("kills_by_mine", 0)), 146],
-		[str(bs.get("kills_by_gun", 0)), 176],
-		[str(bs.get("enemies_total", battle_start_stats.get("enemies", 0))), 206],
-		[str(bs.get("losses", 0)), 236],
-		[str(bs.get("chests", 0)), 266],
-		[str(score), 296],
-		["", 326],
-		[str(info.get("total", state.score_total) if not standalone else score), 386],
-	]
-	for pair in values:
-		var l := OriginalUI.label(pair[0], font, 16, Color("#ffffff"))
-		l.position = Vector2(450, int(pair[1]))
-		l.size = Vector2(120, 22)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		layer.add_child(l)
-	var grade := OriginalUI.grade(state.grade_for_score(score))
-	grade.position = Vector2(466, 312)
-	grade.size = Vector2(120, 28)
-	layer.add_child(grade)
-	if not (bs.get("joined", []) as Array).is_empty():
-		var jl := OriginalUI.label("新加入：%s" % "、".join(bs["joined"]),
-				font, 14, OriginalUI.GOLD_LIGHT)
-		jl.position = Vector2(160, 420)
-		jl.size = Vector2(320, 22)
-		layer.add_child(jl)
-	var row := HBoxContainer.new()
-	row.position = Vector2(160, 450)
-	row.add_theme_constant_override("separation", 12)
-	var cont := _button("继 续", Vector2.ZERO, Vector2(120, 26),
-			_report_continue, 14)
-	row.add_child(cont)
-	var retry := _button("重 试", Vector2.ZERO, Vector2(120, 26),
-			_retry_battle, 14)
-	row.add_child(retry)
-	var back := _button("返回标题", Vector2.ZERO, Vector2(120, 26),
-			func(): exit_requested.emit(), 14)
-	row.add_child(back)
-	layer.add_child(row)
-	_last_report = {"victory": victory, "idx": idx, "score": score,
-			"info": info, "standalone": standalone}
+	if not victory:
+		# The story queue (including TXT4) has already drained before settlement.
+		# Keep battle music; scene43 and the blue report are victory-only.
+		var dialog := preload("res://scripts/ui/DefeatDialog.gd").new()
+		result_canvas.add_child(dialog)
+		dialog.setup(font)
+		dialog.retry_requested.connect(_retry_battle)
+		dialog.title_requested.connect(_defeat_to_title)
+		if is_instance_valid(battle) and not qa_mode: battle._play_sfx(14)
+		return
+	# 41DEAA: fixed43D454 notice keeps battle music, then42B49A.
+	var notice:=preload("res://scripts/ui/OriginalStoryPage.gd").new()
+	result_canvas.add_child(notice)
+	var pages:=preload("res://scripts/ui/OriginalStoryLayout.gd").pages("战斗胜利！","",46)
+	notice.setup(font,pages[0],-1,"KUANG04",46)
+	notice.confirmed.connect(func():
+		notice.hide();notice.set_process_input(false);notice.queue_free()
+		_show_victory_page(score,info,standalone))
+
+func _show_victory_page(score:int,info:Dictionary,standalone:bool) -> void:
+	_commit_victory_score()
+	if bool(_last_report.get("settlement_pending",false)):info=_last_report.info
+	_music(43)
+	var bs:Dictionary=battle.stats.duplicate(true) if is_instance_valid(battle) else {}
+	var captured:=0
+	if is_instance_valid(battle):
+		for quantity in battle.battle_context.get("temporary_loot",{}).values():captured+=int(quantity)&0xffff
+	bs["captured_items"]=captured
+	var page:=preload("res://scripts/ui/OriginalVictoryReport.gd").new()
+	result_canvas.add_child(page)
+	page.setup(font,bs,score,int(info.get("total",state.score_total)) if not standalone else score)
+	page.closed.connect(func():
+		var player=get_node_or_null("/root/Music")
+		if player!=null:player.release_playback()
+		_report_continue())
+
+
+func _defeat_to_title() -> void:
+	var player = get_node_or_null("/root/Music")
+	if player != null: player.release_playback()
+	exit_requested.emit()
 
 
 func _retry_battle() -> void:
+	if not battle_baseline.is_empty() and is_instance_valid(battle):
+		_restart_current_battle()
+		return
 	var r := _last_report
 	if not bool(r.get("victory", false)) and not bool(r.get("standalone", true)):
 		state.load_checkpoint()
@@ -931,8 +1023,53 @@ func _retry_battle() -> void:
 			bool(r.get("standalone", false)), current_deploy_pids)
 
 
+func _commit_victory_score() -> void:
+	if not bool(_last_report.get("settlement_pending",false)) or not bool(_last_report.get("victory",false)) or bool(_last_report.get("score_committed",false)):return
+	_last_report["score_committed"]=true
+	if not bool(_last_report.get("standalone",true)):
+		state.record_level_score(int(_last_report.idx),int(_last_report.score))
+	_last_report.info={"total":state.score_total}
+
+
+func _commit_victory_loot() -> void:
+	# 41DF69 ->42B2C8, after the report wait:156 WORD additions, then clear.
+	# Losing/retrying never commits temporary loot. Keep it intact for MENU10.
+	if not bool(_last_report.get("victory",false)) or bool(_last_report.get("loot_committed",false)) or not is_instance_valid(battle):return
+	var loot:Dictionary=battle.battle_context.get("temporary_loot",{})
+	for iid in range(156):
+		var amount:=int(loot.get(str(iid),0))&0xffff
+		if amount!=0:state.add_item(iid,amount)
+		loot.erase(str(iid))
+	battle.battle_context["temporary_loot"]=loot
+	_last_report["loot_committed"]=true
+
+
+func _commit_victory_result() -> void:
+	if not bool(_last_report.get("victory",false)) or bool(_last_report.get("result_committed",false)):return
+	_last_report["result_committed"]=true
+	var standalone:=bool(_last_report.get("standalone",true))
+	var idx:=int(_last_report.get("idx",current_battle_index))
+	if bool(_last_report.get("settlement_pending",false)) and not standalone:
+		# No input/yield is allowed inside this completed-result transaction.
+		_commit_victory_score()
+		_last_report.info=state.complete_level(idx,int(_last_report.score),true,true)
+		state.record_battle_stats(_last_report.get("stats",{}))
+	_commit_victory_loot()
+	if bool(_last_report.get("settlement_pending",false)) and not standalone:
+		state.apply_phase_state(state.m4_level(idx).get("victory_phase",{}))
+		selected_town=state.current_town
+		# Remake autosave includes progression AND loot, never a report preview.
+		if not qa_mode:state.save_slot(7)
+
+
 func _report_continue() -> void:
+	if bool(_last_report.get("continued",false)):return
+	_last_report["continued"]=true
 	var r := _last_report
+	_commit_victory_result()
+	if not bool(r.get("victory",false)) and not bool(r.get("standalone",true)) and not battle_baseline.is_empty() and is_instance_valid(battle):
+		_restart_current_battle()
+		return
 	if is_instance_valid(result_canvas):
 		result_canvas.queue_free()
 		result_canvas = null
@@ -949,33 +1086,55 @@ func _report_continue() -> void:
 			_show_world()
 		return
 	var idx := int(r.get("idx", 0))
-	# 胜利后先放收尾剧情，再回世界
-	var ids := _story_ids(idx, "outro")
-	if not ids.is_empty():
-		_play_story(ids, func(): _after_victory(idx))
-	else:
-		_after_victory(idx)
+	# 40EB9D: L35 freezes/writes the score and plays the whole END group
+	# before4294BE(1). Other victories retain their ordinary chapter order.
+	if idx==35:_after_victory(idx)
+	else:_play_chapter(idx,"victory",func(): _after_victory(idx))
 
 
 func _after_victory(idx: int) -> void:
+	_music(state.town_bgm_scene)
+	var phase: Dictionary = state.m4_level(idx).get("victory_phase", {})
 	if idx == 35:
-		_show_ending(state.ending_id)
+		preload("res://scripts/ui/OriginalHighScores.gd").record_result(state.player_name,state.main_score_snapshot,highscore_path)
+		_show_ending()
+	elif idx >= 44:
+		_show_town(state.current_town)
 	elif idx >= 36:
-		var mode := "simulation" if idx < 40 else "fiction"
-		if state.hidden_mode_done(mode):
-			_show_ending(5)
+		var threshold := int(phase.get("hidden_threshold", {}).get("main_score_snapshot_gte", 99999))
+		if state.main_score_snapshot < threshold or idx in [39, 43]:
+			_show_finale()
+		elif bool(phase.get("direct_next_battle", false)):
+			_launch_level(idx + 1, false)
 		else:
-			_show_world()
+			_show_town(state.current_town)
+	elif bool(phase.get("direct_next_battle", false)) or idx in [32,33]:
+		_show_deployment(idx + 1)
 	else:
-		_show_world()
+		_show_town(state.current_town)
 
-
-# ---------------- 剧情 / 过场 / 结局 ----------------
 
 func _story_ids(idx: int, kind: String) -> Array:
 	var scenes: Dictionary = m5.get("scenes", {})
 	var s: Dictionary = scenes.get(str(idx), {})
 	return (s.get(kind, []) as Array).duplicate()
+
+
+func _story_context() -> Dictionary:
+	var people := {}
+	for slot in range(40): people[str(slot)] = state.person(slot)
+	var idx: int = current_battle_index if is_instance_valid(battle) else state.campaign_index
+	var level: Dictionary = state.m4_level(idx)
+	for person in level.get("slot_pool",[]): people[str(person.get("slot",-1))] = person
+	# 全局持久人物优先于模板，活跃战场人物再优先。
+	for slot in range(40): people[str(slot)] = state.person(slot)
+	if is_instance_valid(battle):
+		for unit in battle.units: people[str(unit.slot)] = unit.data
+	people["0"] = state.protagonist_member()
+	var context:Dictionary={"people_by_slot":people,"level_name":level.get("name",""),"effective_level_index":idx}
+	context["battle_profile"]=is_instance_valid(battle)
+	if not is_instance_valid(battle):context["native_palette_key"]=strategic_palette_key
+	return context
 
 
 func _play_story(ids: Array, cb: Callable) -> void:
@@ -992,108 +1151,191 @@ func _play_story(ids: Array, cb: Callable) -> void:
 		add_child(story_layer)
 		parent = story_layer
 	parent.add_child(story_player)
+	var caller_screen:WeakRef=weakref(strategic_screen) if is_instance_valid(strategic_screen) else null
+	if caller_screen!=null:caller_screen.get_ref().enabled=false
+	var generation := _story_generation
+	story_player.context = _story_context()
 	story_player.setup(font, m5, ids, state.player_name, func():
+		if generation != _story_generation:
+			return
 		story_player = null
+		if caller_screen!=null and caller_screen.get_ref()!=null:caller_screen.get_ref().enabled=true
 		if is_instance_valid(story_layer):
 			story_layer.queue_free()
 		story_layer = null
-		cb.call())
+		cb.call(), _story_context())
 
 
-func _play_cutscene(path: String, cb: Callable) -> void:
+func _play_cutscene(path: String, cb: Callable, parent:Node=null) -> void:
 	if path == "" or not ResourceLoader.exists(path):
-		cb.call()
+		if cb.is_valid():
+			cb.call()
 		return
 	if is_instance_valid(cutscene):
 		cutscene.queue_free()
 	cutscene = load("res://scripts/m5/CutscenePlayer.gd").new()
-	add_child(cutscene)
+	(parent if parent!=null else self).add_child(cutscene)
 	cutscene.setup(path, font, func():
 		cutscene = null
-		cb.call())
+		if cb.is_valid():
+			cb.call())
 
 
 func _show_ending(forced := -1) -> void:
-	if is_instance_valid(ui_root):
-		ui_root.visible = false
-	if is_instance_valid(ending_layer):
-		ending_layer.queue_free()
-		ending_layer = null
-	if is_instance_valid(panel_root):
-		panel_root.queue_free()
-		panel_root = null
-	var id: int = forced if forced >= 0 else state.ending_id
-	var endings: Array = m5.get("endings", [])
-	var e: Dictionary = {}
-	for ed in endings:
-		if int(ed.get("id", -1)) == id:
-			e = ed
-	if e.is_empty() and not endings.is_empty():
-		e = endings[0]
-	var layer := CanvasLayer.new()
-	layer.layer = 90
-	ending_layer = layer
-	add_child(layer)
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.theme = ui_theme
-	layer.add_child(root)
-	var img := TextureRect.new()
-	img.texture = load(str(e.get("image", ""))) \
-			if ResourceLoader.exists(str(e.get("image", ""))) else null
-	img.position = Vector2.ZERO
-	img.size = Vector2(640, 480)
-	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	img.stretch_mode = TextureRect.STRETCH_SCALE
-	img.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	root.add_child(img)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.36)
-	dim.position = Vector2(0, 330)
-	dim.size = Vector2(640, 150)
-	root.add_child(dim)
-	var t := OriginalUI.title(str(e.get("title", "结局")), font, 28,
-			OriginalUI.GOLD_LIGHT)
-	t.position = Vector2(0, 338)
-	t.size = Vector2(640, 30)
-	root.add_child(t)
-	var body := OriginalUI.label(str(e.get("text", "")), font, 16,
-			Color("#f2ead6"))
-	body.position = Vector2(60, 374)
-	body.size = Vector2(520, 54)
-	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	root.add_child(body)
-	var row := HBoxContainer.new()
-	row.position = Vector2(120, 438)
-	row.add_theme_constant_override("separation", 14)
-	var back := _button("返回标题", Vector2.ZERO, Vector2(120, 28),
-			func(): exit_requested.emit(), 14)
-	row.add_child(back)
-	if ResourceLoader.exists("res://assets/ui/credits.png"):
-		var cr := _button("片 尾", Vector2.ZERO, Vector2(80, 28),
-				_show_credits, 14)
-		row.add_child(cr)
-	if state.hidden_unlocked:
-		var sim := _button("模拟", Vector2.ZERO, Vector2(90, 28),
-				_start_hidden.bind("simulation"), 14)
-		row.add_child(sim)
-		var fic := _button("虚构", Vector2.ZERO, Vector2(90, 28),
-				_start_hidden.bind("fiction"), 14)
-		row.add_child(fic)
-	root.add_child(row)
-	var gallery := _button("结局一览", Vector2(520, 40), Vector2(90, 26),
-			_show_ending_gallery, 14)
-	root.add_child(gallery)
-	var state_l := OriginalUI.label("累计得分 %d / 3600" % state.score_total,
-			font, 14, Color("#d8c39a"))
-	state_l.position = Vector2(0, 462)
-	state_l.size = Vector2(640, 18)
-	state_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(state_l)
+	_ending_fade_out(4)
+	mode="ending"
+	ending_preview=forced>=0
+	ending_flow_events.append("END")
+	_music(49)
+	if is_instance_valid(ui_root): ui_root.visible = false
+	_close_panel()
+	_clear_ending_layer()
+	ending_layer = CanvasLayer.new()
+	ending_layer.layer = 90
+	add_child(ending_layer)
+	ending_steps = [{"image":0,"records":[401]}]
+	if int(state.person(31).get("faction",1)) == 0:
+		ending_steps.append({"image":2,"records":[402]})
+	else: ending_steps.append({"image":1,"records":[403]})
+	if TownRules.get_flag(state,2) == 0:
+		ending_steps.append({"image":3,"records":[404]})
+		ending_steps.append({"image":5,"records":[407]})
+	else: ending_steps.append({"image":4,"records":[405,406]})
+	# Explicit gallery previews are not score endings and never unlock progression.
+	if forced >= 0:
+		ending_steps = [{"image":forced,"records":m5.get("endings",[])[clampi(forced,0,5)].get("records",[])}]
+	ending_step = 0
+	_play_ending_step()
+
+
+func _play_ending_step() -> void:
+	if ending_step >= ending_steps.size():
+		if ending_preview:_show_finale()
+		else:_play_ending_chapter()
+		return
+	var step: Dictionary = ending_steps[ending_step]
+	var id := int(step["image"])
+	if not state.endings_seen.has(id): state.endings_seen.append(id)
+	# Retain the picture after StoryPlayer removes its text, for the separate
+	# outer W/D. Do not let an old page or release leak into the next one.
+	for child in ending_layer.get_children():
+		child.process_mode=Node.PROCESS_MODE_DISABLED
+		if child is CanvasItem:child.hide()
+		child.queue_free()
+	var page=preload("res://scripts/ui/OriginalEndingPage.gd").new()
+	ending_layer.add_child(page)
+	var context := _story_context()
+	# END pixel-only loads retain the live battle KUANG04 palette, not K00.
+	context["native_palette_key"]="KUANG04"
+	page.confirmed.connect(func():
+		ending_step += 1
+		_play_ending_step())
+	page.setup(font,m5,id,step["records"],state.player_name,context)
+
+
+func _clear_ending_layer() -> void:
+	if not is_instance_valid(ending_layer):return
+	ending_layer.process_mode=Node.PROCESS_MODE_DISABLED
+	for child in ending_layer.get_children():
+		if child is CanvasItem:child.hide()
+	ending_layer.queue_free();ending_layer=null
+
+
+func _ending_fade_out(increment:int) -> void:
+	# A transient topmost surface can fade the old report, END or JZ even
+	# when it lives on another CanvasLayer. No input is dispatched mid-fade.
+	var layer:=CanvasLayer.new();layer.layer=130;add_child(layer)
+	var surface:=Control.new();layer.add_child(surface)
+	preload("res://scripts/ui/OriginalPaletteFade.gd").play(surface,false,increment)
+	layer.free()
+
+
+func _play_ending_chapter() -> void:
+	ending_flow_events.append("chapter35")
+	_ending_fade_out(4)
+	_clear_ending_layer()
+	# L35's4294BE text path clears both surfaces toFF, still usingKUANG04.
+	# Keep this surface on the ending layer so it cannot be occluded by END.
+	ending_layer=CanvasLayer.new();ending_layer.layer=90;add_child(ending_layer)
+	var background:=ColorRect.new();background.color=Color.BLACK;background.size=Vector2(640,480)
+	background.mouse_filter=Control.MOUSE_FILTER_IGNORE;ending_layer.add_child(background)
+	var after_chapter:Callable=func():
+		if state.hidden_unlocked:_show_hidden_choice()
+		else:_show_finale()
+	var entry:Dictionary=m5.get("chapter_transitions",{}).get("35",{}).get("victory",{})
+	if not bool(entry.get("enabled",false)):after_chapter.call();return
+	if not state.story_variant:
+		# MPEG owns its normal CD suspension. Its device Restore residue is
+		# normalised to the proved text-path black surface after it finishes.
+		var path:=str(entry.get("mpeg_path",""))
+		_play_cutscene(path,_silence_media_until(after_chapter) if path!="" and ResourceLoader.exists(path) else after_chapter,ending_layer)
+		return
+	var record:=int(entry.get("text_id",-1))
+	if record<0 or bool(entry.get("text_empty",true)):after_chapter.call();return
+	preload("res://scripts/ui/OriginalPaletteFade.gd").play(background,true,4)
+	var player=preload("res://scripts/m5/StoryPlayer.gd").new();ending_layer.add_child(player)
+	var context:=_story_context();context["native_palette_key"]="KUANG04";context["battle_profile"]=false
+	player.setup(font,m5,[record],state.player_name,func():
+		_ending_fade_out(4);after_chapter.call(),context)
+
+
+func _show_hidden_choice() -> void:
+	mode="hidden_notice"
+	ending_flow_events.append("hidden_notice")
+	_clear_ending_layer()
+	ending_layer = CanvasLayer.new()
+	ending_layer.layer = 90
+	add_child(ending_layer)
+	# 40EC1F ->43D454(446AB0), then native426A05 two-row choice.
+	# 429517..552 cleared both original surfaces toFF before this phase.
+	# Normalise video-device Restore residue to the proved text-path black.
+	var background:=ColorRect.new();background.color=Color.BLACK;background.size=Vector2(640,480)
+	background.mouse_filter=Control.MOUSE_FILTER_IGNORE;ending_layer.add_child(background)
+	preload("res://scripts/ui/OriginalPaletteFade.gd").play(background,true,4)
+	var notice=load("res://scripts/m5/StoryPlayer.gd").new();ending_layer.add_child(notice)
+	var context:=_story_context();context["native_palette_key"]="KUANG04";context["battle_profile"]=false
+	notice.setup(font,{"records":[{"n":-1,"lines":[{"code":-1,"text":"由于GG的优良表现，可以进入隐藏关，请选择隐藏关的模式。"}]}]},[-1],state.player_name,_show_hidden_menu,context)
+
+
+func _show_hidden_menu() -> void:
+	mode="hidden_choice"
+	_clear_ending_layer()
+	ending_layer=CanvasLayer.new();ending_layer.layer=90;add_child(ending_layer)
+	var background:=ColorRect.new();background.color=Color.BLACK;background.size=Vector2(640,480)
+	background.mouse_filter=Control.MOUSE_FILTER_IGNORE;ending_layer.add_child(background)
+	var menu:=preload("res://scripts/ui/OriginalChoice.gd").new();ending_layer.add_child(menu)
+	menu.setup(font,["模  拟","虚  构"],Vector2(320,200),true,preload("res://scripts/ui/OriginalPalette.gd").colors("KUANG04"))
+	menu.chosen.connect(func(choice:int):_start_hidden("simulation" if choice==0 else "fiction"))
+	menu.cancelled.connect(_show_finale)
+
+
+func _show_finale() -> void:
+	_ending_fade_out(4)
+	mode="finale"
+	ending_flow_events.append("finale")
+	_clear_ending_layer()
+	ending_layer = CanvasLayer.new()
+	ending_layer.layer = 90
+	add_child(ending_layer)
+	_show_final_image(0)
+
+
+func _show_final_image(index: int) -> void:
+	if index >= 2:
+		game_close_requested.emit()
+		return
+	for child in ending_layer.get_children():
+		child.process_mode=Node.PROCESS_MODE_DISABLED
+		if child is CanvasItem:child.hide()
+		child.queue_free()
+	var image:=preload("res://scripts/ui/OriginalFinalImage.gd").new()
+	ending_layer.add_child(image)
+	image.setup(load("res://assets/ui/jz%d.png"%(index+1)),index==1)
+	image.confirmed.connect(func():_show_final_image(index+1))
 
 
 func _show_credits() -> void:
+	_music(38)
 	if is_instance_valid(credits_layer):
 		credits_layer.queue_free()
 	credits_layer = CanvasLayer.new()
@@ -1163,7 +1405,7 @@ func _show_ending_gallery() -> void:
 		b.disabled = not unlocked
 		root.add_child(b)
 	var back := _button("返 回", Vector2(520, 438), Vector2(90, 26),
-			func(): _show_ending(state.ending_id), 14)
+			func(): _show_ending(), 14)
 	root.add_child(back)
 
 
@@ -1192,7 +1434,12 @@ func _start_hidden(mode: String) -> void:
 		return
 	_close_panel()
 	current_battle_standalone = false
-	_launch_level(idx, false)
+	state.campaign_index = idx
+	if mode == "fiction" and idx == 40:
+		TownRules.set_flag(state,85,2)
+		if not state.liberated.has(17): state.liberated.append(17)
+		_show_town(17)
+	else: _launch_level(idx, false)
 
 
 func _open_easter() -> void:

@@ -17,6 +17,17 @@ static func skill_level(use_count: int) -> int:
 	return mini(10, lv)
 
 
+static func attack_apply(group: int, use_count: int) -> int:
+	# 412030: normal attack groups each contain four successive 7x7 masks.
+	# Mask rank anticipates this attack (+1); frozen attack power does not.
+	return group * 4 - 1 + (skill_level(use_count + 1) + 2) / 3
+
+
+static func skill_apply(base: int, use_count: int) -> int:
+	# 4123F9: SKILL.apply points to rank one, then advances every 3 ranks.
+	return base - 1 + (skill_level(use_count) + 2) / 3
+
+
 static func attack_power(member: Dictionary, unit_type: Dictionary,
 		morale: int = 100, integrity: int = 100,
 		skill_count: int = 0, item_attack: int = 0) -> int:
@@ -33,11 +44,12 @@ static func attack_power(member: Dictionary, unit_type: Dictionary,
 
 static func defense_power(member: Dictionary, unit_type: Dictionary,
 		morale: int = 100, terrain_bonus: int = 0,
-		item_defense: int = 0) -> int:
+		item_defense: int = 0, defense_integrity: int = 100) -> int:
 	var level: int = maxi(1, int(member.get("level", 1)))
 	var base := int(unit_type.get("fangyu", 0))
 	var growth := int(unit_type.get("fangyu_plus", 0))
 	var df: int = base + (level - 1) * growth
+	df = df * clampi(defense_integrity, 0, 100) / 100
 	df = df * (morale + 100) / 200
 	df = df * (100 + terrain_bonus) / 100
 	return maxi(0, df + item_defense)
@@ -48,14 +60,23 @@ static func damage(attack: int, defense: int, apply_pct: int = 100) -> int:
 
 
 static func skill_effect(intelligence: int, para: int, count: int) -> int:
-	var factor := (skill_level(count) + 7) >> 3
-	return (para * intelligence / 100) * factor
+	return ((para * intelligence / 100) * (skill_level(count) + 7)) >> 3
+
+
+static func hit_experience(attacker_level: int, victim_level: int) -> int:
+	var diff := victim_level - attacker_level
+	if diff < -6: return 1
+	if diff < -3: return 2
+	if diff < -1: return 4
+	if diff < 0: return 6
+	if diff == 0: return 8
+	return mini(32, 8 + diff * 8)
 
 
 static func kill_experience(killer_level: int, victim_level: int) -> int:
 	# 0x42ab23: diff = 死者等级 - 击杀者等级；分档 1/2/4/8/12，正差每级 16，封顶 80。
 	var diff := victim_level - killer_level
-	if diff < -5:
+	if diff < -6:
 		return 1
 	if diff < -3:
 		return 2

@@ -158,9 +158,13 @@ def main() -> None:
     GODOT_DATA.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, str] = {}
 
+    # MENU30 is a numeric slider handle, not a mouse cursor (42D7BE/42DAD5).
+    # Remove the obsolete generated alias so stale installs cannot reuse it.
+    (UI / "cursor.png").unlink(missing_ok=True)
+
     # 原版整屏 / 面板
     copies = {
-        "BG01": "title_bg.png",
+        "BG03": "title_bg.png",
         "BG02": "story_bg.png",
         "MENU00": "report_red.png",
         "MENU10": "report_blue.png",
@@ -175,7 +179,7 @@ def main() -> None:
         "K02": "screen_inventory.png",
         "K03": "screen_system.png",
         "K04": "screen_dialog.png",
-        "MENU30": "cursor.png",
+        "MENU30": "menu30_slider.png",
         "BOX": "chest_sheet.png",
         "BUTTON3": "target_flag.png",
         "MINE": "mine_marker.png",
@@ -190,22 +194,146 @@ def main() -> None:
         shutil.copyfile(OUT / "img" / f"MENU{20 + i}.png", UI / f"medal_{i}.png")
         shutil.copyfile(OUT / "img" / f"MENU{50 + i}.png", UI / f"grade_{i}.png")
 
-    # 战斗 HUD：左侧地图区绿色色键透明；右侧/上/下的绿色填成深石色，
-    # 否则 KUANG00 的侧栏会漏出地图，文字不可读。
-    for src, dst in (("KUANG00", "hud_battle.png"), ("KUANG04", "hud_battle_clean.png")):
-        img = load_img(src)
-        px = img.load()
-        for y in range(img.height):
-            for x in range(img.width):
-                r, g, b, a = px[x, y]
-                if a and abs(r - KEY[0]) <= 10 and abs(g - KEY[1]) <= 10 \
-                        and abs(b - KEY[2]) <= 10:
-                    if x < 442 and 28 < y < 456:
-                        px[x, y] = (0, 0, 0, 0)
-                    else:
-                        px[x, y] = (44, 39, 32, 255)
-        img.save(UI / dst)
-        manifest[dst] = "res://assets/ui/" + dst
+    # 战斗HUD实际为KUANG04；只清精确432x432地图窗，不猜绿色色键。
+    hud = load_img("KUANG04")
+    hud.paste((0,0,0,0), (14,32,446,464))
+    for name in ("hud_battle.png", "hud_battle_clean.png"):
+        manifest[name] = save(hud,name)
+    # 426202自定义TGA loader：EOF起逐行逆序读；忽略TGA自带palette。
+    original = ROOT.parent / "dlz" / "ANTI-JAP"
+    palette = bytes(min(255,v*4) for v in (original / "KUANG04.IMG").read_bytes()[-768:])
+    # 42C620: overlays use active BG03 palette, not their own palette tails.
+    title_palette = bytes(v*4 for v in (original / "BG03.IMG").read_bytes()[-768:])
+    # The generic extraction preview does not establish the live palette.
+    # Reconstruct the background from the same original bytes as its overlays.
+    raw = (original / "BG03.IMG").read_bytes()[16:16+640*480]
+    im = Image.frombytes("P", (640,480), raw); im.putpalette(title_palette)
+    manifest["title_bg.png"] = save(im.convert("RGBA"), "title_bg.png")
+    for index in range(5):
+        raw = (original / f"MENU{50+index}.IMG").read_bytes()[16:16+232*56]
+        im = Image.frombytes("P", (232,56), raw); im.putpalette(title_palette)
+        manifest[f"title_selected_{index}.png"] = save(im.convert("RGBA"), f"title_selected_{index}.png")
+    raw = (original / "MINE02.IMG").read_bytes()[16:16+56*48*30]
+    im = Image.frombytes("P", (56,48*30), raw); im.putpalette(title_palette)
+    im = im.convert("RGBA")
+    im.putalpha(Image.frombytes("L", (56,48*30), bytes(0 if v==4 else 255 for v in raw)))
+    manifest["title_mine02.png"] = save(im, "title_mine02.png")
+    raw_bg01 = (original / "BG01.IMG").read_bytes()
+    transition_palette = bytes(v*4 for v in raw_bg01[-768:])
+    im = Image.frombytes("P", (640,480), raw_bg01[16:16+640*480]); im.putpalette(transition_palette)
+    manifest["title_transition.png"] = save(im.convert("RGBA"), "title_transition.png")
+    # ZYB has a 640x480 nominal header, but 7082 extra scanlines. The native
+    # reader uses the fixed palette offset and shifts exactly two rows/tick.
+    zyb = (original / "ZYB.IMG").read_bytes()
+    zyb_palette = bytes(v*4 for v in zyb[0x49D910:0x49D910+768])
+    im = Image.frombytes("P", (640,7562), zyb[16:0x49D910]); im.putpalette(zyb_palette)
+    manifest["title_supporters.png"] = save(im.convert("RGBA"), "title_supporters.png")
+    (GODOT_DATA / "title_pages.json").write_text(json.dumps({
+        "source": "42CFEA/42D217/430253; research_title_subpages_contract_20261025",
+        "bg01_palette": [list(transition_palette[i:i+3]) for i in range(0,768,3)],
+        "battle_palette": [list(palette[i:i+3]) for i in range(0,768,3)],
+    }, indent=1)+"\n", encoding="utf-8")
+    # Shared native overlays are indices in the caller's current palette.
+    # Store the raw index raster, not one incorrectly fixed RGB skin.
+    (UI / "menu09_indices.bin").write_bytes((original / "MENU09.IMG").read_bytes()[16:16+456*227])
+    overlay_palettes = {}
+    for source in ("BG01","BG02","BIGMAP","KUANG04","K00","K01","K02","K03","K04","BACK19"):
+        path = original / (source + ".IMG")
+        if path.exists(): overlay_palettes[source] = [v*4 for v in path.read_bytes()[-768:]]
+    place = (original / "PLACE.DAT").read_bytes()
+    for index in range(19):
+        # PLACE stores a 1024-byte RGB0 palette, already in 8-bit components.
+        raw = place[index*0x4B400+0x4B000:(index+1)*0x4B400]
+        overlay_palettes[f"PLACE{index:02d}"] = [v for i in range(256) for v in raw[i*4:i*4+3]]
+    (GODOT_DATA / "native_ui_palettes.json").write_text(json.dumps(overlay_palettes)+"\n", encoding="utf-8")
+    # 42D686: all creation sprites use the current MENU01 palette, not the
+    # battle palette embedded in the generic sprite-bank PNGs.
+    creation_palette = bytes(v*4 for v in (original / "MENU01.IMG").read_bytes()[-768:])
+    def creation_image(raw: bytes, size: tuple[int, int], name: str, key=None):
+        im = Image.frombytes("P", size, raw)
+        im.putpalette(creation_palette)
+        im = im.convert("RGBA")
+        if key is not None:
+            im.putalpha(Image.frombytes("L", size, bytes(0 if v == key else 255 for v in raw)))
+        manifest[name] = save(im, name)
+    faces = (original / "FACE.DAT").read_bytes()
+    for index in range(103, 109):
+        creation_image(faces[index*8000:(index+1)*8000], (80,100), f"creation_face_{index}.png")
+    armies = (original / "ARMY.DAT").read_bytes()
+    for index in (30,40,32,54):
+        start = index * 19 * 48 * 48
+        creation_image(armies[start:start+48*48], (48,48), f"creation_army_{index}.png", 0)
+    buttons = (original / "BUTTON22.IMG").read_bytes()[16:16+5632]
+    for index, state in enumerate(("normal","pressed")):
+        creation_image(buttons[index*2816:(index+1)*2816], (88,32), f"creation_button_{state}.png")
+    creation_image((original / "MENU30.IMG").read_bytes()[16:16+425], (17,25), "creation_slider.png", 0xF0)
+    offsets = [0,36,220,453,637,659,784,939,1120,1415,1515,1763,1914,1995,2003,2125,2282,2341,2627,2783,2903,3126,3432,3756]
+    # The last original table entry is raw D7FA, not a Unicode GBK character.
+    # Preserve its native HZK slot via a private-use carrier, not U+FFFD or a
+    # dropped cell (which would shift the original grid/count).
+    groups = ["".join("\ue000" if n == 3755 else bytes((0xB0+n//94,0xA1+n%94)).decode("gbk") for n in range(a,b)) for a,b in zip(offsets,offsets[1:])]
+    (GODOT_DATA / "character_creation.json").write_text(json.dumps({
+        "source": "42D686/42E2D6/42F938/42FACA; research_character_create_contract_20261025",
+        "palette": [list(creation_palette[i:i+3]) for i in range(0,768,3)],
+        "name_palette": [list(palette[i:i+3]) for i in range(0,768,3)],
+        "name_groups": groups,
+    }, ensure_ascii=False, indent=1)+"\n", encoding="utf-8")
+    # 4248D9 / 42738A: MENU03 IMG indices are drawn using the battle palette.
+    # The two selected rows use the original 4760F8 LUT, not a solid tint.
+    retry_pixels = (original / "MENU03.IMG").read_bytes()[16:16 + 128 * 88]
+    retry = Image.frombytes("P", (128, 88), retry_pixels)
+    retry.putpalette(palette)
+    manifest["retry_original.png"] = save(retry.convert("RGBA"), "retry_original.png")
+    controls = json.loads((ROOT / "extract/research_ui_controls_20261025.json").read_text())
+    selection_lut = bytes(controls["menu13"]["selected_background_lut"])
+    assert len(selection_lut) == 256
+    for row in range(2):
+        selected = retry.crop((4, 32 + row * 24, 124, 56 + row * 24))
+        selected = Image.frombytes("P", selected.size, selected.tobytes().translate(selection_lut))
+        selected.putpalette(palette)
+        name = f"retry_selected_{row}.png"
+        manifest[name] = save(selected.convert("RGBA"), name)
+    for name,width,height,transparent in [("FRAME00",404,127,True),("BUTTON00",28,312,False),("BUTTON01",28,312,False),("MENU",88,120,True),("DLZ00",40,360,False),("DLZ01",40,360,False)]:
+        src = original / (name + ".TGA")
+        if not src.exists():
+            continue
+        blob = src.read_bytes()
+        if len(blob) < width*height:
+            continue
+        raster = b"".join(blob[len(blob)-(row+1)*width:len(blob)-row*width] for row in range(height))
+        indexed = Image.frombytes("P",(width,height),raster)
+        indexed.putpalette(palette)
+        im = indexed.convert("RGBA")
+        if transparent:
+            im.putalpha(Image.frombytes("L",(width,height),bytes(0 if v==0 else 255 for v in raster)))
+        manifest[name.lower()+"_original.png"] = save(im,name.lower()+"_original.png")
+
+    # 41F935 carries the actual eight-slot item picker, not a modern list.
+    pixels = (original / "MENU08.IMG").read_bytes()[16:16+304*227]
+    picker = Image.frombytes("P", (304,227), pixels)
+    picker.putpalette(palette)
+    manifest["item_picker_original.png"] = save(picker.convert("RGBA"), "item_picker_original.png")
+    # 426A05 / 426844 share MENU.TGA; single-row uses the last32 rows.
+    blob = (original / "MENU.TGA").read_bytes()
+    raster = b"".join(blob[len(blob)-(row+1)*88:len(blob)-row*88] for row in range(120))
+    source = Image.frombytes("P", (88,120), raster)
+    source.putpalette(palette)
+    for count in range(1,17):
+        if count == 1:
+            frame = source.crop((0,88,88,120))
+        else:
+            frame = Image.new("P", (88,24*count+16)); frame.putpalette(palette)
+            frame.paste(source.crop((0,0,88,32)), (0,0))
+            for row in range(count-2):frame.paste(source.crop((0,32,88,56)), (0,32+24*row))
+            frame.paste(source.crop((0,56,88,88)), (0,32+24*(count-2)))
+        name = f"choice_{count}_original.png"
+        manifest[name] = save(frame.convert("RGBA"), name)
+        if count == 1:continue  # single-row never runs the highlight LUT
+        for row in range(count):
+            strip = frame.crop((4,8+24*row,84,32+24*row))
+            strip = Image.frombytes("P",strip.size,strip.tobytes().translate(selection_lut));strip.putpalette(palette)
+            name = f"choice_{count}_selected_{row}.png"
+            manifest[name] = save(strip.convert("RGBA"), name)
 
     # 对话框：取 KUANG01 的深蓝面板，去掉灰底
     dialog = crop_panel("KUANG01", (4, 4, 452, 310))
@@ -262,9 +390,11 @@ def main() -> None:
         shutil.copyfile(p, AUDIO / p.name)
         manifest["audio/" + p.name] = "res://assets/audio/" + p.name
     FLM.mkdir(parents=True, exist_ok=True)
-    for p in sorted((OUT / "flm").glob("flm_*.png")):
-        shutil.copyfile(p, FLM / p.name)
-        manifest["flm/" + p.name] = "res://assets/flm/" + p.name
+    from native_sprite_assets import generate as native_sprites
+    native_sprites(("flm",))
+    for index in range(32):
+        name = f"flm_{index:03d}.png"
+        manifest["flm/" + name] = "res://assets/flm/" + name
     for src in ("MENU01", "MENU02", "K00", "K01", "K02", "K03", "K04", "BG02", "BG03"):
         p = OUT / "img" / f"{src}.png"
         if p.exists():
@@ -291,11 +421,13 @@ def main() -> None:
         "meta": {
             "title": "抗日：地雷战",
             "font": "res://assets/font/hzk16.fnt",
-            "cursor": "res://assets/ui/cursor.png",
+            "cursor_mode": "system_arrow",
             "viewport": [640, 480],
         },
         "assets": manifest,
     }, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    from prepare_native_strategy import prepare as prepare_strategy
+    prepare_strategy()
     print("m3 ui assets", len(manifest))
     print("m3.json", (GODOT_DATA / "m3.json").stat().st_size, "bytes")
 

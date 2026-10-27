@@ -9,6 +9,10 @@ run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/show_image=false
 
+[autoload]
+
+Music="*res://scripts/ui/Music.gd"
+
 [display]
 
 window/size/viewport_width=640

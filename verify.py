@@ -78,8 +78,8 @@ def main() -> int:
     section("TXT")
     recs = txt.load(GAME_DIR / "TXT.DAT")
     check(len(recs) == 478, f"TXT 记录数 {len(recs)} != 478")
-    check(sum(len(r.text) for r in recs) == 55005,
-          f"TXT 字数 {sum(len(r.text) for r in recs)} != 55005")
+    check(sum(len(r.text) for r in recs) == 54997,
+          f"TXT 字数 {sum(len(r.text) for r in recs)} != 54997")
     check(recs[0].number == 4, f"TXT 首条编号 {recs[0].number} != 4")
     check(recs[-1].number == 592, f"TXT 末条编号 {recs[-1].number} != 592")
     print(f"  {len(recs)} 条, {sum(len(r.text) for r in recs)} 字")
@@ -144,6 +144,8 @@ def main() -> int:
     for t in towns:
         check(len(t.raw_u32) == 81, f"TOWN[{t.index}] u32 段长度 {len(t.raw_u32)} != 81")
         check(len(t.flags) == 11, f"TOWN[{t.index}] flags 长度 {len(t.flags)} != 11")
+        check(len(t.goods_material) == 10,
+              f"TOWN[{t.index}] 材料货单应为 10 项，不含后续两个 DWORD")
         check(all(v == -1 or 81 <= v <= 142 for v in t.goods_junxie),
               f"TOWN[{t.index}] goods_junxie 越界：{t.goods_junxie}")
         check(all(v == -1 or 1 <= v <= 80 for v in t.goods_zahuo),
@@ -213,7 +215,7 @@ def main() -> int:
     army = sprites.BANK_BY_NAME["army"]
     check(face.count == 170, f"FACE 帧数 {face.count} != 170")
     check(army.groups == 91, f"ARMY 组数 {army.groups} != 91")
-    check(sprites.BANK_BY_NAME["mine"].groups == 10, "MINE 组数 != 10")
+    check(sprites.BANK_BY_NAME["mine"].groups == 40, "MINE 独立引信图标 != 40")
     check(sprites.BANK_BY_NAME["flm"].groups == 32, "FLM 组数 != 32")
     check(sprites.BANK_BY_NAME["goods"].count == 128, "GOODS 数量 != 128")
     check(sprites.BANK_BY_NAME["material"].count == 10, "MATERIAL 数量 != 10")

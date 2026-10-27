@@ -1,11 +1,12 @@
 class_name OriginalUI
 extends RefCounted
+static var native_wait_left_blocked:=false # inherited 57BD44, not mouse-down state
+static var native_text_index:=0x7F # 405560 initial foreground; shared menus reset48.
 
 ## M3 原味 UI 工具箱。
 ## 只做表现：原版贴图 + HZK16 + 640×480；不碰 M4 关卡逻辑。
 
 const FONT := "res://assets/font/hzk16.fnt"
-const CURSOR := "res://assets/ui/cursor.png"
 
 const GOLD := Color("#e8ba4c")
 const GOLD_LIGHT := Color("#ffe7a3")
@@ -29,8 +30,20 @@ const CHEST := "res://assets/ui/chest_sheet.png"
 const DIALOG := "res://assets/ui/dialog_panel.png"
 
 static var _theme: Theme
+static var sfx_enabled:=true
 static var _sfx: AudioStreamPlayer
 static var _hover_sfx: AudioStreamPlayer
+static var _native_players:Array[AudioStreamPlayer]=[]
+
+# Mine and army PNGs are horizontal animation sheets, not single inventory icons.
+static func first_frame(path: String) -> Texture2D:
+	if path.is_empty() or not ResourceLoader.exists(path): return null
+	var texture: Texture2D = load(path)
+	if texture.get_width() <= 48: return texture
+	var atlas := AtlasTexture.new()
+	atlas.atlas = texture
+	atlas.region = Rect2(0,0,48,48)
+	return atlas
 
 
 ## HZK16 是 16px 点阵；12/14px 会被小数缩放成灰边，先统一回 16。
@@ -93,10 +106,10 @@ static func _style(name: String) -> StyleBoxTexture:
 
 
 static func apply_cursor() -> void:
-	if ResourceLoader.exists(CURSOR):
-		var tex: Texture2D = load(CURSOR)
-		if tex != null:
-			Input.set_custom_mouse_cursor(tex, Input.CURSOR_ARROW, Vector2(2, 2))
+	# 411A00 / 424E83 / 4294A3 load IDC_ARROW. MENU30 is a 17x25 slider
+	# handle, not a cursor; never bind it (or an invented hotspot) to the mouse.
+	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 
 static func label(text: String, font: Font, size: int = 16,
@@ -133,7 +146,7 @@ static func button(text: String, font: Font, size: Vector2 = Vector2(160, 34),
 	b.add_theme_font_size_override("font_size", maxi(fs, MIN_TEXT_SIZE))
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.mouse_default_cursor_shape = Control.CURSOR_ARROW
 	var style_name := "button_normal.png"
 	if size.x <= 84 and size.y <= 28:
 		style_name = "button_small_normal.png"
@@ -278,16 +291,19 @@ static func make_sfx(parent: Node) -> void:
 
 
 static func _click() -> void:
+	if not sfx_enabled:return
 	if _sfx != null and is_instance_valid(_sfx):
 		_sfx.play()
 
 
 static func _hover() -> void:
+	if not sfx_enabled:return
 	if _hover_sfx != null and is_instance_valid(_hover_sfx):
 		_hover_sfx.play()
 
 
 static func play_sfx(name: String) -> void:
+	if not sfx_enabled:return
 	var path := "res://assets/ui/sfx_%s.wav" % name
 	if not ResourceLoader.exists(path):
 		return
@@ -298,3 +314,24 @@ static func play_sfx(name: String) -> void:
 	root.add_child(p)
 	p.finished.connect(p.queue_free)
 	p.play()
+
+static func play_native_sfx(index:int) -> void:
+	if not sfx_enabled:return
+	var path:="res://assets/audio/wave_%04d.wav"%index
+	if not ResourceLoader.exists(path):return
+	var p:=AudioStreamPlayer.new()
+	p.stream=load(path);p.volume_db=-6.0
+	(Engine.get_main_loop() as SceneTree).root.add_child(p)
+	# Structural headless runs validate the original WAV but have no audio sink.
+	# Avoid queued mixer starts outliving a same-frame title/modal teardown.
+	if DisplayServer.get_name()=="headless":
+		p.stream=null;p.free();return
+	_native_players.append(p)
+	p.finished.connect(func():_native_players.erase(p);p.queue_free())
+	p.play()
+
+static func release_native_sfx() -> void:
+	for p in _native_players:
+		if not is_instance_valid(p):continue
+		p.stop();p.stream=null;p.queue_free()
+	_native_players.clear()

@@ -1,0 +1,338 @@
+{
+  "source": {
+    "path": "../dlz/ANTI-JAP/DLZ.exe",
+    "sha256": "9551484dd6bf8db4b95d81b1863faa88851c8eaf3f25a6c503d4e692ea910b49",
+    "method": "static Ghidra plus exact objdump assembly; original not executed"
+  },
+  "definitions": {
+    "E1": "((para1*caster.INT//100)*(skill_level+7))//8",
+    "E2": "((para2*caster.INT//100)*(skill_level+7))//8",
+    "skill_level": "419CA4(caster.People.skill_usage[index]); computed once before target iteration",
+    "applyHP": "7D0488 range application percent, overwritten by actual amount during execution",
+    "applyMorale": "4565D0 second percent channel, overwritten by actual amount",
+    "terrain.fire": "signed dword 475AA8+terrain*20; GAME.DAT terrain field0",
+    "terrain.wood": "signed dword 475AAC+terrain*20; GAME.DAT terrain field1; used by both rollwood and rock",
+    "side": "People+18 runtime faction; 0=player, nonzero=enemy",
+    "moveable": "Fighter+3F action/animation state; 3 is hit-reaction, not an enduring paralysis debuff"
+  },
+  "random": {
+    "algorithm": "state=(state*214013+2531011)&0xffffffff; return (state>>16)&0x7fff",
+    "ordinary_skill_roll": "rand()%100 < max(0,30+2*(caster.INT-target.INT))",
+    "loot_skill_roll": "rand()%100 < max(0,30+2*(caster.INT-target.INT)+caster.skill_level[9])",
+    "evidence": [
+      "0x43E310",
+      "0x42ABB0",
+      "0x42AC0B"
+    ],
+    "note": "Threshold >=100 is naturally guaranteed; 42AC0B belongs to skill9 loot, not skill10 counterintelligence."
+  },
+  "normal_attack": {
+    "entry": "0x41307F",
+    "hit_roll": "none",
+    "damage": "min(target.HP,max(1,target.HP//20,max(0,attack_power-defense_power)*apply_pct//100))",
+    "morale_loss": "max(1,actual_damage*20//target.maxHP), clamped to current morale",
+    "usage": "attacker attack_usage += 1 per damaged enemy target",
+    "hit_xp": "diff=target.level-attacker.level; diff<-6:1, <-3:2, <-1:4, <0:6, ==0:8, >0:min(32,8*diff+8); for nonplayer attacker >>=2",
+    "hit_xp_total_cap_before_kills": 48,
+    "same_side_damage": false,
+    "counterattack": false,
+    "counterattack_evidence": [
+      "Only three direct 41307F callsites in entire /tmp/dlz.asm:404672 (AI),40F241 (script炮击),42146A (player).",
+      "4043EA and4212A7 each execute precisely one attack, no response dispatch.",
+      "41F10A is animation only;41307F neither recursively attacks nor rolls counterattack."
+    ]
+  },
+  "skill_common": {
+    "entry": "0x4138EA",
+    "switch_table": "0x415BF5",
+    "target_iteration": "applyHP!=0 AND occupied map low-byte!=0; row-major visible region",
+    "usage": "Successful/effective targets increment caster usage[index] once each; not simply once per cast; level/E values fixed from before loop.",
+    "base_xp_total_cap_before_kills": 16,
+    "cap_evidence": "0x415665..0x415686, min(local_xp,0x10)",
+    "consume_action": "caster moveable=0 at415655..41565E; consumes action even all target rolls fail",
+    "death": "After effects/animation, for cells with nonzero actual HP or morale amount, if HP==0 OR morale==0 then stage=0, add kill xp,42AFD2 loot/death hook, increment casualty stats, difficulty penalty.",
+    "skills": [
+      {
+        "index": 0,
+        "name": "补给",
+        "entry": "0x413ABC",
+        "evidence": "extract/research_ai_combat_asm/skill00.asm",
+        "target_side": "same",
+        "roll": "none",
+        "effects": [
+          "HP += min(maxHP-HP, E1*applyHP//100)"
+        ],
+        "increment_usage_once_per_target_when": "actual restoration > 0",
+        "base_xp_per_valid_target": "max(4,actualHP*12//E1) if caster.side==0 else max(2,actualHP*4//E1)",
+        "target_moveable_write": null,
+        "writes_last_attacker": false
+      },
+      {
+        "index": 1,
+        "name": "激励",
+        "entry": "0x413CCE",
+        "evidence": "extract/research_ai_combat_asm/skill01.asm",
+        "target_side": "same",
+        "roll": "none",
+        "effects": [
+          "morale += min(100-morale,E2*applyMorale//100)"
+        ],
+        "increment_usage_once_per_target_when": "actual restoration > 0",
+        "base_xp_per_valid_target": "max(4,actualMorale*12//E2) if caster.side==0 else max(1,actualMorale*4//E2)",
+        "target_moveable_write": null,
+        "writes_last_attacker": false
+      },
+      {
+        "index": 2,
+        "name": "医疗",
+        "entry": "0x413EC7",
+        "evidence": "extract/research_ai_combat_asm/skill02.asm",
+        "target_side": "same",
+        "roll": "none",
+        "effects": [
+          "morale += min(100-morale,E2*applyHP//100)",
+          "HP += min(maxHP-HP,E1*applyHP//100)",
+          "Both channels use applyHP; morale is processed first."
+        ],
+        "increment_usage_once_per_target_when": "actual restoration > 0",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": null,
+        "writes_last_attacker": false
+      },
+      {
+        "index": 3,
+        "name": "火攻",
+        "entry": "0x414145",
+        "evidence": "extract/research_ai_combat_asm/skill03.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "d=min(HP,(E1*applyHP//100)*(100+terrain.fire)//100)",
+          "HP-=d; no implicit morale loss"
+        ],
+        "increment_usage_once_per_target_when": "actual damage > 0",
+        "base_xp_per_valid_target": "max(4,actualDamage*8//E1) if caster.side==0 else max(2,actualDamage*4//E1)",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 4,
+        "name": "滚木",
+        "entry": "0x414353",
+        "evidence": "extract/research_ai_combat_asm/skill04.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "d=min(HP,(E1*applyHP//100)*(100+terrain.wood)//100)",
+          "HP-=d; no implicit morale loss"
+        ],
+        "increment_usage_once_per_target_when": "actual damage > 0",
+        "base_xp_per_valid_target": "max(4,actualDamage*8//E1) if caster.side==0 else max(2,actualDamage*4//E1)",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 5,
+        "name": "擂石",
+        "entry": "0x414578",
+        "evidence": "extract/research_ai_combat_asm/skill05.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "d=min(HP,(E1*applyHP//100)*(100+terrain.wood)//100)",
+          "HP-=d; same terrain modifier as skill4, not a separate rock modifier"
+        ],
+        "increment_usage_once_per_target_when": "actual damage > 0",
+        "base_xp_per_valid_target": "max(4,actualDamage*8//E1) if caster.side==0 else max(2,actualDamage*4//E1)",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 6,
+        "name": "威慑",
+        "entry": "0x4147B8",
+        "evidence": "extract/research_ai_combat_asm/skill06.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "d=min(morale,E2*applyMorale//100)",
+          "morale-=d; no implicit HP loss"
+        ],
+        "increment_usage_once_per_target_when": "actual damage > 0",
+        "base_xp_per_valid_target": "max(4,actualDamage*8//E2) if caster.side==0 else max(2,actualDamage*4//E2)",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 7,
+        "name": "骚扰",
+        "entry": "0x4149A2",
+        "evidence": "extract/research_ai_combat_asm/skill07.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "defense_integrity=max(20,defense_integrity*7//10)"
+        ],
+        "increment_usage_once_per_target_when": "roll succeeds (even if no numeric change)",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 8,
+        "name": "破坏",
+        "entry": "0x414AD4",
+        "evidence": "extract/research_ai_combat_asm/skill08.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "attack_integrity=max(50,attack_integrity*7//10)"
+        ],
+        "increment_usage_once_per_target_when": "roll succeeds (even if no numeric change)",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 9,
+        "name": "掠夺",
+        "entry": "0x414C06",
+        "evidence": "extract/research_ai_combat_asm/skill09.asm",
+        "target_side": "different",
+        "roll": "loot_skill_roll",
+        "effects": [
+          "Remove first nonempty inventory slot from target; give to caster inventory; if full, add item to battle loot stock. Empty inventory does not make an otherwise successful cast fail."
+        ],
+        "increment_usage_once_per_target_when": "roll succeeds (even if no numeric change)",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": null,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 10,
+        "name": "反间",
+        "entry": "0x414CDB",
+        "evidence": "extract/research_ai_combat_asm/skill10.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "level=max(1,level-1)",
+          "HP=min(HP,new_maxHP)",
+          "Does not modify target experience or skill usage counters; not an attack debuff."
+        ],
+        "increment_usage_once_per_target_when": "roll succeeds (even if no numeric change)",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": null,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 11,
+        "name": "疑兵",
+        "entry": "0x414E42",
+        "evidence": "extract/research_ai_combat_asm/skill11.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "moveable=0; no type45 immunity; restored by next turn global moveable=1"
+        ],
+        "increment_usage_once_per_target_when": "roll succeeds (even if no numeric change)",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 0,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 12,
+        "name": "督战",
+        "entry": "0x414F19",
+        "evidence": "extract/research_ai_combat_asm/skill12.asm",
+        "target_side": "same",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "moveable=1",
+          "attack_integrity+=min(20,100-attack_integrity)",
+          "defense_integrity+=min(20,100-defense_integrity)",
+          "Target unit_type45 is immune; success roll occurs before immunity check."
+        ],
+        "increment_usage_once_per_target_when": "roll succeeds (even if no numeric change)",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 1,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 13,
+        "name": "暗杀",
+        "entry": "0x4150CA",
+        "evidence": "extract/research_ai_combat_asm/skill13.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "d=min(HP,E1*applyHP//100); HP-=d; no terrain or implicit morale loss"
+        ],
+        "increment_usage_once_per_target_when": "actual damage > 0",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 14,
+        "name": "施毒",
+        "entry": "0x415254",
+        "evidence": "extract/research_ai_combat_asm/skill14.asm",
+        "target_side": "different",
+        "roll": "ordinary_skill_roll",
+        "effects": [
+          "dHP=min(HP,E1*applyHP//100); HP-=dHP",
+          "dMorale=min(morale,E2*applyMorale//100); morale-=dMorale",
+          "Immediate dual-channel damage only; no poison timer."
+        ],
+        "increment_usage_once_per_target_when": "actual HP loss > 0 or actual morale loss > 0",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      },
+      {
+        "index": 15,
+        "name": "空袭",
+        "entry": "0x4154AA",
+        "evidence": "extract/research_ai_combat_asm/skill15.asm",
+        "target_side": "different",
+        "roll": "none",
+        "effects": [
+          "d=min(HP,E1*applyHP//100); HP-=d; no success roll, terrain or implicit morale loss"
+        ],
+        "increment_usage_once_per_target_when": "actual damage > 0",
+        "base_xp_per_valid_target": "8 if caster.side==0 else 2",
+        "target_moveable_write": 3,
+        "writes_last_attacker": true
+      }
+    ],
+    "animation_moveable": "419AD3 snapshots all 128 moveable values to472F88 before effects;419B0D restores every value==2 or3 from snapshot afterwards. Therefore ordinary hit-state3 does NOT suppress future actions; deliberate doubt0 and rally1 survive restore."
+  },
+  "kill_xp": {
+    "entry": "0x42AB23",
+    "formula": "diff=victim.level-killer.level; diff<-6:1, <-3:2, <-1:4, <0:8, ==0:12, >0:min(80,16*diff)",
+    "cap_relationship": "Added after base attack/skill XP cap; no joint final cap proved."
+  },
+  "casualties": {
+    "death_condition": "HP==0 OR morale==0",
+    "action": "Fighter.stage=0 and clear occupied cell via41E4E0; process loot hook",
+    "difficulty_penalty": "After player casualty counter increments: if dead.side==0 AND 1<=dead.slot<32 AND (difficulty==2 OR (difficulty==1 AND cumulative_player_casualties<3)), protagonist.level=max(1,level-1), protagonist.HP=min(HP,new_maxHP).",
+    "stats": "player casualty8331F8; regular/skill enemy kill8331F0; mine enemy kill8331F4"
+  },
+  "mines": {
+    "entry": "0x4165CC",
+    "evidence": "extract/research_ai_combat_asm/4165cc.json",
+    "damage": "amount=mine.weili*apply_pct//100; clamp to current channel value",
+    "channel": "mine.shiqi_or_tili==0:HP; otherwise morale",
+    "friendly_fire": true,
+    "hit_roll": "none",
+    "target_moveable": 3,
+    "death": "Only cells with actual amount!=0 checked;HP==0 OR morale==0 ->stage0,42B35B shared XP,casualty stats and difficulty penalty. No regular42AFD2 loot hook.",
+    "xp": "No planter-specific XP, but42B35B shares XP to all active allies; see mine_facts.json for exact count/recipient ranges and capped formula."
+  },
+  "confidence_limits": [
+    "No runtime sampling or visual/audio frame timing",
+    "No automatic reverse-counterattack system found; exact caller enumeration and dispatch strongly support no synchronous counterattack",
+    "AI target score equations beyond ordinary attacks remain partly untranslated"
+  ]
+}

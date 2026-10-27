@@ -1,137 +1,156 @@
 extends RefCounted
 
-## M4 关卡装载：把战役队伍放进原版关卡数据。
-## 固定剧情单位来自 m4.json；队伍按 deploy 点补入；不改变关卡数据本身。
-
+## 原版People槽0..39和Fighter槽保持同一身份；合成主角PID映射slot0。
+## 不补等级、不增援造人、不改敌方坐标或剧情单位HP。
 
 static func build(m4: Dictionary, m2: Dictionary, idx: int, party: Array,
-		force_party := false, max_party := -1, deploy_pids: Array = []) -> Dictionary:
+		_force_party := false, max_party := -1, deploy_pids: Array = []) -> Dictionary:
+	# Public builders are also used directly by import/tests, not only Main's loader.
+	m4 = preload("res://scripts/battle/StateCodec.gd").integers(m4)
+	m2 = preload("res://scripts/battle/StateCodec.gd").integers(m2)
+	party = preload("res://scripts/battle/StateCodec.gd").integers(party)
+	deploy_pids = preload("res://scripts/battle/StateCodec.gd").integers(deploy_pids)
 	var levels: Array = m4.get("levels", [])
 	if idx < 0 or idx >= levels.size():
 		return {}
 	var lv: Dictionary = (levels[idx] as Dictionary).duplicate(true)
+	var dep: Dictionary = lv.get("deployment", {})
+	var limit := max_party if max_party >= 0 else int(dep.get("max_units", lv.get("max_deploy", 0)))
+	# Native direct-entry battles keep the active Fighter template. In L45
+	# the raw Special count is17 despite never running party placement.
+	if not bool(lv.get("party_deploy",limit not in [0,999])):limit=0
+	var excluded: Array = dep.get("excluded_slots", [])
+	var forced_slots:Array=dep.get("forced_slots",[])
+	var chosen: Array = []
+	var explicit_slots:=deploy_pids.size()==32
+	var special_by_pid:Dictionary={}
+	if explicit_slots:
+		for i in range(32):
+			if int(deploy_pids[i])!=-999:special_by_pid[int(deploy_pids[i])]=i
+	for slot in ([] if explicit_slots else dep.get("forced_slots", [])):
+		chosen.append(-100 if int(slot) == 0 else int(slot))
+	var ordered: Array = party
+	if not deploy_pids.is_empty():
+		ordered = []
+		for pid in deploy_pids:
+			for member in party:
+				if int(member.get("pid",-1)) == int(pid): ordered.append(member); break
+	for m in ordered:
+		var pid := int(m.get("pid", -1))
+		var slot := 0 if pid == -100 else pid
+		if slot < 0 or slot >= 32:
+			continue
+		if not (explicit_slots and forced_slots.has(slot)) and (slot in excluded or int(m.get("faction", 0)) != 0):
+			continue
+		if not deploy_pids.is_empty() and not deploy_pids.has(pid):
+			continue
+		if not chosen.has(pid) and chosen.size() < limit:
+			chosen.append(pid)
+	var members := {}
+	for m in party:
+		members[0 if int(m.get("pid", -1)) == -100 else int(m.get("pid", -1))] = m
 	var units: Array = []
-	for u in lv.get("units", []):
-		var d: Dictionary = (u as Dictionary).duplicate(true)
-		d["side"] = str(d.get("side", "enemy"))
+	var occupied_slots := {}
+	for rec in lv.get("units", []):
+		var d: Dictionary = rec.duplicate(true)
+		var slot := int(d.get("slot", -1))
+		if members.has(slot):
+			d = _merge_member(m2, members[slot], d)
+		_sync_side(d)
 		units.append(d)
-	var deploy: Array = []
-	for p in lv.get("deploy", []):
-		deploy.append([int(p[0]), int(p[1])])
-	var allow_party := force_party or bool(lv.get("party_deploy", false))
-	var limit := max_party if max_party >= 0 else int(lv.get("max_deploy", 10))
-	var roster: Array = []
-	if allow_party and not deploy_pids.is_empty():
-		for m in party:
-			if int(m.get("pid", -1)) in deploy_pids:
-				roster.append(m)
-	else:
-		roster = party
-	if allow_party and not roster.is_empty():
-		var fixed_keys := {}
-		var leader_pid := int((roster[0] as Dictionary).get("pid", -1))
-		for u in units:
-			if str(u.get("side", "")) == "player":
-				fixed_keys[str(u.get("key", _key(u.get("name", ""))))] = true
-		var added := 0
-		for m in roster:
-			if added >= limit:
-				break
-			if int(m.get("hp", 0)) <= 0:
+		occupied_slots[slot] = true
+	if limit > 0 and limit != 999:
+		var pos := 0
+		for pid in chosen:
+			var special_index:int=special_by_pid.get(int(pid),pos)
+			var slot := 0 if int(pid) == -100 else int(pid)
+			if not members.has(slot):
 				continue
-			var k := _key(m.get("name", ""))
-			if fixed_keys.has(k):
-				continue
-			var spawn := _pick_deploy(deploy, added, lv, units)
-			# 战役等级同步：低等级队伍在后期主线/隐藏/彩蛋会被原版高等级敌军压死。
-			# 这是可玩性补足，不改变存档等级。
-			var floor := mini(60, 5 + idx * 2)
-			var d := member_unit(m2, m, spawn, floor)
-			d["hero"] = int(d.get("pid", -1)) == leader_pid
-			units.append(d)
-			fixed_keys[k] = true
-			added += 1
-	# 兜底：没有任何玩家单位时，放一个队伍成员到部署点/地图边缘
-	if not _has_side(units, "player") and not party.is_empty():
-		var spawn := _pick_deploy(deploy, 0, lv, units)
-		var floor0 := mini(60, 5 + idx * 2)
-		units.append(member_unit(m2, party[0], spawn, floor0))
+			if not occupied_slots.has(slot):
+				var deploy: Array = lv.get("deploy", [])
+				var point: Dictionary = _pick_deploy(deploy, special_index, lv, units)
+				if point.is_empty():
+					push_error("原版部署位置周围25格均占用: L%d Special%d"%[idx,special_index])
+					continue
+				units.append(member_unit(m2, members[slot], point))
+				occupied_slots[slot] = true
+			pos += 1
+	# 未出场槽同样用持久人物更新，保证后续spawn不退回模板等级/装备。
+	var pool: Array = []
+	for rec in lv.get("slot_pool", []):
+		var d: Dictionary = rec.duplicate(true)
+		var slot := int(d.get("slot", -1))
+		if members.has(slot):
+			d = _merge_member(m2, members[slot], d)
+		_sync_side(d)
+		pool.append(d)
+	lv["slot_pool"] = pool
+	lv["spawn_pool"] = pool.duplicate(true)
 	lv["units"] = units
 	lv["players"] = _count_side(units, "player")
 	lv["enemies"] = _count_side(units, "enemy")
 	return lv
 
 
+static func _sync_side(d: Dictionary) -> void:
+	# The current People.side after party overlay is authoritative. Named slot
+	# numbers and pad3e/control must never reclassify unrecruited NPCs as allies.
+	if d.has("faction"):
+		d["side"] = "player" if int(d["faction"]) == 0 else "enemy"
+		d["auto"] = d["side"] == "player" and not bool(d.get("control",true))
+
+
+static func _merge_member(m2: Dictionary, m: Dictionary, fighter: Dictionary) -> Dictionary:
+	var d := member_unit(m2, m, {"x": fighter.get("x", 0), "y": fighter.get("y", 0)})
+	for key in ["slot", "direction", "behavior", "target_slot", "target_x", "target_y", "home_x", "home_y", "control", "auto", "protected"]:
+		if fighter.has(key):
+			d[key] = fighter[key]
+	return d
+
+
 static func member_unit(m2: Dictionary, m: Dictionary, spawn: Dictionary,
-		level_floor: int = 0) -> Dictionary:
-	var people: Array = m2.get("people", [])
+		_unused_level_floor: int = 0) -> Dictionary:
 	var pid := int(m.get("pid", -1))
-	var p: Dictionary = people[pid] if pid >= 0 and pid < people.size() else {}
-	var u: Dictionary = p.get("unit", {})
-	if u.is_empty():
-		# 自定义主角（pid<0）不在 PEOPLE.DAT，用兵种表补基础属性。
-		u = (m2.get("units", {}) as Dictionary).get(
-				str(m.get("bingzhong", 0)), {})
-	var lv := maxi(int(m.get("level", 1)), int(level_floor))
-	var max_hp := int(m.get("max_hp", max(1, int(u.get("tili", 50)))))
-	if lv > int(m.get("level", 1)):
-		max_hp = max(1, int(u.get("tili", 50)) + (lv - 1) * int(u.get("tili_plus", 0)))
-	var equip_id := int(m.get("equip", -1))
-	var equip_item: Dictionary = {}
-	var equip_bonus := {"attack": 0, "defense": 0}
-	if equip_id >= 0:
-		equip_item = (m2.get("items", {}) as Dictionary).get(str(equip_id), {})
-		if not equip_item.is_empty():
-			equip_bonus = {"attack": max(0, int(equip_item.get("para3", 0))),
-					"defense": max(0, int(equip_item.get("para4", 0)))}
-	return {
-		"pid": pid,
-		"hero": pid == 0 or bool(m.get("hero", false)),
-		"slot": -1,
-		"side": "player",
-		"name": str(m.get("name", "游击队员")),
-		"key": _key(m.get("name", "")),
-		"unit_name": str(m.get("unit_name", u.get("name", ""))),
-		"bingzhong": int(m.get("bingzhong", p.get("bingzhong", 0))),
-		"level": lv,
-		"wuli": int(m.get("wuli", 0)),
-		"zhili": int(m.get("zhili", 0)),
-		"xp": int(m.get("xp", 0)),
-		"skills": (u.get("skills", {}) as Dictionary).duplicate(true),
+	var bz := int(m.get("bingzhong", 0))
+	var cls: Dictionary = m2.get("units", {}).get(str(bz), {})
+	var lv := int(m.get("level", 1))
+	var hp := maxi(1, int(cls.get("tili", 50)) + (lv - 1) * int(cls.get("tili_plus", 0)))
+	var slots: Array = (m.get("item_slots", []) as Array).duplicate()
+	var valid: Array = m2.get("item_valid", [])
+	var atk := 0
+	var df := 0
+	var movement := 0
+	var equip := -1
+	for raw in slots:
+		var iid := int(raw) - 1
+		if iid < 81 or iid >= valid.size() or bz >= valid[iid].size() or int(valid[iid][bz]) == 0:
+			continue
+		var item: Dictionary = m2.get("items", {}).get(str(iid), {})
+		atk = maxi(atk, int(item.get("para3", 0)))
+		df = maxi(df, int(item.get("para4", 0)))
+		movement = maxi(movement, int(item.get("para1", 0)))
+		equip = iid
+	return {"pid": pid, "slot": 0 if pid == -100 else pid,
+		"hero": pid == -100, "side": "player" if int(m.get("faction", 0)) == 0 else "enemy",
+		"faction": int(m.get("faction", 0)), "name": str(m.get("name", "游击队员")),
+		"key": _key(m.get("name", "")), "unit_name": str(cls.get("name", "")),
+		"bingzhong": bz, "level": lv, "wuli": int(m.get("wuli", 0)), "zhili": int(m.get("zhili", 0)),
+		"xp": int(m.get("xp", 0)), "skills": (m.get("skills", {}) as Dictionary).duplicate(true),
 		"skill_counts": (m.get("skills", {}) as Dictionary).duplicate(true),
-		"attack_count": int(m.get("attack_count", 0)),
-		"item_slots": (m.get("item_slots", []) as Array).duplicate(),
+		"attack_count": int(m.get("attack_count", 1)), "item_slots": slots,
 		"mine_slots": (m.get("mine_slots", []) as Array).duplicate(),
-		"equip": equip_id,
-		"equip_name": str(equip_item.get("name", "")),
-		"attack_bonus": int(equip_bonus["attack"]),
-		"defense_bonus": int(equip_bonus["defense"]),
-		"hp": max_hp if lv > int(m.get("level", 1)) else max(1, int(m.get("hp", max_hp))),
-		"max_hp": max_hp,
-		"raw_hp": int(m.get("hp", max_hp)),
-		"hp_source": "party",
-		"x": int(spawn.get("x", 0)),
-		"y": int(spawn.get("y", 0)),
-		"direction": 1,
-		"behavior": 1,
-		"target_slot": 0,
-		"target_x": 0,
-		"target_y": 0,
-		"face": int(m.get("face", 0)),
-		"face_png": str(m.get("face_png", "")),
-		"army_png": str(m.get("army_png", p.get("army_png", ""))),
-		"select": int(u.get("select", 1)),
-		"apply": int(u.get("apply", 0)),
-		"move": int(u.get("yidong", 4)),
-		"gongji": int(u.get("gongji", 0)),
-		"fangyu": int(u.get("fangyu", 0)),
-		"tili": int(u.get("tili", 50)),
-		"tili_plus": int(u.get("tili_plus", 0)),
-		"is_boss": false,
-		"protected": true if str(m.get("name", "")) in ["村民", "老百姓"] else false,
-		"control": true,
-		"auto": false,
-	}
+		"equip": equip, "equip_name": str(m2.get("items", {}).get(str(equip), {}).get("name", "")),
+		"attack_bonus": atk, "defense_bonus": df,
+		"hp": hp, "max_hp": hp, "raw_hp": hp, "hp_source": "formula",
+		"x": int(spawn.get("x", 0)), "y": int(spawn.get("y", 0)), "direction": int(spawn.get("direction",1)),
+		"behavior": 1, "target_slot": 0, "target_x": 0, "target_y": 0,
+		"face": int(m.get("face", 0)), "face_png": str(m.get("face_png", "")),
+		"army_png": "res://assets/army/army_%03d.png" % int(cls.get("img_index", 0)),
+		"select": int(cls.get("select", 1)), "apply": int(cls.get("apply", 0)),
+		"move": int(cls.get("yidong", 4)) + movement,
+		"gongji": int(cls.get("gongji", 0)), "fangyu": int(cls.get("fangyu", 0)),
+		"tili": int(cls.get("tili", 50)), "tili_plus": int(cls.get("tili_plus", 0)),
+		"is_boss": false, "protected": false, "control": true, "auto": false}
 
 
 static func _pick_deploy(deploy: Array, i: int, lv: Dictionary, units: Array) -> Dictionary:
@@ -139,27 +158,16 @@ static func _pick_deploy(deploy: Array, i: int, lv: Dictionary, units: Array) ->
 	var h := int(lv.get("map", {}).get("height", 1))
 	var used := {}
 	for u in units:
-		used["%d,%d" % [int(u.get("x", -1)), int(u.get("y", -1))]] = true
-	if i < deploy.size():
-		var p: Array = deploy[i]
-		if not used.has("%d,%d" % [int(p[0]), int(p[1])]):
-			return {"x": int(p[0]), "y": int(p[1])}
-	# 围绕部署点找空位
-	for j in range(deploy.size()):
-		var p: Array = deploy[j]
-		for dy in range(-2, 3):
-			for dx in range(-2, 3):
-				var x := int(p[0]) + dx
-				var y := int(p[1]) + dy
-				if x >= 0 and y >= 0 and x < w and y < h \
-						and not used.has("%d,%d" % [x, y]):
-					return {"x": x, "y": y}
-	# 底部兜底
-	for y in range(h - 1, 0, -1):
-		for x in range(w):
-			if not used.has("%d,%d" % [x, y]):
-				return {"x": x, "y": y}
-	return {"x": 0, "y": 0}
+		used[Vector2i(int(u.get("x", -1)), int(u.get("y", -1)))] = true
+	if i >= deploy.size(): return {}
+	var p: Array = deploy[i]
+	var specials: Array = lv.get("specials",[])
+	var direction := int(specials[i].get("direction",1)) if i<specials.size() else 1
+	# 43B3E2/447390: own Special and exact 25-offset order, not other people's
+	# positions and not a terrain-aware/global-search convenience fallback.
+	var tile := preload("res://scripts/battle/OriginalPlacement.gd").find_cell(Vector2i(int(p[0]),int(p[1])),Vector2i(w,h),used)
+	if tile.x >= 0:return {"x":tile.x,"y":tile.y,"direction":direction}
+	return {}
 
 
 static func _has_side(units: Array, side: String) -> bool:

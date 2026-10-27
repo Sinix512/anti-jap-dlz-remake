@@ -74,7 +74,9 @@ def parse_fail_units(failure: str, player_names: list[str]) -> list[str]:
 
 def hzk_glyph(ch: str) -> bytes | None:
     try:
-        b = ch.encode("gb2312")
+        # Native character-creation table includes D7FA, an unassigned GBK
+        # cell which still has an HZK16 raster. Keep that cell byte-exact.
+        b = bytes.fromhex("d7fa") if ch == "\ue000" else ch.encode("gb2312")
     except UnicodeEncodeError:
         return None
     if len(b) != 2:

@@ -29,9 +29,14 @@ func _load_json(path: String):
 
 func _new_battle(idx: int):
 	var builder = load("res://scripts/m4/LevelBuilder.gd")
-	var built: Dictionary = builder.build(m4, m2, idx, gs.party, false)
+	# Full original-person fixtures, not a campaign-clear claim. gs.party
+	# excludes the protagonist and cannot stand in for a deployed roster.
+	var people:Array=[]
+	for slot in range(40):people.append(gs.person(slot))
+	var built: Dictionary = builder.build(m4, m2, idx, people, false)
 	var b = load("res://scripts/Battle.gd").new()
 	root.add_child(b)
+	b.fast_sim=true
 	b.setup(m4, built, font)
 	b.set_process(false)
 	return b
@@ -116,6 +121,9 @@ func _run() -> void:
 		if u.alive and u.side == "enemy" and (u.x == 8 or u.x == 10) and u.y == 3:
 			b.remove_slot(int(u.slot))
 	var ps: Array = b.player_units.filter(func(u): return u.alive)
+	if ps.size()<2:
+		ps.append(b._spawn_unit(load("res://scripts/m4/LevelBuilder.gd").member_unit(m2,gs.person(1),{"x":0,"y":0})))
+		b.set_slot_faction(1,0)
 	if ps.size() >= 2:
 		ps[0].set_tile(8, 3)
 		ps[1].set_tile(10, 3)
@@ -158,7 +166,7 @@ func _run() -> void:
 	b.remove_slot(42)
 	b.scenario.on_tick()
 	_check(bool(b.finished_flag) and b.last_result == "victory", "L19 40–42 离场胜利")
-	_check(int(b.stats.get("score_bonus", 0)) == 1000, "L19 组 1 +1000 分")
+	_check(int(b.stats.get("money_bonus", 0)) == 1000, "L19 组 1 +1000 元")
 	b.queue_free()
 
 	# 9) L26 到达 (2,39) -> 胜利
@@ -264,9 +272,9 @@ func _run() -> void:
 
 	# 14) L00 T750 第 6 回合重排 40/41，西北院重新生成
 	b = _new_battle(0)
-	b.turn = 6
+	b.scenario.on_turn_start(6)
 	b.scenario.on_tick()
-	_check(int(b.scenario.trigger_flags.get("0x583F18", 0)) == 2,
+	_check(b.scenario._global_value("0x583F18") == 2,
 			"L00 第 6 回合 flag=2")
 	_check(b.unit_by_slot(40) == null and b.unit_by_slot(41) == null,
 			"L00 第 6 回合撤下 40/41")
@@ -280,7 +288,7 @@ func _run() -> void:
 	b.queue_free()
 
 	b = _new_battle(0)
-	b.turn = 41
+	b.scenario.on_turn_start(41)
 	b.scenario.on_tick()
 	_check(bool(b.finished_flag) and b.last_result == "defeat",
 			"L00 第 41 回合失败")
@@ -288,48 +296,51 @@ func _run() -> void:
 
 	# 15) L22 三选一：放走 +5000
 	b = _new_battle(22)
+	b.fast_sim=false
 	b.remove_slot(24)
 	b.scenario.on_tick()
 	_check(not b.scenario.pending_choice.is_empty(), "L22 触发三选一")
 	_check(b.trigger_messages.any(func(m): return int(m.get("record", -1)) == 159),
 			"L22 显示投降 TXT 159")
 	b.scenario.resolve_choice(1)
-	_check(int(b.stats.get("score_bonus", 0)) == 5000, "L22 放走 +5000")
+	_check(int(b.stats.get("money_bonus", 0)) == 5000, "L22 放走 +5000")
 	_check(bool(b.finished_flag) and b.last_result == "victory", "L22 放走胜利")
 	b.queue_free()
 
-	# 收编：24/25 转我方并记录入队
+	# 收编仅改People.side，24保持离场，不能复活补HP/移动/改控制。
 	b = _new_battle(22)
+	b.fast_sim=false
 	b.remove_slot(24)
 	b.scenario.on_tick()
 	b.scenario.resolve_choice(2)
-	var r24 = b.unit_by_slot(24)
+	var r24 = b.units.filter(func(u):return int(u.slot)==24)[0]
 	var r25 = b.unit_by_slot(25)
-	_check(r24 != null and r24.side == "player", "L22 收编 24 号")
-	_check(r25 != null and r25.side == "player", "L22 收编 25 号")
-	_check((b.stats.get("recruited", []) as Array).size() == 2, "L22 记录 24/25 入队")
+	_check(r24 != null and r24.side == "player" and int(r24.data.faction)==0 and not r24.alive, "L22 收编 24 号不复活")
+	_check(r25 != null and r25.side == "player" and int(r25.data.faction)==0, "L22 收编 25 号精确侧别")
+	_check(not r24.control and not r25.control and b.stats.get("recruited",[]).is_empty(), "L22 不改控制或额外结算招募")
 	b.queue_free()
 
-	# 枪毙：全军士气 +2
+	# 枪毙：People0..23等级 +2
 	b = _new_battle(22)
+	b.fast_sim=false
 	if not b.player_units.is_empty():
 		b.player_units[0].morale = 80
 	var before: Array = []
 	for u in b.player_units:
-		before.append(int(u.morale))
+		before.append(int(u.data.level))
 	b.remove_slot(24)
 	b.scenario.on_tick()
 	b.scenario.resolve_choice(0)
 	var gained := false
 	for i in range(b.player_units.size()):
-		if int(b.player_units[i].morale) > int(before[i]):
+		if int(b.player_units[i].data.level) > int(before[i]):
 			gained = true
-	_check(gained, "L22 枪毙全军士气 +2")
+	_check(gained, "L22 枪毙People0..23等级 +2")
 	b.queue_free()
 
 	# 16) L23 34 号随机出生，占住出生格后出场胜利
 	b = _new_battle(23)
-	_check(int(b.scenario.trigger_flags.get("0x583F54", 0)) == 1,
+	_check(b.scenario._global_value("0x583F54") == 1,
 			"L23 第 1 回合初始化 34 号")
 	var pos34: Vector2i = b.scenario._slot_pos(34)
 	_check(pos34 in [Vector2i(0, 31), Vector2i(7, 31), Vector2i(21, 21)],
@@ -359,12 +370,11 @@ func _run() -> void:
 	_check(not b.finished_flag, "L38 我军进入出口不判负")
 	b.queue_free()
 
-	# 18) L18 劝降分支不可达：撤走 21 号不应直接胜利
+	# 18) L18未招募21的side原值1来自People批量加载。
 	b = _new_battle(18)
 	b.remove_slot(21)
 	b.scenario.on_tick()
-	if b.alive_enemies() > 0:
-		_check(not b.finished_flag, "L18 撤走 21 号不直接胜利")
+	_check(b.finished_flag and b.last_result=="victory", "L18未招募21离场清敌胜利")
 	b.queue_free()
 
 	if failures.is_empty():

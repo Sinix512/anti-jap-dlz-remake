@@ -41,6 +41,20 @@ def save_contact(image: Image.Image, rel: str) -> Path:
     return path
 
 
+def prepare_txt() -> None:
+    recs = txt.load(GAME_DIR / "TXT.DAT")
+    dialogue = "\n\n".join(f"#{r.number}\n{r.text}" for r in recs)
+    (OUT / "txt").mkdir(parents=True, exist_ok=True)
+    (OUT / "txt" / "dialogue.txt").write_text(dialogue, encoding="utf-8")
+    dump("txt.json", {
+        "source": "TXT.DAT",
+        "count": len(recs),
+        "chars": sum(len(r.text) for r in recs),
+        "records": [{"n": r.number, "text": r.text, "native_stream": r.native_stream} for r in recs],
+    })
+    print(f"TXT: {len(recs)} 条, {sum(len(r.text) for r in recs)} 字")
+
+
 def main() -> int:
     if not GAME_DIR.is_dir():
         print(f"找不到原版资源目录：{GAME_DIR}", file=sys.stderr)
@@ -66,18 +80,7 @@ def main() -> int:
     for name, err in fails:
         print(f"  FAIL {name}: {err}")
 
-    # ---------------- TXT ----------------
-    recs = txt.load(GAME_DIR / "TXT.DAT")
-    dialogue = "\n\n".join(f"#{r.number}\n{r.text}" for r in recs)
-    (OUT / "txt").mkdir(parents=True, exist_ok=True)
-    (OUT / "txt" / "dialogue.txt").write_text(dialogue, encoding="utf-8")
-    dump("txt.json", {
-        "source": "TXT.DAT",
-        "count": len(recs),
-        "chars": sum(len(r.text) for r in recs),
-        "records": [{"n": r.number, "text": r.text} for r in recs],
-    })
-    print(f"TXT: {len(recs)} 条, {sum(len(r.text) for r in recs)} 字")
+    prepare_txt()
 
     # ---------------- PEOPLE ----------------
     roster = people.load(GAME_DIR / "PEOPLE.DAT")

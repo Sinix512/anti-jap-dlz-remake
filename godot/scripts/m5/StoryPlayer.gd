@@ -1,10 +1,11 @@
 extends Control
 
-## M5 剧情播放器：TXT 478 条、说话人/头像、占位符替换、逐字显示。
+## M5 剧情播放器：TXT 478 条、说话人/头像、占位符替换、原纵向卷页。
 ## 也提供“剧情回顾”档案模式。
 
 signal finished
 
+var context: Dictionary = {}
 var font: Font
 var data: Dictionary = {}
 var player_name := "李勇"
@@ -17,11 +18,17 @@ var visible_chars := 0.0
 var speed := 52.0
 var _on_done: Callable
 var _records: Dictionary = {}
+const NativePalette=preload("res://scripts/ui/OriginalPalette.gd")
+var _native_palette:Array=[]
+static var _native_faces:PackedByteArray
+var native_page:Control
+var old_native_page:Control
+const Layout=preload("res://scripts/ui/OriginalStoryLayout.gd")
 
 var _portrait: TextureRect
 var _big_portrait: TextureRect
 var _speaker: Label
-var _text_label: Label
+var _text_label: RichTextLabel
 var _hint: Label
 var _counter: Label
 var _indicator: Label
@@ -32,11 +39,14 @@ var archive_levels_only := false
 var _preview_text: Label
 var _preview_portrait: TextureRect
 var _selected_record := 0
+var _finished := false
 
 
 func setup(f: Font, m5: Dictionary, scene_ids: Array = [],
-		name_text: String = "李勇", on_done: Callable = Callable()) -> void:
+		name_text: String = "李勇", on_done: Callable = Callable(), scene_context: Dictionary = {}) -> void:
 	font = f
+	context = scene_context
+	_native_palette=NativePalette.colors(str(context.get("native_palette_key","KUANG04")))
 	data = m5
 	player_name = name_text if name_text != "" else "李勇"
 	_on_done = on_done
@@ -56,193 +66,81 @@ func setup(f: Font, m5: Dictionary, scene_ids: Array = [],
 
 
 func _build_scene() -> void:
-	var lv := -1
-	for n in ids:
-		var rec: Dictionary = _records.get(int(n), {})
-		if not rec.is_empty() and int(rec.get("level", -1)) >= 0:
-			lv = int(rec["level"])
-			break
-	var npic_ids := [1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 21, 22, 25, 29]
-	var bg_path := "res://assets/ui/story_bg.png"
-	if lv >= 0 and lv < npic_ids.size():
-		var np := "res://assets/ui/npic_%02d.png" % int(npic_ids[lv])
-		if ResourceLoader.exists(np):
-			bg_path = np
-	var bg := TextureRect.new()
-	bg.texture = load(bg_path) if ResourceLoader.exists(bg_path) else null
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bg.modulate = Color(0.72, 0.68, 0.60, 1.0)
-	add_child(bg)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.42)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(dim)
-	var head := OriginalUI.header("剧 情", font, Rect2(0, 0, 640, 30))
-	add_child(head)
-	_counter = OriginalUI.label("", font, 14, Color("#d8c39a"))
-	_counter.position = Vector2(520, 5)
-	_counter.size = Vector2(110, 20)
-	_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	add_child(_counter)
-	_big_portrait = TextureRect.new()
-	_big_portrait.position = Vector2(18, 62)
-	_big_portrait.size = Vector2(150, 190)
-	_big_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_big_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_big_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_big_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_big_portrait.visible = false
-	add_child(_big_portrait)
-
-	_panel = Control.new()
-	_panel.position = Vector2(20, 276)
-	_panel.size = Vector2(600, 168)
-	add_child(_panel)
-	_panel.add_child(OriginalUI.nine_patch(OriginalUI.PANEL_RED,
-			Rect2(0, 0, 600, 168), 12))
-	var head2 := OriginalUI.header("", font, Rect2(0, 0, 600, 30))
-	_panel.add_child(head2)
-	_portrait = TextureRect.new()
-	_portrait.position = Vector2(12, 38)
-	_portrait.size = Vector2(78, 98)
-	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_panel.add_child(_portrait)
-	_speaker = OriginalUI.label("", font, 16, OriginalUI.GOLD_LIGHT)
-	_speaker.position = Vector2(24, 36)
-	_speaker.size = Vector2(552, 22)
-	_panel.add_child(_speaker)
-	_text_label = OriginalUI.label("", font, 16, OriginalUI.INK)
-	_text_label.position = Vector2(24, 62)
-	_text_label.size = Vector2(552, 94)
-	_text_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-	_panel.add_child(_text_label)
-	_hint = OriginalUI.label("点击 / 空格 继续    Esc 跳过", font, 14,
-			Color("#d8c39a"))
-	_hint.position = Vector2(8, 450)
-	_hint.size = Vector2(624, 20)
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(_hint)
-	_indicator = OriginalUI.label("▼", font, 16, OriginalUI.GOLD)
-	_indicator.position = Vector2(584, 420)
-	_indicator.size = Vector2(20, 20)
-	_indicator.visible = false
-	add_child(_indicator)
-	gui_input.connect(_on_gui_input)
-
+	# Only the original404x127 frame; no typewriter, ▼, click sound or dimmer.
+	if context.has("backdrop"):
+		var bg:=TextureRect.new();bg.texture=load(str(context.backdrop))
+		bg.position=Vector2.ZERO;bg.size=Vector2(640,480);bg.mouse_filter=Control.MOUSE_FILTER_IGNORE;add_child(bg)
+	_speaker=Label.new();_speaker.hide();add_child(_speaker)
+	_counter=Label.new();_counter.hide();add_child(_counter)
+	_big_portrait=TextureRect.new();_big_portrait.hide();add_child(_big_portrait)
 
 func _build_lines() -> void:
 	lines.clear()
 	for n in ids:
-		var rec: Dictionary = _records.get(int(n), {})
-		if rec.is_empty():
-			continue
-		for line in rec.get("lines", []):
-			var l: Dictionary = (line as Dictionary).duplicate(true)
-			l["n"] = int(n)
-			lines.append(l)
-	line_index = 0
-	if lines.is_empty():
-		_finish()
-		return
-	_show_line(0)
+		var rec:Dictionary=_records.get(int(n),{})
+		for source in rec.get("lines",[]):
+			var line:Dictionary=source.duplicate(true);line["n"]=int(n)
+			var code:=int(line.get("code",-1))
+			var identity:Dictionary=context.get("people_by_slot",{}).get(str(code),{})
+			if not identity.is_empty():
+				line["speaker"]=identity.get("name",line.get("speaker",""));line["face"]=identity.get("face",-1)
+			if code==0:line["speaker"]=player_name
+			var width:=36 if code>=0 or bool(context.get("battle_profile",false)) else 46
+			var pages:=Layout.pages(_fmt(str(line.get("text",""))),str(line.get("speaker","")) if code>=0 else "",width)
+			for j in range(pages.size()):
+				var copy:=line.duplicate(true);copy["glyphs"]=pages[j];copy["width"]=width;copy["record_end"]=j==pages.size()-1;copy["continues"]=j>0;lines.append(copy)
+	line_index=0
+	if lines.is_empty():_finish()
+	else:_show_line(0)
 
 
 func _fmt(text: String) -> String:
-	text = text.replace("GG", player_name)
-	for p in ["AA", "BB", "CC", "DD", "TT"]:
-		text = text.replace(p, "")
-	return text
+	var out:="";var i:=0
+	while i<text.length():
+		var char:=text.substr(i,1)
+		if char in ["G","T"]:
+			out+=_red_name(player_name if char=="G" else str(context.get("level_name","当前战斗")));i+=2
+		else:out+=char;i+=1
+	return out
+
+func _red_name(value:String) -> String:
+	var out:=""
+	for char in value:out+=("AA" if char.unicode_at(0)>=128 else "")+char
+	return out
 
 
-func _show_line(i: int) -> void:
-	if i < 0 or i >= lines.size():
-		_finish()
-		return
-	line_index = i
-	var l: Dictionary = lines[i]
-	var speaker := str(l.get("speaker", "旁白"))
-	if speaker == "GG":
-		speaker = player_name
-	var text := _fmt(str(l.get("text", "")))
-	_speaker.text = speaker
-	_text_label.text = text
-	_text_label.visible_characters = 0
-	visible_chars = 0.0
-	typing = true
-	_indicator.visible = false
-	var face := int(l.get("face", -1))
-	if face >= 0 and ResourceLoader.exists("res://assets/face/face_%03d.png" % face):
-		var ft: Texture2D = load("res://assets/face/face_%03d.png" % face)
-		_portrait.texture = null
-		_portrait.visible = false
-		_big_portrait.texture = ft
-		_big_portrait.visible = true
-	else:
-		_portrait.texture = null
-		_portrait.visible = false
-		_big_portrait.texture = null
-		_big_portrait.visible = false
-		if speaker == "旁白":
-			_speaker.text = ""
-			_text_label.position = Vector2(24, 40)
-			_text_label.size = Vector2(552, 116)
-		else:
-			_text_label.position = Vector2(24, 62)
-			_text_label.size = Vector2(552, 94)
-	_counter.text = "%d / %d" % [i + 1, lines.size()]
-
-
-func _process(delta: float) -> void:
-	if mode != "scene" or not typing:
-		return
-	visible_chars += speed * delta
-	var total := _text_label.text.length()
-	if visible_chars >= total:
-		visible_chars = total
-		typing = false
-		_indicator.visible = true
-	_text_label.visible_characters = int(visible_chars)
-
-
-func _on_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			_advance()
-			get_viewport().set_input_as_handled()
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER \
-				or event.keycode == KEY_KP_ENTER:
-			_advance()
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_ESCAPE:
-			_finish()
-
+func _show_line(i:int) -> void:
+	if i<0 or i>=lines.size():_finish();return
+	line_index=i
+	var line:Dictionary=lines[i]
+	if is_instance_valid(native_page):
+		if bool(line.get("continues",false)):
+			old_native_page=native_page;old_native_page.set_process(false);old_native_page.set_process_input(false)
+		else:native_page.hide();native_page.queue_free()
+	native_page=preload("res://scripts/ui/OriginalStoryPage.gd").new();add_child(native_page)
+	native_page.setup(font,line.glyphs,int(line.get("face",-1)) if int(line.get("code",-1))>=0 else -1,str(context.get("native_palette_key","KUANG04")),int(line.width))
+	native_page.record_end=bool(line.record_end);native_page.battle_profile=bool(context.get("battle_profile",false))
+	if is_instance_valid(old_native_page):
+		native_page.hide()
+		native_page.scroll_started.connect(func():
+			native_page.show()
+			if is_instance_valid(old_native_page):old_native_page.queue_free();old_native_page=null)
+	_speaker.text=str(line.get("speaker","旁白"))
+	native_page.confirmed.connect(func():
+		if line_index+1<lines.size():_show_line(line_index+1)
+		else:_finish())
 
 func _advance() -> void:
-	if mode != "scene":
-		return
-	if typing:
-		typing = false
-		_text_label.visible_characters = -1
-		_indicator.visible = true
-		return
-	OriginalUI.play_sfx("click")
-	if line_index + 1 < lines.size():
-		_show_line(line_index + 1)
-	else:
-		_finish()
+	# Explicit QA/archive stepping only; real input lives in OriginalStoryPage.
+	if mode!="scene" or not is_instance_valid(native_page):return
+	if native_page.stage=="scroll":native_page.height=99;native_page._scroll_step()
+	elif native_page.stage=="wait":native_page._accept()
 
 
 func _finish() -> void:
+	if _finished: return
+	_finished = true
+	process_mode=Node.PROCESS_MODE_DISABLED;hide()
 	if _on_done.is_valid():
 		_on_done.call()
 	finished.emit()

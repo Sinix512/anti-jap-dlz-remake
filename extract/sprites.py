@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `FACE.DAT` | 80×100 | 170 | 1 |
 | `ARMY.DAT` | 48×48 | 91×19=1729 | 19 帧/兵种 |
-| `MINE.DAT` | 48×48 | 10×4=40 | 4 帧/雷 |
+| `MINE.DAT` | 48×48 | 10×4=40 | 40 独立图标（引信×10+雷种），非动画 |
 | `FLM.DAT` | 48×48 | 32×16=512 | 16 帧/动画 |
 | `GOODS.DAT` | 48×48 | 128 | 1（物品图标） |
 | `MATERIAL.DAT` | 48×48 | 10 | 1（材料图标） |
@@ -61,7 +61,7 @@ class SpriteBank:
 BANKS: tuple[SpriteBank, ...] = (
     SpriteBank("face", "FACE.DAT", 80, 100, 170),
     SpriteBank("army", "ARMY.DAT", 48, 48, 91 * 19, 19, True),
-    SpriteBank("mine", "MINE.DAT", 48, 48, 10 * 4, 4, True),
+    SpriteBank("mine", "MINE.DAT", 48, 48, 10 * 4, 1, True),
     SpriteBank("flm", "FLM.DAT", 48, 48, 32 * 16, 16, True),
     SpriteBank("goods", "GOODS.DAT", 48, 48, 128, 1, True),
     SpriteBank("material", "MATERIAL.DAT", 48, 48, 10, 1, True),

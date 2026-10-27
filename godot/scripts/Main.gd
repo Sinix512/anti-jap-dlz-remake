@@ -1,6 +1,7 @@
 extends Control
 
-## M3-M5 入口：标题 / 战役 / 47 关演练 / 剧情回顾 / 设置。
+## Original title / campaign. Remake tools are explicit command-line extras,
+## not extra rows or buttons on the original five-item title screen.
 
 const M2_PATH := "res://data/m2.json"
 const M3_PATH := "res://data/m3.json"
@@ -9,6 +10,7 @@ const M5_PATH := "res://data/m5.json"
 const FONT_PATH := "res://assets/font/hzk16.fnt"
 const LevelBuilder = preload("res://scripts/m4/LevelBuilder.gd")
 
+var qa_mode := false
 var font: Font
 var theme_ref: Theme
 var m2: Dictionary = {}
@@ -26,11 +28,11 @@ var result_canvas: CanvasLayer
 var result_layer: Control
 var free_level := -1
 var bgm: AudioStreamPlayer
-var creation_difficulty := 1
-var _diff_buttons: Array = []
 
 
 func _ready() -> void:
+	# 根容器不是交互控件；不能吞掉战斗地图的未处理鼠标事件。
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if ResourceLoader.exists(FONT_PATH):
 		font = load(FONT_PATH)
 	else:
@@ -55,6 +57,14 @@ func _ready() -> void:
 	free_state.new_game(m2)
 	_show_title()
 	_handle_capture()
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--remake-tools="):continue
+		match arg.trim_prefix("--remake-tools="):
+			"drill":_open_battle_select()
+			"story":_show_story_archive()
+			"settings":_show_settings()
+			"intro":_play_intro()
+			"gallery":_show_gallery_preview()
 
 
 func _handle_capture() -> void:
@@ -66,6 +76,7 @@ func _handle_capture() -> void:
 
 
 func _capture(mode: String) -> void:
+	qa_mode = true
 	for i in range(4):
 		await get_tree().process_frame
 	match mode:
@@ -101,15 +112,6 @@ func _capture(mode: String) -> void:
 				await get_tree().process_frame
 			if is_instance_valid(campaign):
 				campaign._show_deployment(0)
-		"m5-levelup":
-			_start_campaign()
-			for i in range(3):
-				await get_tree().process_frame
-			if is_instance_valid(campaign):
-				campaign._show_levelups([
-					{"name": "张嘎", "from": 3, "to": 5, "hp": 130, "max_hp": 130},
-					{"name": "赵虎", "from": 3, "to": 4, "hp": 129, "max_hp": 129},
-				])
 		"m2-shop", "m4-shop":
 			_start_campaign()
 			for i in range(3):
@@ -337,48 +339,53 @@ func _load_json(path: String) -> Dictionary:
 	if f == null:
 		return {}
 	var parsed = JSON.parse_string(f.get_as_text())
-	return parsed if parsed is Dictionary else {}
+	return preload("res://scripts/battle/StateCodec.gd").integers(parsed) if parsed is Dictionary else {}
 
 
 func _clear_all() -> void:
 	if is_instance_valid(campaign):
+		campaign.process_mode=Node.PROCESS_MODE_DISABLED
+		campaign.hide()
 		campaign.queue_free()
 		campaign = null
 	if is_instance_valid(battle):
+		battle.process_mode=Node.PROCESS_MODE_DISABLED
+		battle.hide()
 		battle.queue_free()
 		battle = null
 	if is_instance_valid(story_player):
+		story_player.process_mode=Node.PROCESS_MODE_DISABLED
+		story_player.hide()
 		story_player.queue_free()
 		story_player = null
 	if is_instance_valid(title_screen):
+		title_screen.process_mode=Node.PROCESS_MODE_DISABLED
+		title_screen.hide()
 		title_screen.queue_free()
 		title_screen = null
 	if is_instance_valid(result_canvas):
+		result_canvas.process_mode=Node.PROCESS_MODE_DISABLED
+		result_canvas.hide()
 		result_canvas.queue_free()
 		result_canvas = null
 	if is_instance_valid(menu_root):
+		menu_root.process_mode=Node.PROCESS_MODE_DISABLED
+		menu_root.hide()
 		menu_root.queue_free()
 		menu_root = null
 
 
 func _show_title() -> void:
+	if bgm != null: bgm.play_scene(53,false)
 	_clear_all()
 	title_screen = load("res://scripts/ui/TitleScreen.gd").new()
 	add_child(title_screen)
 	title_screen.setup(font)
 	title_screen.new_game.connect(_show_character_create)
 	title_screen.continue_game.connect(_continue_campaign)
-	title_screen.battle_select.connect(_open_battle_select)
-	title_screen.story_archive.connect(_show_story_archive)
-	title_screen.settings.connect(_show_settings)
-	title_screen.quit_game.connect(func(): get_tree().quit())
-	var intro := OriginalUI.button("片头", font, Vector2(70, 26), _play_intro, 14)
-	intro.position = Vector2(552, 404)
-	title_screen.add_child(intro)
-	var gallery := OriginalUI.button("影像馆", font, Vector2(70, 26),
-			_show_gallery_preview, 14)
-	gallery.position = Vector2(470, 404)
-	title_screen.add_child(gallery)
+	title_screen.high_scores.connect(_show_high_scores)
+	title_screen.supporters.connect(_show_supporters)
+	title_screen.quit_game.connect(_confirm_exit)
 	# M1 回归兼容：隐藏的 L14 快速入口（不参与视觉，仅测试/调试）
 	var debug := Button.new()
 	debug.text = "L14 地道战"
@@ -413,90 +420,83 @@ func _play_intro() -> void:
 		cp.queue_free())
 
 
+func _show_title_page(page:String) -> void:
+	_clear_all()
+	menu_root=preload("res://scripts/ui/OriginalTitlePages.gd").new()
+	add_child(menu_root);menu_root.setup(font,page)
+	menu_root.closed.connect(_show_title)
+
+
+func _show_high_scores() -> void:
+	_show_title_page("scores")
+
+
+func _show_supporters() -> void:
+	if bgm!=null:bgm.play_scene(38)
+	_show_title_page("supporters")
+
+
+func _confirm_exit() -> void:
+	_show_title_page("exit")
+	menu_root.exit_confirmed.connect(func():get_tree().quit())
+
+
 func _show_character_create() -> void:
 	_clear_all()
-	menu_root = Control.new()
-	menu_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	menu_root.theme = theme_ref
+	# 42D686 resets original defaults for a new creation, never from CFG.
+	menu_root = preload("res://scripts/ui/OriginalCharacterCreate.gd").new()
 	add_child(menu_root)
-	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/menu01.png") 			if ResourceLoader.exists("res://assets/ui/menu01.png") else null
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	menu_root.add_child(bg)
-	var cfg := ConfigFile.new()
-	cfg.load("user://dlz_config.cfg")
-	var name := str(cfg.get_value("player", "name", "李勇"))
-	var edit := LineEdit.new()
-	edit.text = name
-	edit.position = Vector2(52, 390)
-	edit.size = Vector2(190, 34)
-	edit.add_theme_font_override("font", font)
-	edit.add_theme_font_size_override("font_size", 16)
-	menu_root.add_child(edit)
-	var tip := OriginalUI.label("形象/兵种：默认（后续开放）", font, 14,
-			Color("#e5d4ad"))
-	tip.position = Vector2(52, 168)
-	tip.size = Vector2(300, 20)
-	menu_root.add_child(tip)
-	var name_tip := OriginalUI.label("此姓名就是主角 GG；张嘎等仍是原作队员。",
-			font, 16, Color("#c8b88f"))
-	name_tip.position = Vector2(52, 360)
-	name_tip.size = Vector2(470, 20)
-	menu_root.add_child(name_tip)
-	creation_difficulty = int(cfg.get_value("gameplay", "difficulty", 1))
-	_diff_buttons.clear()
-	for i in range(3):
-		var b := OriginalUI.button(["简 单", "普 通", "困 难"][i], font,
-				Vector2(76, 28), _pick_difficulty.bind(i), 14)
-		b.position = Vector2(260 + i * 82, 394)
-		menu_root.add_child(b)
-		_diff_buttons.append(b)
-	_refresh_difficulty_buttons()
-	var start := OriginalUI.button("开始战役", font, Vector2(120, 30),
-			func(): _save_player_name(edit.text, creation_difficulty); _start_campaign(), 16)
-	start.position = Vector2(240, 438)
-	menu_root.add_child(start)
-	var back := OriginalUI.button("返回", font, Vector2(90, 30),
-			_show_title, 16)
-	back.position = Vector2(420, 438)
-	menu_root.add_child(back)
+	menu_root.setup(font,m2.get("units",{}))
+	menu_root.confirmed.connect(_begin_created_campaign)
+	menu_root.cancelled.connect(_show_title)
 
 
-func _pick_difficulty(v: int) -> void:
-	creation_difficulty = v
-	_refresh_difficulty_buttons()
+func _begin_created_campaign(values:Dictionary) -> void:
+	_clear_all()
+	# Original creation confirmation shows NPIC25/history before submitting
+	# People0, then enters L00 directly. Do not persist the creation to CFG.
+	var history=preload("res://scripts/m5/HistorySlideshow.gd").new()
+	history.creation_entry=true
+	menu_root=history;add_child(history)
+	history.setup(font,m5.get("history",[]))
+	history.closed.connect(func():
+		_start_campaign(values)
+		campaign._launch_level(0,false,[-100]))
 
 
-func _refresh_difficulty_buttons() -> void:
-	for i in range(_diff_buttons.size()):
-		var b: Button = _diff_buttons[i]
-		b.modulate = Color(1.25, 1.1, 0.65) if i == creation_difficulty else Color.WHITE
-
-
-func _save_player_name(text: String, diff: int = 1) -> void:
-	var c := ConfigFile.new()
-	c.load("user://dlz_config.cfg")
-	var nm := text.strip_edges()
-	c.set_value("player", "name", nm if nm != "" else "李勇")
-	c.set_value("gameplay", "difficulty", diff)
-	c.save("user://dlz_config.cfg")
-
-
-func _start_campaign() -> void:
+func _start_campaign(creation:Dictionary={}) -> void:
 	_clear_all()
 	campaign = load("res://scripts/m4/Campaign.gd").new()
+	campaign.qa_mode = qa_mode or DisplayServer.get_name() == "headless"
 	add_child(campaign)
 	campaign.exit_requested.connect(_show_title)
-	campaign.setup(font)
+	campaign.game_close_requested.connect(_close_campaign_game)
+	campaign.setup(font,creation)
+
+
+func _close_campaign_game() -> void:
+	# Natural JZ end is the original WM_CLOSE, not a return to the title.
+	get_tree().quit()
 
 
 func _continue_campaign() -> void:
-	_start_campaign()
-	if is_instance_valid(campaign):
-		campaign._open_save_load()
+	_show_title_page("load")
+	menu_root.load_ready.connect(_open_title_save_picker)
+
+
+func _open_title_save_picker() -> void:
+	var picker=preload("res://scripts/ui/OriginalSavePicker.gd").new()
+	menu_root.add_child(picker)
+	picker.setup(font,preload("res://scripts/ui/OriginalPalette.gd").colors("BG01"),preload("res://scripts/ui/OriginalSaveSlots.gd").previews(free_state),true)
+	picker.chosen.connect(func(slot:int):
+		if slot<0:_show_title();return
+		_start_campaign()
+		campaign.state.data=campaign.state.data.duplicate(true)
+		campaign.state.data.meta.save_prefix=free_state.meta().get("save_prefix","dlz_m2_save_")
+		if not campaign.load_campaign_slot(slot):
+			# Native mode150 remains a declared compatibility boundary. Never
+			# silently import it as healed/redeployed strategic state.
+			_show_title())
 
 
 func _open_battle_select() -> void:
@@ -554,6 +554,7 @@ func _start_free_level(idx: int, party_limit: int = -1) -> void:
 	add_child(battle)
 	battle.finished.connect(_on_free_finished)
 	battle.setup(m4, level, font)
+	if bgm != null: bgm.play_scene(int(level.get("bgm_scene",34)))
 
 
 func _on_free_finished(result: String, message: String) -> void:
@@ -610,22 +611,8 @@ func _show_free_result(victory: bool, message: String) -> void:
 
 
 func _start_bgm() -> void:
-	var path := "res://assets/audio/bgm_title.ogg"
-	if not ResourceLoader.exists(path):
-		path = "res://assets/audio/bgm_cd.ogg"
-	if not ResourceLoader.exists(path):
-		return
-	bgm = AudioStreamPlayer.new()
-	bgm.stream = load(path)
-	if bgm.stream is AudioStreamOggVorbis:
-		(bgm.stream as AudioStreamOggVorbis).loop = true
-	var c := ConfigFile.new()
-	var bv := 0.8
-	if c.load("user://dlz_config.cfg") == OK:
-		bv = float(c.get_value("audio", "bgm_volume", 0.8))
-	bgm.volume_db = -14.0 + linear_to_db(clampf(bv, 0.0, 1.0))
-	add_child(bgm)
-	bgm.play()
+	bgm = get_node_or_null("/root/Music")
+	if bgm != null: bgm.play_scene(53)
 
 
 func _apply_saved_audio() -> void:
@@ -797,3 +784,7 @@ func _show_fatal(msg: String) -> void:
 	l.size = Vector2(520, 160)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bg.add_child(l)
+
+func _exit_tree() -> void:
+	Input.set_custom_mouse_cursor(null)
+	OriginalUI.release_native_sfx()

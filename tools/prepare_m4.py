@@ -23,7 +23,31 @@ from collections import deque
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from trigger_data import TRIGGERS as LEVEL_TRIGGERS
+from trigger_data import TRIGGERS as TICK_TRIGGERS
+from turn_trigger_data import TURN_TRIGGERS
+from phase_trigger_data import START_PHASES, VICTORY_PHASES
+from phase_runtime_data import compile_start
+from town_phase_data import RESIDENT, COMMANDER, RESIDENT_SPECIAL, EVIDENCE as TOWN_EVIDENCE
+
+# 四阶段不混淆：动作后T510与轮次T750各按自己的事件调度。
+LEVEL_TRIGGERS = json.loads(json.dumps(TICK_TRIGGERS))
+LEVEL_TRIGGERS = {int(i): t for i, t in LEVEL_TRIGGERS.items()}
+_T510_FLOW = json.loads((Path(__file__).with_name("t510_result_flow.json")).read_text())["rules"]
+for _idx, _t in LEVEL_TRIGGERS.items():
+    _t["rules"] = [r for r in _t["rules"] if r["id"] not in
+                   {"turn6_move_40_41", "turn_limit_defeat"}]
+    for _r in _t["rules"]:
+        _flow = _T510_FLOW[str(_idx)].get(_r["id"])
+        if _flow is None:
+            # T5D0 initialization, not a T510 rule; separate phase boundary.
+            assert (_idx, _r["id"]) == (23, "init_slot34")
+            continue
+        _r.update(_flow)
+    assert set(_T510_FLOW[str(_idx)]) <= {r["id"] for r in _t["rules"]}
+    _orders = [r["source_order"] for r in _t["rules"] if "source_order" in r]
+    assert _orders == sorted(_orders), f"T510 source order changed: L{_idx}"
+    _t["turn_entry"] = TURN_TRIGGERS[_idx]["entry"]
+    _t["rules"].extend(TURN_TRIGGERS[_idx]["rules"])
 
 
 def _trigger_spawn_slots(trig: dict) -> set:
@@ -64,41 +88,6 @@ MAIN_LEVELS = list(range(0, 36))
 HIDDEN_SIM = list(range(36, 40))
 HIDDEN_FICTION = list(range(40, 44))
 EASTER = list(range(44, 47))
-
-# 可玩性补足：原版过场/触发器里的友军增援与个别 Easter 单位的实际 HP
-# 不在 FIGHT.DAT 的静态槽里，这里显式建模，避免“目标存在但不可完成”。
-ALLY_WAVES = {
-    32: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27, 28, 29]},
-    33: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27, 28, 29]},
-    34: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27, 28, 29]},
-    35: {"turn": 1, "side": "player",
-         "pids": [33, 30, 31, 32, 26, 27, 28, 29, 24, 25, 22, 23]},
-    40: {"turn": 1, "side": "player", "pids": [33, 30, 31, 32, 26, 27]},
-    46: {"turn": 1, "side": "player",
-         "pids": [33, 4, 8, 9, 5, 7, 6, 10, 11, 12]},
-}
-# 后期/彩蛋关的敌军数量与静态 Fighter 槽不一致（原版靠脚本分批投入）；
-# 这里给可玩性上限，超出部分不进入首发，避免 5-10 人面对 30-58 个同时行动。
-ENEMY_CAP = {18: 12, 20: 20, 25: 20, 27: 20, 28: 12, 29: 12, 30: 12, 31: 18, 32: 20, 33: 20, 34: 20,
-             35: 12, 36: 10, 37: 10, 38: 10, 39: 10, 40: 10,
-             41: 10, 42: 10, 43: 10, 46: 12}
-ENEMY_LEVEL_CAP = {18: 20, 20: 20, 25: 20, 27: 20, 28: 20, 29: 20, 30: 20, 31: 20, 32: 20, 33: 20, 34: 20,
-                   35: 20, 36: 20, 37: 20, 38: 20, 39: 20, 40: 20,
-                   41: 20, 42: 20, 43: 20}
-ENEMY_HP_CAP = {18: 600, 20: 600, 25: 600, 27: 600, 28: 600, 29: 600, 30: 600, 31: 600, 32: 600, 33: 600, 34: 600,
-                35: 600, 36: 600, 37: 600, 38: 600, 39: 600, 40: 600,
-                41: 600, 42: 600, 43: 600}
-ENEMY_WAVE_DISABLE = set(range(36, 44))
-# 早期主线在困难模式下敌军等级/HP 过高，触发器又要求全歼；
-# 用与后期关相同的上限层，避免 10 级队伍被 27 级敌军拖死。
-for _i in range(1, 11):
-    ENEMY_CAP.setdefault(_i, 12)
-    ENEMY_LEVEL_CAP.setdefault(_i, 20)
-    ENEMY_HP_CAP.setdefault(_i, 600)
-HP_OVERRIDES = {
-    45: {"柳忻": 1376},   # 与 L44 的柳忻一致，避免赛跑关被高等级敌军一击秒杀
-    46: {"张嘎": 662},
-}
 
 TOWN_OF_LEVEL = {
     0: 0, 1: 0, 2: 1, 3: 2, 4: 1, 5: 3, 6: 6, 7: 4, 8: 5, 9: 5,
@@ -177,10 +166,6 @@ PROTECT = {
     44: ["李正"], 45: ["柳忻"], 46: ["张嘎", "村民"],
 }
 
-MAX_DEPLOY = {0: 1, 26: 1, 45: 1}
-# 第一关是主角 GG 孤身侦察；不把整支队伍摆进出战列表，避免玩家
-# 以为可以带赵虎/李向阳等人。-100 = 运行时生成的自定义主角。
-FIXED_DEPLOY = {0: [-100]}
 # 5 个代表关的关卡初始化函数（DLZ.exe 0x4465D0 表）：
 # 这些函数只做开场音效/旗标，不包含逐回合触发器。用于 TRIGGERS.md 的证据。
 TRIGGER_FUNCTIONS = {
@@ -190,21 +175,6 @@ TRIGGER_FUNCTIONS = {
     18: "0x40C8DA",
     36: "0x40D020",
 }
-PARTY_DEPLOY = {**{i: True for i in MAIN_LEVELS}}
-PARTY_DEPLOY[46] = True  # 鬼子进村：张嘎 + 村民 + 队伍 + 八路军增援
-PROTECT_ALL = {36, 40}  # 狼牙山：五壮士全部阵亡才失败
-# 剧情加入：按原作情节在胜利后加入队伍（pid 对应 PEOPLE.DAT）。
-# 这不是反汇编确认的加入触发器，是可玩性/剧情补足。
-JOIN_AFTER = {
-    6: [8],    # 接应肖飞
-    11: [13],  # 解救林嫂
-    18: [21],  # 智擒郑之光
-    19: [22],  # 义收金花婆
-    23: [34],  # 营救彼德
-    30: [33],  # 红岩反击战：李正
-}
-TURN_LIMIT_OVERRIDE = {i: 60 for i in range(36)}  # 主线至少 60 回合；原版 20-40 回合对低等级队伍过紧
-
 # 每关推荐剧情 TXT n（M5 再细化；这里只放关键的开场/收尾）
 STORY_IDS = {
     0: [521, 0, 1, 2, 3], 1: [522, 4, 5, 6, 7, 8],
@@ -372,10 +342,7 @@ def deploy_positions(specials, terrain, w, h, move_row, occupied, count):
 
 
 def unit_hp(f: dict, p: dict, u: dict) -> tuple[int, str]:
-    raw = int(f["tili"])
-    if raw == 4500:
-        return max(1, int(u["tili"]) + (int(p["level"]) - 1) * int(u["tili_plus"])), "formula"
-    return max(1, raw), "explicit"
+    return max(1, int(u["tili"]) + (int(p["level"]) - 1) * int(u["tili_plus"])), "formula"
 
 
 def make_ally(pid: int, people: list, units: dict, x: int, y: int) -> dict:
@@ -413,6 +380,7 @@ def make_ally(pid: int, people: list, units: dict, x: int, y: int) -> dict:
         "tili": int(u["tili"]),
         "tili_plus": int(u["tili_plus"]),
         "jingyan": int(p.get("jingyan", 0)),
+                "xp": int(p.get("jingyan",0)),
         "skills": u.get("skills", {}),
         "skill_counts": p.get("skills", {}),
         "attack_count": int(p.get("gongji", 0)),
@@ -522,7 +490,10 @@ def main() -> None:
     people = load("people.json")["records"]
     txt_records = {int(r["n"]): r for r in load("txt.json")["records"]}
     game = load("game.json")
-    items = {str(it["index"]): it for it in game["items"]}
+    items = {str(it["index"]): dict(it) for it in game["items"]}
+    for it in items.values():
+        if 41 <= int(it["index"]) <= 56:
+            it["anm_index"] = int(it["para3"])
     units = game["units"]
     move_rows = {str(i): v for i, v in enumerate(game["unit_move"])}
     ASSETS.mkdir(parents=True, exist_ok=True)
@@ -530,16 +501,49 @@ def main() -> None:
     (ASSETS / "map").mkdir(parents=True, exist_ok=True)
 
     # 地图 & 单位图
-    for i in range(47):
-        copy_asset(OUT / "map" / f"map_{i:02d}.png", f"map/map_{i:02d}.png")
-    for i in range(170):
-        p = OUT / "face" / f"face_{i:03d}.png"
-        if p.exists():
-            copy_asset(p, f"face/face_{i:03d}.png")
-    for i in range(91):
-        p = OUT / "army" / f"army_{i:03d}.png"
-        if p.exists():
-            copy_asset(p, f"army/army_{i:03d}.png")
+    # 地图原版实际使用KUANG04色板；不依赖旧out/map的BOX近似颜色。
+    sys.path.insert(0, str(ROOT))
+    from extract import blk, mapdat, palette
+    game_dir = ROOT.parent / "dlz" / "ANTI-JAP"
+    raw_maps = mapdat.load(game_dir / "MAP.DAT")
+    raw_tiles = blk.load(game_dir / "BLK.DAT")
+    pal = palette.img_palette(game_dir / "KUANG04.IMG")
+    # Keep indices, not RGB->nearest reconstructions: index0/255 and duplicate
+    # palette colors have distinct 4240B9 semantics. PNGs are import/export-safe.
+    from PIL import Image
+    from death_palette import generate as generate_death_lut, highlight_lut
+    (ASSETS / "palette").mkdir(parents=True, exist_ok=True)
+    generate_death_lut(pal, ASSETS / "palette" / "death_lut.png")
+    army_raw = (game_dir / "ARMY.DAT").read_bytes()
+    army_index = Image.new("L", (48*19, 48*91))
+    for group in range(91):
+        for frame in range(19):
+            start = (group*19+frame)*2304
+            army_index.paste(Image.frombytes("L", (48,48), army_raw[start:start+2304]), (frame*48,group*48))
+    army_index.save(ASSETS / "palette" / "army_index.png")
+    # 4170AA always uses these indexed map markers, not the large MINE.DAT
+    # inventory picture. Keep original indices and original KUANG04 colors.
+    for name, size in (("box", (48, 288)), ("mine", (16, 16))):
+        raw = (game_dir / (name.upper() + ".IMG")).read_bytes()[16:]
+        image = Image.frombytes("L", size, raw[:size[0]*size[1]])
+        image.save(ASSETS / "palette" / (name + "_index.png"))
+        image = image.convert("P")
+        image.putpalette(pal)
+        image.info["transparency"] = 0
+        image.convert("RGBA").save(ASSETS / "palette" / (name + "_map.png"))
+    dark_lut = highlight_lut(pal)
+    luan_glyph = (game_dir / "HZK16").read_bytes()[100832:100864]
+    for mrec in raw_maps.maps:
+        image = blk.render_map(mrec, raw_tiles, pal)
+        image.save(ASSETS / "map" / f"map_{mrec.index:02d}.png")
+        Image.frombytes("L", image.size, image.tobytes()).save(ASSETS / "map" / f"map_{mrec.index:02d}_index.png")
+        # 4170AA remaps only the indexed map through6223B0. Keep overlays
+        # separate; RGB black rectangles also darken boxes/units incorrectly.
+        dark_image = Image.frombytes("P", image.size, image.tobytes().translate(dark_lut))
+        dark_image.putpalette(pal)
+        dark_image.save(ASSETS / "map" / f"map_{mrec.index:02d}_dark.png")
+    from native_sprite_assets import generate as native_sprites
+    native_sprites(("face", "army"))
 
     out_levels = []
     for idx in range(47):
@@ -556,17 +560,16 @@ def main() -> None:
 
         active = []
         reserves = []
-        spawn_needed = TRIGGER_SPAWN_SLOTS.get(idx, set())
+        spawn_needed = TRIGGER_SPAWN_SLOTS.get(idx, set()) | set(START_PHASES[idx].get("spawn_slots", []))
         all_recs = {}
         for f in fl["fighters"]:
             p = people[f["slot"]] if f["slot"] < 40 else lv["people"][f["slot"] - 40]
             u = units[int(p["bingzhong"])]
-            # 槽位 0..39 是 PEOPLE.DAT 的我方名册；40..127 的 People
-            # 用 unknown_18 区分友军(0)/敌军(1)。这是 M0 复核后的规则。
-            if f["slot"] < 40:
-                side = "player"
-            else:
-                side = "player" if int(p["unknown_18"]) == 0 else "enemy"
+            # People.side (+18h) applies to all128 slots, including named,
+            # not-yet-recruited NPCs (e.g. L18 slot21). Slot identity/control
+            # are independent. Persistent party/entry writes are overlaid later.
+            # Keep the exact numeric faction (including2), not just its group.
+            side = "player" if int(p["unknown_18"]) == 0 else "enemy"
             hp, hp_source = unit_hp(f, p, u)
             rec = {
                 "slot": int(f["slot"]),
@@ -575,6 +578,7 @@ def main() -> None:
                 "pid": int(f["slot"]) if int(f["slot"]) < 40 else -1,
                 "hero": int(f["slot"]) == 0,
                 "side": side,
+                "faction": int(p["unknown_18"]),
                 "name": str(f["unit"]),
                 "key": norm(f["unit"]),
                 "unit_name": str(u["name"]),
@@ -603,55 +607,17 @@ def main() -> None:
                 "tili": int(u["tili"]),
                 "tili_plus": int(u["tili_plus"]),
                 "jingyan": int(p.get("jingyan", 0)),
-                "skills": u.get("skills", {}),
-                "skill_counts": p.get("skills", {}),
-                "attack_count": int(p.get("gongji", 0)),
-                "items": p.get("wupin", []),
-                "mines": p.get("dilei", []),
+                "xp": int(p.get("jingyan",0)),
+                "skills": {k: int(v)*[1,10,25,45,70,100,135,175,225,300][min(int(p["level"])//6,9)] for k,v in u.get("skills", {}).items()},
+                "skill_counts": {k: int(v)*[1,10,25,45,70,100,135,175,225,300][min(int(p["level"])//6,9)] for k,v in u.get("skills", {}).items()},
+                "attack_count": [1,10,25,45,70,100,135,175,225,300][min(int(p["level"])//6,9)],
+                "item_slots": p.get("wupin", []),
+                "mine_slots": p.get("dilei", []),
                 "is_boss": hp >= 1000,
                 "protected": False,
-                "control": True,
-                "auto": side == "player" and str(f["unit"]).replace("\u3000", "") in
-                        ("国军", "八路军", "村民", "老百姓", "游击队员", "自卫队"),
+                "control": int(f.get("pad3e",0)) != 0,
+                "auto": side == "player" and int(f.get("pad3e",0)) == 0,
             }
-            if idx in ENEMY_LEVEL_CAP and rec["side"] == "enemy":
-                rec["level"] = min(int(rec["level"]), int(ENEMY_LEVEL_CAP[idx]))
-            if idx in ENEMY_HP_CAP and rec["side"] == "enemy":
-                rec["hp"] = min(int(rec["hp"]), int(ENEMY_HP_CAP[idx]))
-                rec["raw_hp"] = rec["hp"]
-                rec["hp_source"] = "balance_cap"
-            if idx in HP_OVERRIDES and rec["key"] in {
-                    norm(k) for k in HP_OVERRIDES[idx]}:
-                rec["hp"] = int(HP_OVERRIDES[idx][rec["key"]])
-                rec["raw_hp"] = rec["hp"]
-                rec["hp_source"] = "override"
-            if idx == 19 and f["slot"] == 22:
-                rec["side"] = "enemy"
-                rec["auto"] = False
-                rec["control"] = False
-            # 黑风寨的向天虎/向天豹是寨主，FIGHT.People.unknown_18 误标成友军；
-            # 0x40A4AF 在 24 号阵亡时直接给胜利，可反证其敌军身份。
-            if idx == 22 and f["slot"] in (24, 25):
-                rec["side"] = "enemy"
-                rec["auto"] = False
-                rec["control"] = False
-            # 第 15 关的老百姓在 People 表里被标成 enemy(1)，但原版是
-            # 需要保护的村民；按剧情语义改为友军 AI。
-            # L10 三名村民被救出后仍会被敌军追击；原版靠玩家护送，
-            # bot 不会专门保护，给“被护送者”一个更高耐久标记。
-            if idx == 10 and int(f["slot"]) in (63, 64, 65):
-                rec["escort"] = True
-            # L15 的 33/55/56 任一死亡即失败（0x409BD7/0x409BFB/0x409C1B）。
-            if idx == 15 and int(f["slot"]) in (33, 55, 56):
-                rec["escort"] = True
-            # L16 的 33/35 一旦已登场再阵亡即失败（0x409CCF/0x409CFC）。
-            if idx == 16 and int(f["slot"]) in (33, 35):
-                rec["escort"] = True
-            if idx == 15 and str(f["unit"]) == "老百姓":
-                rec["side"] = "player"
-                rec["auto"] = True
-                rec["control"] = False
-                rec["protected"] = True
             all_recs[int(f["slot"])] = rec
             if f["active"]:
                 active.append(rec)
@@ -663,35 +629,12 @@ def main() -> None:
                 reserves.append(rec)
 
         spawn_pool = [all_recs[s] for s in sorted(spawn_needed) if s in all_recs]
-        # L16 原版 33 在 (22,15)、35 在 (22,14)，35 被 33 堵在唯一通道后。
-        # 人类可以手动先移 33；bot 不会，交换两人出生点让 35 先走。
-        if idx == 16 and 33 in all_recs and 35 in all_recs:
-            a, c = all_recs[33], all_recs[35]
-            a["x"], c["x"] = c["x"], a["x"]
-            a["y"], c["y"] = c["y"], a["y"]
-        if idx in ENEMY_CAP:
-            cap = int(ENEMY_CAP[idx])
-            kept = [r for r in active if r["side"] == "enemy"][:cap]
-            active = [r for r in active if r["side"] != "enemy"] + kept
-        # 保护名单
+        # Intro+0x118是最大部署数，+11C排除/+12C强制，不是候选列表。
+        max_deploy = int(lv["intro"]["special_count_raw"])
+        excluded = [int(v) for v in lv["intro"]["unknown_11c"][:16] if int(v) != 255]
+        forced = [int(v) for v in lv["intro"]["unknown_11c"][16:] if int(v) != 255]
+        deploy = [(int(v["x"]), int(v["y"])) for v in specials if not v["empty"]]
         protect_names = PROTECT.get(idx, [])
-        for r in active + reserves + spawn_pool:
-            if r["side"] == "player" and r["key"] in {norm(n) for n in protect_names}:
-                r["protected"] = True
-                r["escort"] = True
-        # 没有任何可控友军时，把有名友军设为可控
-        if not any(r["side"] == "player" and not r["auto"] for r in active):
-            for r in active:
-                if r["side"] == "player":
-                    r["auto"] = False
-
-        occupied = {(r["x"], r["y"]) for r in active}
-        occupied |= {(c["x"], c["y"]) for c in chests_raw}
-        max_deploy = MAX_DEPLOY.get(idx, 10)
-        deploy = []
-        if PARTY_DEPLOY.get(idx, False):
-            deploy = deploy_positions(specials, terrain, w, h, move3, occupied,
-                                      min(10, max_deploy))
         # 目标：优先用显式坐标，再按 type2 特殊位置
         obj_raw = dict(OBJECTIVES[idx])
         if "units" in obj_raw:
@@ -709,82 +652,8 @@ def main() -> None:
             for r in active + reserves + spawn_pool:
                 if r["side"] == "player" and r["key"] in obj_raw.get("unit_keys", []):
                     obj_raw["unit_positions"].append([r["x"], r["y"]])
-        # 目标可达性：以部署点/固定友军为起点做一次 BFS
-        starts = deploy + [(r["x"], r["y"]) for r in active if r["side"] == "player"]
-        reach = bfs(move3, terrain, w, h, starts)
-        if not reach:
-            reach = {(x, y) for y in range(h) for x in range(w)
-                     if walkable(move3, terrain[y * w + x])}
-        # 敌军必须在玩家可达域内，否则“全歼”永远无法完成。
-        occupied = {(r["x"], r["y"]) for r in active}
-        for r in active + reserves:
-            if r["side"] != "enemy":
-                continue
-            nx, ny = snap_unit_to_reach(int(r["x"]), int(r["y"]), reach,
-                                        occupied, w, h)
-            if (nx, ny) != (int(r["x"]), int(r["y"])):
-                occupied.discard((int(r["x"]), int(r["y"])))
-                r["x"], r["y"] = nx, ny
-                occupied.add((nx, ny))
-        # 目标必须由指定单位/任意我方走到；按单位单独算可达域再吸附
-        target_reach = reach
-        if obj_raw.get("unit_keys"):
-            us = [r for r in active + reserves
-                  if r["side"] == "player" and r["key"] in obj_raw["unit_keys"]]
-            if us:
-                target_reach = bfs(move3, terrain, w, h,
-                                   [(r["x"], r["y"]) for r in us])
-        if obj_raw["type"] == "race":
-            ru = [r for r in active + reserves
-                  if r["side"] == "player" and r["key"] in obj_raw.get("unit_keys", [])]
-            rv = [r for r in active + reserves
-                  if r["side"] == "enemy" and r["key"] == obj_raw.get("rival_key")]
-            if ru and rv:
-                ra = bfs(move3, terrain, w, h, [(ru[0]["x"], ru[0]["y"])])
-                rb = bfs(move3, terrain, w, h, [(rv[0]["x"], rv[0]["y"])])
-                inter = ra & rb
-                if inter:
-                    target_reach = inter
-        if "targets" in obj_raw:
-            obj_raw["targets"] = snap_targets(obj_raw["targets"], target_reach,
-                                               w, h, occupied)
-        if "unit_positions" in obj_raw:
-            obj_raw["unit_positions"] = snap_targets(obj_raw["unit_positions"],
-                                                     reach, w, h, occupied)
-
-        # 增援：按回合分批；没有友军时友方增援直接入场
-        friendly_reserves = [r for r in reserves if r["side"] == "player"]
-        enemy_reserves = [r for r in reserves if r["side"] == "enemy"]
         waves = []
-        if friendly_reserves and not any(r["side"] == "player" for r in active):
-            active.extend(friendly_reserves)
-            friendly_reserves = []
-        if friendly_reserves:
-            waves.append({"turn": 3, "side": "player", "units": friendly_reserves})
-        if enemy_reserves:
-            if not any(r["side"] == "enemy" for r in active):
-                active.extend(enemy_reserves)
-                enemy_reserves = []
-            else:
-                first = enemy_reserves[:max(1, len(enemy_reserves) // 2)]
-                rest = enemy_reserves[max(1, len(enemy_reserves) // 2):]
-                waves.append({"turn": 2, "side": "enemy", "units": first})
-                if rest:
-                    waves.append({"turn": 5, "side": "enemy", "units": rest})
-        if idx in ENEMY_WAVE_DISABLE:
-            waves = [w for w in waves if str(w.get("side", "")) != "enemy"]
-        if idx in ALLY_WAVES:
-            aw = ALLY_WAVES[idx]
-            ally_units = []
-            for j, pid in enumerate(aw["pids"]):
-                ax = 2 + (j % 5) * 3
-                ay = max(1, h - 2)
-                ally_units.append(make_ally(int(pid), people, units, ax, ay))
-            waves.append({"turn": int(aw["turn"]), "side": "player",
-                          "units": ally_units})
         reserve_out = []
-        for wave in waves:
-            reserve_out.extend(wave["units"])
 
         # 目标 turn 数
         if obj_raw["type"] == "survive":
@@ -813,7 +682,7 @@ def main() -> None:
             "race": "抢先到达山神庙",
             "capture_or_annihilate": "占领仓库或全歼敌人",
         }.get(obj_raw["type"], "完成任务")
-        # 0x11C：按 PEOPLE.DAT 索引解码的每关队伍候选（推断）。
+        # Intro11C前16排除、后16强制：此汇总仅供证据显示，不是候选名单。
         cand_pids = sorted({int(v) for v in lv["intro"]["unknown_11c"]
                             if int(v) != 255})
         cand_names = [norm(people[pid]["name"]) for pid in cand_pids]
@@ -823,16 +692,19 @@ def main() -> None:
         out_levels.append({
             "index": idx,
             "name": lv["name"],
+            "fighter_hex": (ROOT.parent / "dlz" / "ANTI-JAP" / "FIGHT.DAT").read_bytes()[idx * int(load("fight.json")["level_size"]) + 700:idx * int(load("fight.json")["level_size"]) + 8892].hex(),
+            "people_hex": (ROOT.parent / "dlz" / "ANTI-JAP" / "FIGHT.DAT").read_bytes()[idx * int(load("fight.json")["level_size"]) + 8892:idx * int(load("fight.json")["level_size"]) + 20508].hex(),
+            "intro_hex": (ROOT.parent / "dlz" / "ANTI-JAP" / "FIGHT.DAT").read_bytes()[idx * int(load("fight.json")["level_size"]):idx * int(load("fight.json")["level_size"]) + 700].hex(),
             "name_gbk_hex": lv["name"].encode("gb18030", errors="replace").hex(),
             "success_gbk_hex": lv["success"].strip().strip("\u3000").encode("gb18030", errors="replace").hex(),
             "failure_gbk_hex": lv["failure"].strip().strip("\u3000").encode("gb18030", errors="replace").hex(),
             "kind": kind,
             "hidden_mode": mode,
             "sub_index": sub,
-            "town": TOWN_OF_LEVEL[idx],
+            "town": VICTORY_PHASES.get(idx - 1, {}).get("town_index", TOWN_OF_LEVEL[idx]),
             "success": lv["success"].strip().strip("\u3000"),
             "failure": lv["failure"].strip().strip("\u3000"),
-            "turn_limit": TURN_LIMIT_OVERRIDE.get(idx, turn_limit(lv["failure"])),
+            "turn_limit": turn_limit(lv["failure"]),
             "original_turn_limit": (
                 int(obj_raw.get("turns", 0)) if obj_raw["type"] == "survive"
                 else turn_limit(lv["failure"])),
@@ -842,8 +714,7 @@ def main() -> None:
                 "special_count_raw": int(lv["intro"]["special_count_raw"]),
                 "special_count": sum(1 for s in specials if not s["empty"]),
                 # 0x11C 的 32 字节：非 FF 值对应 PEOPLE.DAT 索引。
-                # 这些名字与剧情加入/关卡队伍高度吻合，暂作为“队伍候选”证据，
-                # 不直接限制部署（避免改变现有 47 关平衡）。
+                # 前16为排除，后16为强制；运行时deployment字段分别执行。
                 "player_indices": sorted({int(v) for v in
                                           lv["intro"]["unknown_11c"]
                                           if int(v) != 255}),
@@ -871,19 +742,29 @@ def main() -> None:
             "enemies": sum(1 for u in active if u["side"] == "enemy"),
             "reserves": reserve_out,
             "spawn_pool": spawn_pool,
+            "slot_pool": list(all_recs.values()),
             "waves": waves,
             "deploy": [[x, y] for x, y in deploy],
-            "party_deploy": bool(PARTY_DEPLOY.get(idx, False)),
+            # town0 406E4C..406EEA enters L45 directly through41B8E9,
+            # never43B3E2. Its Intro's count17/Special coordinates are stale
+            # metadata, not permission to insert the named campaign party.
+            # Preserve those raw fields; see Sol interlude_play273 evidence.
+            "party_deploy": max_deploy not in (0, 999) and idx != 45,
+            "deployment": {"max_units": max_deploy, "excluded_slots": excluded, "forced_slots": forced},
+            "start_phase": START_PHASES[idx],
+            "start_actions": compile_start(idx),
+            "victory_phase": VICTORY_PHASES[idx],
+            "bgm_scene": int(lv["intro"]["fight_txt_raw"]),
             "max_deploy": max_deploy,
-            "fixed_deploy": FIXED_DEPLOY.get(idx, []),
+            "fixed_deploy": [-100 if v == 0 else v for v in forced] if max_deploy == len(forced) else [],
             "objective": obj_raw,
             "protect": protect_names,
-            "protect_all": idx in PROTECT_ALL,
-            "party_candidates": [
+            "protect_all": idx == 36,
+            "deployment_excluded_and_forced": [
                 {"pid": pid, "name": name}
                 for pid, name in zip(cand_pids, cand_names)
             ],
-            "joins": JOIN_AFTER.get(idx, []),
+            "joins": [],
             "chests": chests,
             "specials": [s for s in specials if not s["empty"]],
             "story_ids": STORY_IDS.get(idx, []),
@@ -901,6 +782,9 @@ def main() -> None:
             "font_size": 16,
             "mine_type": 0,
             "mines": 3,
+            "battle_palette": list(pal),
+            "map_dark_lut": list(dark_lut),
+            "luan_glyph": list(luan_glyph),
             "mine_png": "res://assets/mine/mine_000.png",
             "main_levels": len(MAIN_LEVELS),
             "hidden_levels": len(HIDDEN_SIM) + len(HIDDEN_FICTION),
@@ -911,6 +795,7 @@ def main() -> None:
             "note": "目标/保护名单/城镇映射为可玩性复刻；原版触发器仍待反汇编完全确认。",
         },
         "levels": out_levels,
+        "town_scripts": {"resident": RESIDENT, "commander": COMMANDER, "resident_special": RESIDENT_SPECIAL, "evidence": TOWN_EVIDENCE},
         "unit_types": units,
         "unit_move": move_rows,
         "select_ranges": {str(i): game["select_ranges"][i] for i in range(16)},

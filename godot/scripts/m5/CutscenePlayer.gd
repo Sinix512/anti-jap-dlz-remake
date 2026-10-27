@@ -8,6 +8,7 @@ signal finished
 var _video: VideoStreamPlayer
 var _on_done: Callable
 var _path := ""
+var _finished := false
 
 
 func setup(path: String, font: Font, on_done: Callable = Callable()) -> void:
@@ -35,23 +36,22 @@ func setup(path: String, font: Font, on_done: Callable = Callable()) -> void:
 	_video.autoplay = true
 	_video.finished.connect(_finish)
 	add_child(_video)
-	var hint := OriginalUI.label("Esc / 点击 跳过", font, 14, Color("#d8c39a"))
-	hint.position = Vector2(500, 454)
-	hint.size = Vector2(132, 20)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	add_child(hint)
-	gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.pressed:
-			_finish())
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo \
+func _input(event: InputEvent) -> void:
+	if _finished:return
+	# 4294BE's DirectShow/MCI windows explicitly skip only on Esc-DOWN.
+	# Keep the movie modal: a mouse click is not a skip or a battle action.
+	if event is InputEventMouse or event is InputEventKey:
+		get_viewport().set_input_as_handled()
+	if event is InputEventKey and event.pressed \
 			and event.keycode == KEY_ESCAPE:
 		_finish()
 
 
 func _finish() -> void:
+	if _finished: return
+	_finished = true
 	if _video != null and is_instance_valid(_video):
 		_video.stop()
 	if _on_done.is_valid():

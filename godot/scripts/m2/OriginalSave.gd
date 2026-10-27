@@ -1,371 +1,179 @@
 extends RefCounted
 
-## 原版 85072 B 存档布局的编解码器（实验）。
-## 28 个 block 的尺寸/顺序由 DLZ.exe save_game@0x427C94、load_game@0x427FEF
-## 直接确认；名字用 GBK 字节写入。关键 block 的运行时全局：
-##   block1 fight_index     0x7D06A0
-##   block3 current_level   0x475AA4（战斗/结算的当前关索引）
-##   block5 town_index      0x962788（城镇初始化写 0..18）
-##   block6 money           0x7D0484（城镇“资金：”绘制 0x431704 读取）
-##   block7 score_total     0x6223A8（战斗结算累加评分）
-##   block8 kills_by_gun    0x472580（战斗结算累加）
-##   block9 kills_by_mine   0x7D069C（战斗结算累加）
-## block13 是 95×u32 的关卡/界面状态机；idx0/2/3/4/5/6/9/10/11/…/85/86/90/91
-## 都有代码引用，idx90 还是 2800/3000/3300/3600 结局阈值，不能整块当空。
-## 队伍用各 People 记录的 pad2=0x50415254('PART') 标记（原版 pad2 为 0）；
-## 兼容旧版 PARY，但新文件不再覆盖 block13。正式存档仍是 GameState JSON。
-
+## 实验性原版28块布局：战略导出mode57；导入转战略状态，不声称战斗中途续存。
+## 静态证据见extract/research_save_20261025.md及审计；尚无原EXE回读实测。
 const SIZE := 85072
-const SKILL_KEYS := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
-		"weishe", "saorao", "pohuai", "lueduo", "fanjian", "yibing",
-		"duzhan", "ansha", "shidu", "kongxi"]
+const BLOCK_SIZES := [4,4,4,4,700,4,4,4,4,4,64,76,56,380,8192,8192,16896,16896,320,320,80,40,32768,8,28,12,4,4]
+const SKILL_KEYS := ["buji","jili","yiliao","huogong","gunmu","leishi","weishe","saorao","pohuai","lueduo","fanjian","yibing","duzhan","ansha","shidu","kongxi"]
+const GBK = preload("res://scripts/m2/GBK.gd")
 
+static func offsets() -> Array:
+	var result: Array = []
+	var offset := 0
+	for size in BLOCK_SIZES:
+		result.append(offset)
+		offset += int(size)
+	assert(offset == SIZE)
+	return result
 
-static func _pad(b: StreamPeerBuffer, n: int) -> void:
-	var z := PackedByteArray()
-	z.resize(n)
-	b.put_data(z)
+static func _block(state, index: int) -> PackedByteArray:
+	var raw: PackedByteArray = state.original_blocks.get("block%d" % index,PackedByteArray()).duplicate()
+	if raw.size() != int(BLOCK_SIZES[index]): raw.resize(int(BLOCK_SIZES[index]))
+	return raw
 
-
-static func _skip(b: StreamPeerBuffer, n: int) -> void:
-	b.seek(b.get_position() + n)
-
-
-static func _read_raw(b: StreamPeerBuffer, n: int) -> PackedByteArray:
-	var got = b.get_data(n)
-	return got[1]
-
-
-static func _put_raw_or_pad(b: StreamPeerBuffer, state, key: String,
-		n: int) -> void:
-	var raw := PackedByteArray()
-	var store = state.original_blocks if state != null else null
-	if store is Dictionary:
-		var v = store.get(key, null)
-		if v is PackedByteArray and (v as PackedByteArray).size() == n:
-			raw = v
-	if raw.size() == n:
-		b.put_data(raw)
-	else:
-		_pad(b, n)
-
-
-static func _put_name(b: StreamPeerBuffer, raw: PackedByteArray, n: int) -> void:
-	var out := PackedByteArray()
-	out.resize(n)
-	for i in range(min(n, raw.size())):
-		out[i] = raw[i]
-	b.put_data(out)
-
-
-static func _gbk(hex: String) -> PackedByteArray:
-	if hex == "":
-		return PackedByteArray()
-	return hex.hex_decode()
-
-
-static func _write_at(arr: PackedByteArray, off: int, raw: PackedByteArray,
-		n: int) -> void:
-	for i in range(min(n, raw.size())):
-		arr[off + i] = raw[i]
-
-
-static func _people_bytes(state) -> PackedByteArray:
-	var b := StreamPeerBuffer.new()
-	b.big_endian = false
-	var base: Array = state.data.get("people", [])
-	var by_pid := {}
-	for m in state.party:
-		by_pid[int(m["pid"])] = m
-	for i in range(128):
-		if i >= base.size():
-			_pad(b, 132)
-			continue
-		var p: Dictionary = base[i]
-		var m = by_pid.get(i)
-		_put_name(b, _gbk(str(p.get("name_gbk_hex", ""))), 16)
-		b.put_u32(int(p.get("face", 0)))
-		# pad2 原版为 0。复刻用 0x50415254('PART') 标记队伍成员，
-		# 避免再占用 block13 的已用状态槽；原版应忽略该 pad。
-		b.put_u32(0x50415254 if m != null else 0)
-		b.put_u32(int(p.get("unknown_18", 0)))
-		b.put_u32(int(p.get("wuli", 0)))
-		b.put_u32(int(p.get("zhili", 0)))
-		b.put_u32(int(m.get("level", p.get("level", 1))) if m != null else int(p.get("level", 1)))
-		b.put_u32(int(m.get("xp", p.get("jingyan", 0))) if m != null else 0)
-		b.put_u32(int(m.get("bingzhong", p.get("bingzhong", 0))) if m != null else int(p.get("bingzhong", 0)))
-		var counts: Dictionary = (m.get("skills", p.get("skills", {})) if m != null else p.get("skills", {}))
-		b.put_u32(int(m.get("attack_count", p.get("gongji", 0))) if m != null else 0)
-		for k in SKILL_KEYS:
-			b.put_u32(int(counts.get(k, 0)))
-		var slots: Array = (m.get("item_slots", p.get("wupin", [])) if m != null else p.get("wupin", []))
-		for j in range(8):
-			b.put_u8(int(slots[j]) if j < slots.size() else 0)
-		var mines: Array = (m.get("mine_slots", p.get("dilei", [])) if m != null else p.get("dilei", []))
-		for j in range(8):
-			b.put_u8(int(mines[j]) if j < mines.size() else 0)
-	return b.get_data_array()
-
+static func _people_bytes(state, level: Dictionary) -> PackedByteArray:
+	var raw := _block(state,16)
+	if not state.original_blocks.has("block16"):
+		var fight: PackedByteArray = str(level.get("people_hex","")).hex_decode()
+		for i in range(mini(fight.size(),88*132)): raw[40*132+i] = fight[i]
+	for slot in range(40):
+		var member: Dictionary = state.person(slot)
+		if member.is_empty(): continue
+		var offset := slot*132
+		var name: PackedByteArray = GBK.encode(str(member.get("name","")),16)
+		for i in range(16): raw[offset+i] = name[i]
+		raw.encode_u32(offset+16,int(member.get("face",0)))
+		# pad2是原版未知/零字段，不再私写PART。
+		for pair in [[24,"faction"],[28,"wuli"],[32,"zhili"],[36,"level"],[40,"xp"],[44,"bingzhong"],[48,"attack_count"]]:
+			raw.encode_u32(offset+int(pair[0]),int(member.get(pair[1],0)))
+		for index in range(16): raw.encode_u32(offset+52+index*4,int(member.get("skills",{}).get(SKILL_KEYS[index],0)))
+		for pair in [[116,"item_slots",156],[124,"mine_slots",40]]:
+			var slots: Array = member.get(pair[1],[])
+			for index in range(8):
+				var value := int(slots[index]) if index < slots.size() else 0
+				if value < 0 or value > int(pair[2]):
+					push_error("非法原版携带字节 slot%d/%s/%d" % [slot,pair[1],value])
+					return PackedByteArray()
+				raw[offset+int(pair[0])+index] = value
+	return raw
 
 static func encode(state, level: Dictionary) -> PackedByteArray:
-	var b := StreamPeerBuffer.new()
-	b.big_endian = false
-	b.put_u32(2)  # block0 game_mode：战略界面
-	b.put_u32(int(state.campaign_index))  # block1 fight_index
-	b.put_u32(int(state.difficulty))  # block2 difficulty
-	b.put_u32(int(state.campaign_index))  # block3 current_level（0x475AA4）
-	# Intro 700 B: 关卡名/成功/失败按 GBK 写入。
-	var intro := PackedByteArray(); intro.resize(700)
-	_write_at(intro, 0x00, _gbk(str(level.get("name_gbk_hex", ""))), 32)
-	_write_at(intro, 0x28, _gbk(str(level.get("success_gbk_hex", ""))), 64)
-	_write_at(intro, 0x68, _gbk(str(level.get("failure_gbk_hex", ""))), 64)
-	intro.encode_u32(0x20, 1)
-	intro.encode_u32(0x2B4, 99)
-	b.put_data(intro)
-	b.put_u32(int(state.current_town))  # block5 town
-	b.put_u32(mini(0xFFFFFFFF, int(state.money)))  # block6 money
-	b.put_u32(int(state.score_total))  # block7 score_total
-	b.put_u32(int(state.kills_by_gun))  # block8
-	b.put_u32(int(state.kills_by_mine))  # block9
-	_put_raw_or_pad(b, state, "block10", 64)
-	for i in range(19):
-		b.put_u32(1 if state.is_liberated(i) else 0)
-	for i in range(14):
-		var v := 0
-		match i:
-			0: v = int(state.campaign_index)
-			1: v = int(state.score_total)
-			2: v = 1 if state.hidden_unlocked else 0
-			3: v = int(state.ending_id)
-			4: v = state.campaign_completed.size()
-		b.put_u32(v)
-	# block13 是 95 槽的关卡/界面状态机；idx90 存结算时的总分快照。
-	# 新导出至少写 idx90=score_total；导入文件则原样保留。
-	var raw13 = state.original_blocks.get("block13", null) \
-			if state.original_blocks is Dictionary else null
-	if raw13 is PackedByteArray and (raw13 as PackedByteArray).size() == 380:
-		b.put_data(raw13)
-	else:
-		var b13 := PackedByteArray(); b13.resize(380)
-		b13.encode_u32(360, int(state.score_total))
-		b.put_data(b13)
-	_put_raw_or_pad(b, state, "block14", 8192)
-	_put_raw_or_pad(b, state, "block15", 8192)
-	var people := _people_bytes(state)
-	b.put_data(people)
-	_put_raw_or_pad(b, state, "block17", 16896)
-	for i in range(160):
-		b.put_u16(mini(65535, state.item_count(i)))
-	_put_raw_or_pad(b, state, "block19", 320)
-	# block20/21 是 4×10 物品格缓存：当前页写前 10 个库存物品。
-	var top_ids: Array = []
-	for i in range(160):
-		if state.item_count(i) > 0:
-			top_ids.append(i)
-			if top_ids.size() >= 10:
-				break
-	for i in range(40):
-		b.put_u16(state.item_count(int(top_ids[i])) if i < top_ids.size() else 0)
-	for i in range(10):
-		b.put_u32(int(top_ids[i]) if i < top_ids.size() else 0)
-	_put_raw_or_pad(b, state, "block22", 32768)
-	_put_raw_or_pad(b, state, "block23", 8)
-	_put_raw_or_pad(b, state, "block24", 28)
-	_put_raw_or_pad(b, state, "block25", 12)
-	if state.original_blocks is Dictionary and state.original_blocks.has("block26"):
-		_put_raw_or_pad(b, state, "block26", 4)
-	else:
-		b.put_u32(int(Time.get_unix_time_from_system()))
-	if state.original_blocks is Dictionary and state.original_blocks.has("block27"):
-		_put_raw_or_pad(b, state, "block27", 4)
-	else:
-		b.put_u32(0)
-	var data := b.get_data_array()
-	if data.size() != SIZE:
-		push_error("OriginalSave size %d != %d" % [data.size(), SIZE])
-	return data
+	var blocks: Array = []
+	for index in range(28): blocks.append(_block(state,index))
+	blocks[0].encode_u32(0,57) # 原版load包装仅mode57进入世界图，其余转战斗150。
+	blocks[1].encode_u32(0,int(state.campaign_index))
+	blocks[2].encode_u32(0,int(state.difficulty))
+	blocks[3].encode_u32(0,int(state.battle_turn))
+	var intro: PackedByteArray = str(level.get("intro_hex","")).hex_decode()
+	if intro.size() == 700: blocks[4] = intro
+	for pair in [[5,state.current_town],[6,state.money],[7,state.score_total],[8,state.kills_by_gun],[9,state.kills_by_mine]]:
+		blocks[int(pair[0])].encode_u32(0,int(pair[1]))
+	for index in range(19): blocks[11].encode_u32(index*4,1 if state.is_liberated(index) else 0)
+	for index in range(14): blocks[12].encode_u32(index*4,int(state.script_globals.get("0x%x" % (0x95eaf8+index*4),0)))
+	for index in range(95):
+		var key := "0x%x" % (0x7d06c8+index*4)
+		if state.script_globals.has(key): blocks[13].encode_u32(index*4,int(state.script_globals[key]))
+	blocks[13].encode_u32(90*4,int(state.main_score_snapshot))
+	if not state.original_blocks.has("block14"):
+		var fighters: PackedByteArray = str(level.get("fighter_hex","")).hex_decode()
+		if fighters.size() == 8192:
+			blocks[14] = fighters
+			blocks[15] = fighters.duplicate()
+	blocks[16] = _people_bytes(state,level)
+	if blocks[16].size() != 16896: return PackedByteArray()
+	if not state.original_blocks.has("block17"): blocks[17] = blocks[16].duplicate()
+	for index in range(160): blocks[18].encode_u16(index*2,clampi(state.item_count(index),0,65535))
+	# 战略导出已结算，不携带上次战斗暂存战利品/统计造成重复领取。
+	blocks[19].fill(0)
+	blocks[25].fill(0)
+	for index in range(40): blocks[20].encode_u16(index*2,clampi(state.mine_count(index),0,65535))
+	for index in range(10): blocks[21].encode_u32(index*4,maxi(0,state.material_count(index)))
+	blocks[26].encode_u32(0,maxi(0,int(state.play_seconds)))
+	blocks[27].encode_u32(0,int(state.town_bgm_scene))
+	var result := PackedByteArray()
+	for index in range(28):
+		if blocks[index].size() != int(BLOCK_SIZES[index]): return PackedByteArray()
+		result.append_array(blocks[index])
+	return result if result.size() == SIZE else PackedByteArray()
 
-
-static func decode(data: PackedByteArray) -> Dictionary:
-	if data.size() != SIZE:
-		return {}
-	var b := StreamPeerBuffer.new()
-	b.data_array = data
-	b.big_endian = false
-	var game_mode := int(b.get_u32())  # block0
-	var fight_index := int(b.get_u32())  # block1
-	var difficulty := int(b.get_u32())  # block2
-	var level_index := int(b.get_u32())  # block3
-	var out := {"game_state": game_mode, "difficulty": difficulty,
-			"fight_index": fight_index, "level_index": level_index}
-	var intro_got = b.get_data(700)
-	var intro: PackedByteArray = intro_got[1]
-	out["intro_name_gbk_hex"] = intro.slice(0, 32).hex_encode()
-	out["intro_success_gbk_hex"] = intro.slice(0x28, 0x28 + 64).hex_encode()
-	out["intro_failure_gbk_hex"] = intro.slice(0x68, 0x68 + 64).hex_encode()
-	out["town"] = int(b.get_u32())
-	out["money"] = int(b.get_u32())
-	var score_total := int(b.get_u32())  # block7
-	var kills_gun := int(b.get_u32())  # block8
-	var kills_mine := int(b.get_u32())  # block9
-	out["score_total"] = score_total
-	out["kills_by_gun"] = kills_gun
-	out["kills_by_mine"] = kills_mine
-	var b10 := _read_raw(b, 64)
+static func decode(raw: PackedByteArray) -> Dictionary:
+	if raw.size() != SIZE: return {}
+	var locations := offsets()
+	var blocks := {}
+	for index in range(28): blocks["block%d" % index] = raw.slice(int(locations[index]),int(locations[index])+int(BLOCK_SIZES[index]))
+	var index := int(blocks["block1"].decode_u32(0))
+	var town := int(blocks["block5"].decode_u32(0))
+	var difficulty := int(blocks["block2"].decode_u32(0))
+	if index > 46 or town > 18 or difficulty > 2: return {}
+	var out := {"game_state":int(blocks["block0"].decode_u32(0)),"fight_index":index,"town":town,"difficulty":difficulty,
+		"battle_turn":int(blocks["block3"].decode_u32(0)),"money":int(blocks["block6"].decode_u32(0)),"score_total":int(blocks["block7"].decode_u32(0)),
+		"kills_by_gun":int(blocks["block8"].decode_u32(0)),"kills_by_mine":int(blocks["block9"].decode_u32(0)),"play_seconds":int(blocks["block26"].decode_u32(0)),"town_bgm_scene":int(blocks["block27"].decode_u32(0)),"_raw":blocks}
+	out["level_index"] = index # 仅旧UI兼容别名，绝不读block3为关卡。
+	out["intro_name_gbk_hex"] = blocks["block4"].slice(0,32).hex_encode()
 	var liberated: Array = []
 	for i in range(19):
-		if int(b.get_u32()) != 0:
-			liberated.append(i)
+		if blocks["block11"].decode_u32(i*4) != 0: liberated.append(i)
 	out["liberated"] = liberated
-	var progress: Array = []
-	for i in range(14):
-		progress.append(int(b.get_u32()))
-	var b13_got = b.get_data(380)
-	var b13: PackedByteArray = b13_got[1]
-	var b14 := _read_raw(b, 8192)
-	var b15 := _read_raw(b, 8192)
-	var people_got = b.get_data(16896)
-	var people_raw: PackedByteArray = people_got[1]
-	var b17 := _read_raw(b, 16896)
-	var people := _decode_people(people_raw)
-	out["people"] = people
-	var cangku: Array = []
-	for i in range(160):
-		cangku.append(int(b.get_u16()))
-	var items := {}
-	for i in range(160):
-		if cangku[i] > 0:
-			items[str(i)] = cangku[i]
-	out["items"] = items
-	var b19 := _read_raw(b, 320)
-	var grid_counts: Array = []
-	for i in range(40):
-		grid_counts.append(int(b.get_u16()))
-	var grid_ids: Array = []
-	for i in range(10):
-		grid_ids.append(int(b.get_u32()))
-	out["item_grid"] = {"ids": grid_ids, "counts": grid_counts.slice(0, 10)}
-	var b22 := _read_raw(b, 32768)
-	var b23 := _read_raw(b, 8)
-	var b24 := _read_raw(b, 28)
-	var b25 := _read_raw(b, 12)
-	var b26 := _read_raw(b, 4)
-	var b27 := _read_raw(b, 4)
-	out["_raw"] = {
-		"block10": b10, "block13": b13,
-		"block14": b14, "block15": b15, "block17": b17,
-		"block19": b19, "block22": b22, "block23": b23,
-		"block24": b24, "block25": b25, "block26": b26,
-		"block27": b27,
-	}
+	var globals := {}
+	for i in range(14): globals["0x%x" % (0x95eaf8+i*4)] = int(blocks["block12"].decode_u32(i*4))
+	for i in range(95): globals["0x%x" % (0x7d06c8+i*4)] = int(blocks["block13"].decode_u32(i*4))
+	out["script_globals"] = globals
+	out["main_score_snapshot"] = int(blocks["block13"].decode_u32(360))
+	for pair in [["items",18,160,2],["temp_loot",19,160,2],["mines",20,40,2],["materials",21,10,4]]:
+		var stock := {}
+		for i in range(int(pair[2])):
+			var quantity := int(blocks["block%d" % pair[1]].decode_u16(i*2) if int(pair[3]) == 2 else blocks["block%d" % pair[1]].decode_u32(i*4))
+			if quantity > 0: stock[str(i)] = quantity
+		out[pair[0]] = stock
+	var people: Array = []
+	var source: PackedByteArray = blocks["block16"]
 	var members: Array = []
-	if b13.size() >= 380 and b13.decode_u32(340) == 0x50415259:
-		# 兼容旧版导出的 PARY 扩展。
-		for i in range(10):
-			var pid := int(b13.decode_u32(344 + i * 4))
-			if pid > 0 and pid < 40:
-				members.append(pid)
-	else:
-		# 新版：队伍成员各自的 People.pad2 == 'PART'，不再覆盖 block13。
-		for i in range(min(40, people.size())):
-			if int(people[i].get("pad2", 0)) == 0x50415254:
-				members.append(i)
-	out["members"] = members
-	# block1/3/7 是原版字段；旧版本导出文件把 40/100/0 写在这里，
-	# 这时才回退到 block12 的复刻进度。新文件不再需要回退。
-	var legacy := fight_index > 46 or level_index > 46
-	if fight_index > 46:
-		fight_index = int(progress[0]) if progress.size() > 0 else 0
-	if level_index > 46:
-		level_index = fight_index
-	if legacy and score_total == 0 and progress.size() > 1:
-		score_total = int(progress[1])
-	out["fight_index"] = fight_index
-	out["level_index"] = level_index
-	out["score_total"] = score_total
-	out["hidden_unlocked"] = (progress[2] if progress.size() > 2 else 0) != 0
-	out["ending_id"] = progress[3] if progress.size() > 3 else 0
-	out["campaign_completed"] = progress[4] if progress.size() > 4 else 0
-	return out
-
-
-static func _decode_people(raw: PackedByteArray) -> Array:
-	var out: Array = []
-	var b := StreamPeerBuffer.new()
-	b.data_array = raw
-	b.big_endian = false
 	for i in range(128):
-		var name_got = b.get_data(16)
-		var name_bytes: PackedByteArray = name_got[1]
-		var face := int(b.get_u32())
-		var pad2 := int(b.get_u32())
-		var enemy := int(b.get_u32())
-		var wuli := int(b.get_u32())
-		var zhili := int(b.get_u32())
-		var level := int(b.get_u32())
-		var xp := int(b.get_u32())
-		var bz := int(b.get_u32())
-		var atk := int(b.get_u32())
+		var base := i*132
+		var person := {"slot":i,"name_gbk":source.slice(base,base+16),"name":GBK.decode(source.slice(base,base+16)),"face":int(source.decode_u32(base+16)),"pad2":int(source.decode_u32(base+20))}
+		for pair in [[24,"enemy"],[28,"wuli"],[32,"zhili"],[36,"level"],[40,"xp"],[44,"bingzhong"],[48,"attack_count"]]: person[pair[1]] = int(source.decode_u32(base+int(pair[0])))
 		var skills := {}
-		for k in SKILL_KEYS:
-			skills[k] = int(b.get_u32())
-		var items: Array = []
-		for j in range(8):
-			items.append(int(b.get_u8()))
-		var mines: Array = []
-		for j in range(8):
-			mines.append(int(b.get_u8()))
-		out.append({"slot": i, "name_gbk": name_bytes, "face": face,
-				"pad2": pad2, "enemy": enemy, "wuli": wuli, "zhili": zhili,
-				"level": level, "xp": xp, "bingzhong": bz,
-				"attack_count": atk, "skills": skills, "items": items,
-				"mines": mines})
+		for j in range(16): skills[SKILL_KEYS[j]] = int(source.decode_u32(base+52+j*4))
+		person["skills"] = skills
+		person["items"] = Array(source.slice(base+116,base+124))
+		person["mines"] = Array(source.slice(base+124,base+132))
+		people.append(person)
+		if i > 0 and i < 32 and int(person["enemy"]) == 0: members.append(i)
+	out["people"] = people
+	out["members"] = members
 	return out
-
 
 static func apply(state, d: Dictionary, path: String) -> bool:
-	if d.is_empty():
-		return false
+	if d.is_empty() or (d.get("people",[]) as Array).size() != 128: return false
+	# Native battle mode requires a dedicated 128-slot/flags/mines adapter. Never
+	# silently heal/redeploy it as strategy and settle its temporary loot.
+	if int(d.get("game_state",-1))!=57:return false
+	# 先完整decode校验，之后一次性替换。保留m2/m4表，不继承上一局人物/剧情。
+	state.new_game(state.data)
+	state.original_blocks = (d["_raw"] as Dictionary).duplicate(true)
+	for key in ["money","current_town","campaign_index","difficulty","battle_turn","play_seconds","town_bgm_scene","score_total","kills_by_gun","kills_by_mine"]:
+		var source_key: String = "town" if key == "current_town" else ("fight_index" if key == "campaign_index" else key)
+		state.set(key,int(d.get(source_key,0)))
+	state.liberated = (d["liberated"] as Array).duplicate()
+	state.script_globals = (d["script_globals"] as Dictionary).duplicate(true)
+	state.main_score_snapshot = int(d["main_score_snapshot"])
+	state.hidden_unlocked = state.main_score_snapshot >= 2800
+	state.ending_id = state.ending_for_score(state.main_score_snapshot)
 	state.party.clear()
-	state.items.clear()
-	state.materials.clear()
-	state.mines.clear()
-	state.liberated = (d.get("liberated", []) as Array).duplicate()
-	state.money = int(d.get("money", 0))
-	state.current_town = int(d.get("town", 0))
-	state.campaign_index = int(d.get("fight_index", 0))
-	state.score_total = int(d.get("score_total", 0))
-	state.kills_by_gun = int(d.get("kills_by_gun", 0))
-	state.kills_by_mine = int(d.get("kills_by_mine", 0))
-	state.original_blocks = (d.get("_raw", {}) as Dictionary).duplicate(true)
-	state.hidden_unlocked = bool(d.get("hidden_unlocked", false))
-	state.ending_id = int(d.get("ending_id", 0))
-	state.campaign_completed.clear()
-	for i in range(min(state.campaign_index, 36)):
-		state.campaign_completed.append(i)
-	var people: Array = d.get("people", [])
-	for pid in d.get("members", []):
-		var p: Dictionary = people[pid] if pid < people.size() else {}
-		state._add_member(int(pid))
-		var m = state.get_member(int(pid))
-		if m == null:
-			continue
-		m["level"] = int(p.get("level", 1))
-		m["xp"] = int(p.get("xp", 0))
-		m["bingzhong"] = int(p.get("bingzhong", m.get("bingzhong", 0)))
-		m["wuli"] = int(p.get("wuli", m.get("wuli", 0)))
-		m["zhili"] = int(p.get("zhili", m.get("zhili", 0)))
-		m["skills"] = (p.get("skills", {}) as Dictionary).duplicate(true)
-		m["attack_count"] = int(p.get("attack_count", 0))
-		m["item_slots"] = (p.get("items", []) as Array).duplicate()
-		m["mine_slots"] = (p.get("mines", []) as Array).duplicate()
-		m["max_hp"] = state.max_hp_for(int(m["bingzhong"]), int(m["level"]))
-		m["hp"] = int(m["max_hp"])
-	if state.party.is_empty():
-		# 真原版存档没有 PARY；回退到默认起始队伍，避免导入后队伍为空。
-		for pid in state.data.get("starting", {}).get("party", []):
-			state._add_member(int(pid))
-	for k in d.get("items", {}):
-		state.items[str(k)] = int(d["items"][k])
-	state.saved_at = "original:" + path
+	state.reserve_members.clear()
+	for slot in range(40):
+		var source: Dictionary = d["people"][slot]
+		var m: Dictionary = state.person(slot)
+		for key in ["name","face","wuli","zhili","level","xp","bingzhong","attack_count"]: m[key] = source[key]
+		m["faction"] = int(source["enemy"])
+		m["skills"] = (source["skills"] as Dictionary).duplicate(true)
+		m["item_slots"] = (source["items"] as Array).duplicate()
+		m["mine_slots"] = (source["mines"] as Array).duplicate()
+		m["name_gbk_hex"] = (source["name_gbk"] as PackedByteArray).hex_encode()
+		m["face_png"] = "res://assets/face/face_%03d.png" % int(m["face"])
+		var cls: Dictionary = state.unit_of(m)
+		m["army_png"] = "res://assets/army/army_%03d.png" % int(cls.get("img_index",0))
+		m["unit_name"] = cls.get("name","")
+		m["max_hp"] = state.max_hp_for(int(m["bingzhong"]),int(m["level"]))
+		m["hp"] = m["max_hp"] # 明确战略导入；下一战依原版满血初始化。
+		if slot == 0: state.player_name = str(m["name"])
+		elif slot < 32 and int(m["faction"]) == 0: state.party.append(m)
+	state.items = (d["items"] as Dictionary).duplicate(true)
+	state.mines = (d["mines"] as Dictionary).duplicate(true)
+	state.materials = (d["materials"] as Dictionary).duplicate(true)
+	# 战略转换把未结战利品入库一次，并清保留块，防止再次领取。
+	for key in d["temp_loot"]: state.add_item(int(key),int(d["temp_loot"][key]))
+	state.original_blocks["block19"].fill(0)
+	for i in range(mini(state.campaign_index,36)): state.campaign_completed.append(i)
+	state.saved_at = "original strategy import:" + path
 	return true

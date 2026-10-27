@@ -22,6 +22,8 @@ def main() -> None:
     spec.loader.exec_module(m1)
     texts: list[str] = []
     for p in sorted(DATA.glob("*.json")):
+        if p.name == "gbk_codec.json":
+            continue
         try:
             texts.append(p.read_text(encoding="utf-8"))
         except UnicodeDecodeError:

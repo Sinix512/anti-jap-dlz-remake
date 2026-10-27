@@ -10,7 +10,7 @@
   每个城镇背景自带一份。
 
 原版目录里没有 `dlz-01.pal` / `dlz-11.pal` / `dlz-13.pal` 文件，
-EXE 里也没有对应字面量；因此地图调色板用上面的 IMG 通用调色板代替。
+416C70不读PAL元数据；41B698/41B8E9明确使用KUANG04尾色板。
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 PALETTE_BYTES = 768
 COMPONENT_SCALE = 4
 # 29 个 IMG 共用这组调色板，作为全局 8bpp 索引图的调色板。
-GLOBAL_PALETTE_SOURCE = "BOX.IMG"
+GLOBAL_PALETTE_SOURCE = "KUANG04.IMG"
 
 
 def img_palette(path: Path) -> bytes:

@@ -72,7 +72,7 @@ GLOBALS = {
     0x7D50F8: "battle_result",
     0x475AA4: "turn",
     0x7D0484: "score",
-    0x7D19E4: "dialog_result?",
+    0x7D19E4: "People21.side",
     0x7D1A68: "flag_7d1a68",
     0x7D06B8: "mode_7d06b8",
     0x57BA20: "map_w",

@@ -1,6 +1,6 @@
 extends Node2D
 
-## 战场单位：精灵、HP 条、选择框、受击/死亡表现。
+## 战场单位：原状态精灵、乱字、受击/死亡表现。
 
 const TILE := 48
 
@@ -31,14 +31,22 @@ var control := true
 var auto := false
 var protected := false
 var is_boss := false
-var acted := false
+var acted := false:
+	set(value):
+		acted=value
+		if not display_action_lock:display_state=0 if value else 1
+		if sprite!=null:refresh()
 var moved := false
 var alive := true
+# 429CC8 sets stage1 before searching; an exhausted 25-cell search leaves a
+# live, unplaced slot, not a teleport to some other part of the map.
+var placed := true
 var selected := false
 # 战斗数值（M6）：士气/装备完整度/技能次数/装备加成/状态
 var last_damage_kind := ""  # gun / mine / skill / throw
 var morale := 100
 var integrity := 100
+var defense_integrity := 100
 var attack_count := 0
 var skill_counts: Dictionary = {}
 var skills: Dictionary = {}
@@ -55,6 +63,12 @@ var status_stun := 0
 var status_disarm := 0
 
 var sprite: Sprite2D
+# Original Fighter +00/+3F. direction is this runtime's destination direction.
+# Keep these independent of the current Sprite region; deaths sample them.
+var display_counter := 0
+var display_state := 1
+var display_action_lock := false
+var _damage_display_backup := -1
 var _flash_tween: Tween
 var frame_count := 1
 var _anim_active := false
@@ -63,6 +77,20 @@ var _anim_to := 0
 var _anim_fps := 10.0
 var _anim_t := 0.0
 var _anim_loop := false
+
+const STATE_FIELDS := ["side","unit_name","x","y","hp","max_hp","move","select",
+	"bingzhong","direction","slot","pid","key","behavior","target_slot","target_x",
+	"target_y","home_x","home_y","control","auto","protected","is_boss","acted",
+	"moved","alive","placed","last_damage_kind","morale","integrity","defense_integrity",
+	"attack_count","skill_counts","skills","attack_bonus","defense_bonus","equip",
+	"equip_name","item_slots","mine_slots","gained_xp","status_def_down",
+	"status_atk_down","status_stun","status_disarm","display_counter","display_state"]
+
+func state_record() -> Dictionary:
+	var result := data.duplicate(true)
+	result["_runtime_state"] = true
+	for field in STATE_FIELDS: result[field] = get(field)
+	return result.duplicate(true)
 
 
 func setup(d: Dictionary, b: Node) -> void:
@@ -93,6 +121,7 @@ func setup(d: Dictionary, b: Node) -> void:
 	is_boss = bool(d.get("is_boss", false))
 	morale = int(d.get("morale", 100))
 	integrity = int(d.get("integrity", 100))
+	defense_integrity = int(d.get("defense_integrity", 100))
 	attack_count = int(d.get("attack_count", 0))
 	skill_counts = (d.get("skill_counts", {}) as Dictionary).duplicate(true)
 	skills = (d.get("skills", {}) as Dictionary).duplicate(true)
@@ -106,6 +135,7 @@ func setup(d: Dictionary, b: Node) -> void:
 	z_index = int(position.y)
 
 	sprite = Sprite2D.new()
+	sprite.show_behind_parent=true # army before the parent's behavior11 glyph
 	sprite.centered = true
 	sprite.region_enabled = true
 	sprite.region_rect = Rect2(0, 0, TILE, TILE)
@@ -116,7 +146,20 @@ func setup(d: Dictionary, b: Node) -> void:
 		sprite.texture = _fallback_texture()
 	frame_count = maxi(1, int(sprite.texture.get_width() / TILE))
 	add_child(sprite)
-	sprite.flip_h = direction == 2
+	sprite.flip_h = false
+	# Resume is not a fresh deployment. Retain action availability and departed units.
+	if bool(d.get("_runtime_state",false)):
+		for field in STATE_FIELDS:
+			if d.has(field): set(field,d[field])
+	# Hydration is also used by JSON resumes and late spawns, bypassing Builder.
+	# Older records can contain a contradictory cached side; derive it only after
+	# all runtime fields are restored, before Battle builds its enemy/ally lists.
+	if data.has("faction"):
+		side = "player" if int(data["faction"]) == 0 else "enemy"
+		data["side"] = side
+		auto = side == "player" and not control
+		data["auto"] = auto
+	visible = alive and placed
 	refresh()
 
 
@@ -149,6 +192,15 @@ func _process(delta: float) -> void:
 	sprite.region_rect = Rect2(f * TILE, 0, TILE, TILE)
 
 
+func native_frame() -> int:
+	return preload("res://scripts/battle/OriginalDeathMix.gd").army_frame(display_state,direction,display_counter)
+
+
+func advance_display(amount:=1) -> void:
+	display_counter=(display_counter+amount)&0xffffffff
+	refresh()
+
+
 func play_anim(from_frame: int, to_frame: int, fps: float = 10.0,
 		loop: bool = false) -> void:
 	if battle != null and bool(battle.fast_sim):
@@ -162,8 +214,14 @@ func play_anim(from_frame: int, to_frame: int, fps: float = 10.0,
 	sprite.region_rect = Rect2(_anim_from * TILE, 0, TILE, TILE)
 
 
-func play_attack() -> void:
-	play_anim(0, frame_count - 1, 16.0, false)
+func play_attack(present:=true) -> void:
+	# 41F10A: five pairs of same-cell draws, one p++ per pair. No lunge.
+	display_state=2
+	for i in range(5):
+		refresh()
+		if present:await get_tree().create_timer(0.1).timeout
+		advance_display()
+		if present:await get_tree().create_timer(0.1).timeout
 
 
 func play_walk() -> void:
@@ -172,17 +230,15 @@ func play_walk() -> void:
 
 func stop_anim() -> void:
 	_anim_active = false
-	sprite.region_rect = Rect2(0, 0, TILE, TILE)
+	refresh()
 
 
 func refresh() -> void:
 	if sprite == null:
 		return
-	sprite.flip_h = direction == 2
-	if acted:
-		sprite.modulate = Color(0.58, 0.58, 0.62, 1.0)
-	else:
-		sprite.modulate = Color.WHITE
+	sprite.flip_h = false
+	sprite.modulate = Color.WHITE
+	sprite.region_rect = Rect2(native_frame()*TILE,0,TILE,TILE)
 	queue_redraw()
 
 
@@ -194,67 +250,73 @@ func set_selected(v: bool) -> void:
 func set_tile(tx: int, ty: int) -> void:
 	x = tx
 	y = ty
+	placed = true
+	visible = alive
 	position = _tile_center(tx, ty)
 	z_index = int(position.y)
 
 
 func move_visual(tx: int, ty: int, dur: float = 0.10) -> void:
+	if battle != null: direction = battle._facing(Vector2i(x,y),Vector2i(tx,ty))
 	x = tx
 	y = ty
-	if battle != null and bool(battle.fast_sim):
-		set_tile(tx, ty)
-		return
-	play_walk()
-	var tw := create_tween()
-	tw.tween_property(self, "position", _tile_center(tx, ty), dur)
-	tw.parallel().tween_property(self, "z_index", int(_tile_center(tx, ty).y), dur)
-	await tw.finished
-	stop_anim()
+	placed = true
+	visible = alive
+	var from:=position
+	var to:=_tile_center(tx,ty)
+	var present:=battle==null or (not bool(battle.fast_sim) and bool(battle.animations_enabled))
+	if battle != null:
+		dur=float(battle.animation_speed)*0.08
+	# 41E5F1:12/24/36/48px, p++ BEFORE each step, s unchanged.
+	for step in range(1,5):
+		advance_display()
+		sprite.region_rect=Rect2((2+2*posmod(direction,4)+display_counter%2)*TILE,0,TILE,TILE)
+		position=from.lerp(to,step/4.0)
+		z_index=int(position.y)
+		if present and dur>0:await get_tree().create_timer(dur/4.0).timeout
+	refresh()
 
 
 func take_damage(amount: int) -> bool:
 	hp = max(0, hp - amount)
 	queue_redraw()
-	if _flash_tween != null and _flash_tween.is_valid():
-		_flash_tween.kill()
-	sprite.modulate = Color(1.0, 0.35, 0.35, 1.0)
-	_flash_tween = create_tween()
-	_flash_tween.tween_property(sprite, "modulate",
-			Color(0.58, 0.58, 0.62, 1.0) if acted else Color.WHITE, 0.28)
+	if amount>0:
+		if _damage_display_backup<0:_damage_display_backup=display_state
+		display_state=3
+		refresh()
 	return hp <= 0
 
 
+func restore_damage_display() -> void:
+	if _damage_display_backup<0:return
+	# 419B0D restores temporary2/3 only; doubt/supervise0/1 persist.
+	if display_state in [2,3]:display_state=_damage_display_backup
+	_damage_display_backup=-1
+	refresh()
+
+
 func die() -> void:
-	if not alive:
-		return
+	if not alive:return
 	alive = false
-	var tw := create_tween()
-	tw.tween_property(sprite, "modulate:a", 0.0, 0.25)
-	tw.parallel().tween_property(sprite, "scale", Vector2(0.6, 0.6), 0.25)
-	await tw.finished
+	disappear()
+
+
+func disappear() -> void:
+	if _flash_tween != null and _flash_tween.is_valid():_flash_tween.kill()
+	stop_anim()
 	visible = false
 
 
 func _draw() -> void:
 	if not alive:
 		return
-	# 选择圈
-	if selected:
-		draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 24, Color("#ffd166"), 2.0)
-	# 阵营点
-	var c := Color("#69b7ff") if side == "player" else Color("#ff5a5a")
-	if auto and side == "player":
-		c = Color("#8fd18f")
-	draw_circle(Vector2(-19, -30), 4.0, c)
-	if protected:
-		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 24, Color("#e8ba4c"), 1.0)
-	# HP 条
-	var w := 38.0
-	var ratio := clampf(float(hp) / float(max_hp), 0.0, 1.0)
-	draw_rect(Rect2(-w / 2, -25, w, 4), Color(0, 0, 0, 0.8))
-	var col := Color("#53d769")
-	if ratio < 0.35:
-		col = Color("#ff5a5a")
-	elif ratio < 0.65:
-		col = Color("#f2c14e")
-	draw_rect(Rect2(-w / 2, -25, w * ratio, 4), col)
+	# 4170AA uses this one raw HZK16 glyph for behavior11, not all stuns.
+	if behavior==11 and battle!=null:
+		var glyph:Array=battle.data.meta.get("luan_glyph",[])
+		var pal:Array=battle.data.meta.get("battle_palette",[])
+		if glyph.size()==32 and pal.size()==768:
+			var color:=Color8(int(pal[0xB7*3]),int(pal[0xB7*3+1]),int(pal[0xB7*3+2]))
+			for gy in range(16):
+				for gx in range(16):
+					if int(glyph[gy*2+gx/8]) & (128>>(gx%8)):draw_rect(Rect2(gx-8,gy-8,1,1),color)
+	# 417547/4170AA do not add modern circles, faction dots, or HP bars.

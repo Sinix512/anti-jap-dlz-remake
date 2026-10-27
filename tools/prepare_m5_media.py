@@ -58,6 +58,7 @@ VideoStreamWebM.  No third-party Python packages are used.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -873,25 +874,38 @@ def anm_frames(parsed: dict):
         yield idx, bytes(prev)
 
 
+def battle_anm_signature(parsed: dict) -> dict:
+    """Battle surfaces retain KUANG04; ANM's own palette is preview-only.
+
+    404AA7/4264F6 exclude the final loop-back record. Keep preview and battle
+    frame counts separate, and invalidate old sheets even on incremental runs.
+    """
+    source = Path(parsed["path"])
+    palette = (source.parent / "KUANG04.IMG").read_bytes()[-768:]
+    return {"policy": "kuang04-records-minus-one-v1",
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "palette_sha256": hashlib.sha256(palette).hexdigest(),
+            "decoded_records": len(parsed["sorted_indices"]), "battle_frame_ms": 50,
+            "battle_frames": (int(parsed["records_num"]) & 0xffff) - 1}
+
+
 def encode_anm_alpha_sheet(parsed: dict, dst: Path) -> int:
-    """把 ANM 帧导出为 RGBA 横排 sprite sheet；调色板 index 0 视为透明。"""
+    """Battle-only RGBA sheet: KUANG04, index0 transparent, native N-1 frames."""
     w, h = parsed["width"], parsed["height"]
-    palette = parsed["palette"]
-    rgb = []
-    for i in range(256):
-        b, g, r, _ = palette[i * 4 : i * 4 + 4]
-        rgb.append((r, g, b))
+    signature = battle_anm_signature(parsed)
+    palette = bytes(v * 4 for v in (Path(parsed["path"]).parent / "KUANG04.IMG").read_bytes()[-768:])
+    n = signature["battle_frames"]
+    if n < 1 or n > signature["decoded_records"]:
+        raise ConversionError("ANM native record bound outside decoded records")
     frames = []
     for _, frame in anm_frames(parsed):
-        data = bytearray(w * h * 4)
-        for j, v in enumerate(frame):
-            r, g, b = rgb[v]
-            o = j * 4
-            data[o] = r
-            data[o + 1] = g
-            data[o + 2] = b
-            data[o + 3] = 0 if v == 0 else 255
-        frames.append(Image.frombytes("RGBA", (w, h), bytes(data)))
+        indexed = Image.frombytes("P", (w, h), frame)
+        indexed.putpalette(palette)
+        rgba = indexed.convert("RGBA")
+        rgba.putalpha(Image.frombytes("L", (w, h), frame).point([0] + [255] * 255))
+        frames.append(rgba)
+        if len(frames) == n:
+            break
     if not frames:
         return 0
     sheet = Image.new("RGBA", (w * len(frames), h), (0, 0, 0, 0))
@@ -899,6 +913,7 @@ def encode_anm_alpha_sheet(parsed: dict, dst: Path) -> int:
         sheet.paste(im, (i * w, 0))
     dst.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(dst)
+    dst.with_suffix(".json").write_text(json.dumps(signature, indent=2) + "\n")
     return len(frames)
 
 
@@ -1073,13 +1088,16 @@ def convert_anm(
         skipped = False
     if video_id.startswith("mine") or video_id.startswith("ffpact"):
         sheet = dest / "anm" / f"{video_id}_sheet.png"
-        if force or not sheet.exists():
+        signature = battle_anm_signature(parsed)
+        cached = json.loads(sheet.with_suffix(".json").read_text()) if sheet.with_suffix(".json").exists() else {}
+        if force or not sheet.exists() or cached != signature:
             try:
-                n = encode_anm_alpha_sheet(parsed, sheet)
-                decode_info["sheet_path"] = f"res://assets/m5/anm/{sheet.name}"
-                decode_info["sheet_frames"] = n
+                encode_anm_alpha_sheet(parsed, sheet)
             except Exception as exc:
                 decode_info["sheet_error"] = str(exc)
+        decode_info.update(sheet_path=f"res://assets/m5/anm/{sheet.name}",
+                           sheet_frames=signature["battle_frames"],
+                           battle_sheet=signature)
     return {
         "id": video_id,
         "source": src.name,

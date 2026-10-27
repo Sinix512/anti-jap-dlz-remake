@@ -1,4 +1,5 @@
 extends RefCounted
+const InventorySlots=preload("res://scripts/battle/InventorySlots.gd")
 
 ## M4 通用关卡目标 / 触发器 / 增援。
 ## Battle 只负责地图、移动、攻击；这里解释 level["objective"]。
@@ -23,6 +24,7 @@ var chests_opened := 0
 var target_count := 1
 var survive_turns := 0
 var race_winner := ""
+var start_phase_pending := false
 var started := false
 var finished := false
 var status_text := ""
@@ -31,15 +33,26 @@ var _target_sprites: Array = []
 var trigger_rules: Array = []
 var trigger_flags: Dictionary = {}
 var trigger_done: Dictionary = {}
+var _executing_rule: Dictionary = {}
 var trigger_texts: Dictionary = {}
 var trigger_authoritative := false
-# 仅无头 bot 验收使用的旧目标胜利捷径；人类游玩仍只认触发器。
-var bot_objective_fallback := false
 var protagonist = null
 var pending_choice: Dictionary = {}
 var _choice_rng := RandomNumberGenerator.new()
 var _last_dead_side := ""
 var _last_dead_slot := -1
+var _last_turn_hook := -1
+var _trigger_active := false
+# 404932 checks result before the entire new-round block, not between its
+# T750 / recovery / timed mines / T510 calls. Do not publish a timeout until
+# that transaction has completed: some source T510 branches can overwrite it.
+var native_result := 0
+var result_writes: Array = []
+var _round_active := false
+var _pending_result_message := ""
+var _apply_depth := 0
+var _native_status_text := false
+var _pending_choice_rule: Dictionary = {}
 # AI behavior 运行时轨迹：手动试玩/无头回归都可读取。
 var ai_log: Array[String] = []
 var ai_trace := false
@@ -74,19 +87,20 @@ func setup(b, lv: Dictionary) -> void:
 	trigger_rules = (trig.get("rules", []) as Array).duplicate(true)
 	trigger_texts = (trig.get("texts", {}) as Dictionary).duplicate(true)
 	trigger_authoritative = bool(trig.get("authoritative", false))
-	trigger_flags.clear()
+	trigger_flags = (battle.battle_context.get("script_globals", {}) as Dictionary).duplicate(true)
+	for key in trigger_flags.keys():
+		var normalized := str(key).to_lower()
+		if normalized != str(key):
+			trigger_flags[normalized] = trigger_flags[key]
+			trigger_flags.erase(key)
+	for addr in range(0x583f18,0x583f58,4): trigger_flags["0x%x" % addr] = 0
 	trigger_done.clear()
 	pending_choice.clear()
 	protagonist = null
 	for u in battle.units:
-		if is_instance_valid(u) and str(u.side) == "player" and int(u.slot) < 0:
+		if is_instance_valid(u) and int(u.slot) == 0:
 			protagonist = u
 			break
-	if protagonist == null:
-		for u in battle.units:
-			if is_instance_valid(u) and str(u.side) == "player":
-				protagonist = u
-				break
 	_choice_rng.randomize()
 
 
@@ -98,25 +112,6 @@ func on_start() -> void:
 	started = true
 	if battle != null:
 		battle.emit_story_event("start", {})
-	# 赛跑关：柳忻获得兔子速度，龟田按乌龟速度走。原版赛跑关的脚本
-	# 不在 FIGHT.DAT 里，这里是可玩性补足，不是已确认数值。
-	if objective.get("type", "") == "race":
-		for u in battle.player_units:
-			if _key(u.unit_name) in unit_keys:
-				u.move += 8
-		for e in battle.enemy_units:
-			if _key(e.unit_name) == rival_key:
-				e.move = maxi(1, int(e.move) - 2)
-			else:
-				# 赛跑关只保留龟田作为对手；其他静态敌军在原版脚本里并未
-				# 参与赛跑，当前数据无法还原其脚本，直接退场避免堵死路线。
-				e.alive = false
-				e.visible = false
-				e.behavior = 0
-				e.target_slot = 0
-				e.target_x = 0
-				e.target_y = 0
-				e.status_stun = 999
 	# 目标点/搜索点标记
 	if objective.get("type", "") in ["reach", "capture_or_annihilate", "race"]:
 		for t in targets:
@@ -125,7 +120,24 @@ func on_start() -> void:
 		for t in targets:
 			_add_search_marker(int(t[0]), int(t[1]))
 	_update_status()
-	on_tick()
+	var actions: Array = level.get("start_actions", [])
+	if not actions.is_empty() and bool(battle.battle_context.get("campaign_story", false)):
+		start_phase_pending = true
+		battle.emit_story_event("phase_steps", {"steps": actions})
+	else:
+		# The standalone entry uses the same ordered resolver as Campaign's queue.
+		# Keep input/T750/T510 gated until a scripted mine has fully returned.
+		start_phase_pending = true
+		await _apply(actions)
+		await complete_start_phase()
+
+
+func complete_start_phase() -> void:
+	start_phase_pending = false
+	await on_turn_start(int(battle.turn))
+	await on_tick()
+	battle.busy = battle.finished_flag
+	battle.update_hud()
 
 
 func _add_target_marker(tx: int, ty: int) -> void:
@@ -161,10 +173,28 @@ func _add_search_marker(tx: int, ty: int) -> void:
 
 
 func on_turn_start(turn: int) -> void:
-	if finished:
+	if finished or start_phase_pending or (battle!=null and battle.finished_flag):
 		return
 	if battle != null:
 		battle.emit_story_event("turn", {"turn": turn})
+	if _last_turn_hook != turn:
+		_last_turn_hook = turn
+		battle.turn = turn
+		var previous_busy:bool=battle.busy
+		battle.busy=true
+		_round_active = true
+		_trigger_active = true
+		await _execute_triggers("turn")
+		if turn > 1: await battle._round_maintenance()
+		# Death callbacks/check_end inside a mine chain must not insert an
+		# extra T510 before the remaining mines, XP and penalty have returned.
+		await _execute_triggers("tick")
+		_trigger_active = false
+		_round_active = false
+		_commit_result()
+		battle.busy=previous_busy or battle.finished_flag
+	if finished:
+		return
 	# 增援
 	for wi in range(waves.size()):
 		var wave: Dictionary = waves[wi]
@@ -174,7 +204,7 @@ func on_turn_start(turn: int) -> void:
 			wave_done.append(wi)
 			_spawn_wave(wave)
 	# 坚持 N 回合
-	if (not trigger_authoritative or bot_objective_fallback) and objective.get("type", "") == "survive" \
+	if (not trigger_authoritative) and objective.get("type", "") == "survive" \
 			and survive_turns > 0 and turn > survive_turns:
 		battle._finish("victory", "坚持 %d 回合，任务完成" % survive_turns)
 		return
@@ -206,11 +236,11 @@ func on_unit_moved(u) -> void:
 			var tt: Array = targets[i]
 			if int(tt[0]) == t.x and int(tt[1]) == t.y:
 				reached[i] = true
-		if (not trigger_authoritative or bot_objective_fallback) and objective.get("type", "") == "capture_or_annihilate":
+		if (not trigger_authoritative) and objective.get("type", "") == "capture_or_annihilate":
 			if not reached.is_empty():
 				_finish("victory", "占领目标")
 				return
-		elif (not trigger_authoritative or bot_objective_fallback) and reached.size() >= target_count:
+		elif (not trigger_authoritative) and reached.size() >= target_count:
 			if battle != null:
 				battle.emit_story_event("reach", {"tile": [t.x, t.y]})
 			_finish("victory", str(level.get("success", "到达目标")))
@@ -223,7 +253,7 @@ func on_unit_moved(u) -> void:
 				collected += 1
 				battle._log("搜集到%s %d/%d" % [
 					objective.get("label", "物资"), collected, target_count])
-		if (not trigger_authoritative or bot_objective_fallback) and collected >= target_count:
+		if (not trigger_authoritative) and collected >= target_count:
 			_finish("victory", "物资搜集完成")
 			return
 	if u.side == "player" and objective.get("type", "") == "reach_unit":
@@ -234,7 +264,7 @@ func on_unit_moved(u) -> void:
 				continue
 			var d: int = abs(tu.x - u.x) + abs(tu.y - u.y)
 			var radius := int(objective.get("radius", 1))
-			if d <= radius and (not trigger_authoritative or bot_objective_fallback):
+			if d <= radius and (not trigger_authoritative):
 				if battle != null:
 					battle.emit_story_event("reach", {"unit": tu.unit_name})
 				_finish("victory", "已接近 %s" % tu.unit_name)
@@ -244,7 +274,7 @@ func on_unit_moved(u) -> void:
 			var tt: Array = targets[i]
 			if int(tt[0]) == t.x and int(tt[1]) == t.y:
 				race_winner = _key(u.unit_name)
-				if not trigger_authoritative or bot_objective_fallback:
+				if not trigger_authoritative:
 					if u.side == "player":
 						_finish("victory", str(level.get("success", "抢先到达")))
 					else:
@@ -253,7 +283,7 @@ func on_unit_moved(u) -> void:
 	# 原版每帧都跑触发器；复刻在每一步移动后也跑一次，避免单位只是
 	# 路过目标格、tick 时已经离开而漏掉占格事件。
 	if not finished:
-		_run_triggers("tick")
+		await _run_triggers("tick")
 	if finished:
 		return
 	_update_status()
@@ -264,7 +294,7 @@ func on_unit_died(u) -> void:
 		return
 	_last_dead_side = str(u.side)
 	_last_dead_slot = int(u.slot)
-	_run_triggers("death")
+	await _run_triggers("death")
 	if finished:
 		return
 	var k := _key(u.unit_name)
@@ -272,7 +302,7 @@ func on_unit_died(u) -> void:
 		battle.emit_story_event("unit_died", {"key": k, "name": u.unit_name})
 	if u.side == "enemy":
 		killed[k] = true
-		if objective.get("type", "") == "kill" and (not trigger_authoritative or bot_objective_fallback):
+		if objective.get("type", "") == "kill" and (not trigger_authoritative):
 			var all := true
 			for n in name_keys:
 				if not killed.has(n):
@@ -280,7 +310,7 @@ func on_unit_died(u) -> void:
 			if all:
 				_finish("victory", "击毙 " + "、".join(objective.get("names", [])))
 				return
-	if u.side == "player" and k in protected_keys and (not trigger_authoritative or bot_objective_fallback):
+	if u.side == "player" and k in protected_keys and (not trigger_authoritative):
 		if bool(level.get("protect_all", false)):
 			var any_alive := false
 			for p in battle.player_units:
@@ -298,23 +328,40 @@ func on_unit_died(u) -> void:
 
 func on_chest(u, chest: Dictionary) -> void:
 	chests_opened += 1
-	var item := str(chest.get("item_name", "物资"))
+	var iid := int(chest.get("wupin", -1))
+	var item := str(battle.data.get("items",{}).get(str(iid),{}).get("name",chest.get("item_name","物资")))
+	# 429A4A has no faction gate. An enemy with room keeps the item;
+	# any full bag uses the original permanent player warehouse branch.
+	# Keep the native notice unchanged, but make the diagnostic receipt explicit.
+	var destination:="carrier" if iid>=0 and iid<156 and u.item_slots.has(0) else "warehouse" if iid>=0 and not u.item_slots.has(0) else "none"
 	if battle != null:
 		battle.emit_story_event("chest", {"item": item, "x": int(chest.get("x", 0)),
-				"y": int(chest.get("y", 0))})
-	battle._log("%s 打开宝箱：%s" % [u.unit_name, item])
-	battle.looted.emit(int(chest.get("wupin", -1)))
+				"y": int(chest.get("y", 0)), "item_id":iid,"actor_slot":u.slot,
+				"actor_faction":int(u.data.get("faction",-1)),"destination":destination,
+				"recipient_slot":u.slot if destination=="carrier" else -1})
+	if iid >= 0 and u.item_slots.has(0):
+		# 42920D inserts into the FIRST hole, then 4290F8 compacts. In
+		# particular [A,0,B] + C becomes [A,C,B], not [A,B,C].
+		if iid<156 and InventorySlots.add_id(u.item_slots,iid+1):
+			battle._refresh_equipment(u)
+			battle.stats["loot_count"] = int(battle.stats.get("loot_count", 0)) + 1
+	else:
+		battle._battle_loot(iid)
+	var receipt:="进入%s背包"%u.unit_name if destination=="carrier" else "进入我方仓库" if destination=="warehouse" else "未收入"
+	battle._log("%s 打开宝箱：%s（%s）" % [u.unit_name, item, receipt])
 	_update_status()
 
 
 func check_end() -> bool:
 	if finished:
 		return true
+	if _round_active:
+		return false
 	if not started:
 		return false
 	# 有 result 动作的关卡由 0x446510 触发器权威判胜；旧 objective 只作
 	# HUD 提示和 bot 导航，不再抢在触发器前结束战斗。
-	if not trigger_authoritative or bot_objective_fallback:
+	if not trigger_authoritative:
 		match str(objective.get("type", "annihilate")):
 			"annihilate":
 				if battle.alive_enemies() == 0:
@@ -482,7 +529,7 @@ func bot_goal(u) -> Dictionary:
 	"""给无头全通 bot 的目标：返回 {kind:"tile"|"unit"|"hold", tile, unit}。"""
 	# 触发器权威关：先满足旧目标（它已对齐触发器坐标），之后按触发器
 	# 胜利条件找一个占格点；其余单位继续打最近敌人。
-	if trigger_authoritative and not bot_objective_fallback and objective_satisfied():
+	if trigger_authoritative and objective_satisfied():
 		var trig_tile := bot_trigger_tile()
 		if trig_tile.x >= 0 and _closest_player_to(trig_tile) == u:
 			return {"kind": "tile", "tile": trig_tile}
@@ -563,19 +610,8 @@ func _at_exact_target(u) -> bool:
 	return _valid_ai_tile(t) and int(u.x) == t.x and int(u.y) == t.y
 
 
-func _at_ai_target(u, exact_only := false) -> bool:
-	if _at_exact_target(u):
-		return true
-	if exact_only:
-		return false
-	var t := Vector2i(int(u.target_x), int(u.target_y))
-	if not _valid_ai_tile(t):
-		return false
-	# 目标格被别的单位占住时，停在相邻格也算到位；否则 behavior 4/5
-	# 会在目标旁反复找空位，永远不切守卫/待机。
-	if absi(int(u.x) - t.x) + absi(int(u.y) - t.y) == 1:
-		return battle._is_occupied(t, u)
-	return false
+func _at_ai_target(u, _exact_only := false) -> bool:
+	return _at_exact_target(u)
 
 
 func _swap_patrol(u) -> void:
@@ -595,100 +631,59 @@ func _swap_patrol(u) -> void:
 
 
 func ai_target(u):
-	"""behavior 2/3/6 的指定槽目标；目标消失时按原版切行为。"""
-	if u == null:
-		return null
-	var b := int(u.behavior)
-	if b != 2 and b != 3 and b != 6:
-		return null
-	var t = _slot_unit(int(u.target_slot))
-	if t != null and (b == 3 or t.side != u.side):
-		return t
-	_set_behavior(u, 7 if b == 3 else 1, "target_slot_%d_gone" % int(u.target_slot))
-	return null
+	if u == null or not int(u.behavior) in [2,3,6]: return null
+	return _slot_unit(int(u.target_slot))
 
 
 func ai_prepare(u) -> bool:
-	"""回合开始按 Fighter.behavior 做原版切换；返回 true 表示本回合已消耗。"""
-	if u == null:
-		return false
+	if u == null: return false
 	var b := int(u.behavior)
-	if b == 2 or b == 3 or b == 6:
-		var old := int(u.behavior)
-		ai_target(u)
-		return int(u.behavior) != old
-	if b == 4 or b == 5:
-		if _at_ai_target(u):
-			_set_behavior(u, 7 if b == 4 else 0, "reached_target")
-			return true
-		if not _valid_ai_tile(Vector2i(int(u.target_x), int(u.target_y))):
-			_set_behavior(u, 1, "invalid_target")
-			return true
-		return false
-	if b == 8 and _at_exact_target(u):
+	if b in [2,3,6] and _slot_unit(int(u.target_slot)) == null:
+		_set_behavior(u,7 if b == 3 else 1,"target_gone")
+		return true
+	if b in [4,5] and _at_exact_target(u):
+		_set_behavior(u,7 if b == 4 else 0,"reached_target")
+		return true
+	if b in [8,10] and _at_exact_target(u) and (u.home_x != u.target_x or u.home_y != u.target_y):
 		_swap_patrol(u)
 		return true
 	return false
 
 
-func ai_after_move(u) -> bool:
-	"""移动途中到达目标时立即切换，避免越过目标继续走。"""
-	if u == null:
-		return false
-	var b := int(u.behavior)
-	if b == 4 and _at_exact_target(u):
-		_set_behavior(u, 7, "reached_target_move")
-		return true
-	if b == 5 and _at_exact_target(u):
-		_set_behavior(u, 0, "reached_target_move")
-		return true
-	if b == 8 and _at_exact_target(u):
-		_swap_patrol(u)
-		return true
+func ai_after_move(_u) -> bool:
+	# 转换只发生在下次规划之前，不在路径途中。
 	return false
 
 
 func ai_goal(u) -> Vector2i:
-	"""按 Fighter.behavior 返回显式目标点；(-1,-1) 表示按最近敌人。"""
-	if objective.get("type", "") == "race" and _key(u.unit_name) == rival_key \
-			and not targets.is_empty():
-		return Vector2i(int(targets[0][0]), int(targets[0][1]))
-	var b := int(u.behavior)
-	if b == 4 or b == 5 or b == 8:
-		var t := Vector2i(int(u.target_x), int(u.target_y))
-		if _valid_ai_tile(t):
-			return t
-		if b != 8:
-			_set_behavior(u, 1, "invalid_target")
-		return Vector2i(-1, -1)
-	if b == 2 or b == 3 or b == 6:
-		var target = ai_target(u)
-		if target != null:
-			return Vector2i(int(target.x), int(target.y))
-		return Vector2i(-1, -1)
-	# behavior 1 的出场数据大量带有 +0x30/+0x34 集结点（L37/L39/L44/L45）；
-	# 非零时以集结点为持久目标，射程内有敌人就攻击；0,0 视为无集结点，
-	# 此时才追最近敌人。
-	if b == 1:
-		var t1 := Vector2i(int(u.target_x), int(u.target_y))
-		if (t1.x != 0 or t1.y != 0) and _valid_ai_tile(t1):
-			return t1
-		return Vector2i(-1, -1)
-	# behavior 0/7/9/12/13 走守卫分支，不使用 target_x/y。
-	return Vector2i(-1, -1)
+	if int(u.behavior) in [4,5,8,10]: return Vector2i(u.target_x,u.target_y)
+	var target = ai_target(u)
+	if target != null: return Vector2i(target.x,target.y)
+	return Vector2i(-1,-1)
 
-
-# ---------------------------------------------------------------- triggers
-# 0x446510 的逐关函数被翻译成 m4.json 的 rules；这里只做通用解释。
-# 规则顺序重要：原版函数先判失败，再处理事件，最后判胜利。
 
 func on_tick() -> void:
-	if finished or not started or not pending_choice.is_empty():
+	if finished or not started or start_phase_pending or not pending_choice.is_empty():
 		return
-	_run_triggers("tick")
+	await _run_triggers("tick")
 
 
 func _run_triggers(event: String) -> void:
+	# A scripted attack can reenter on_unit_died while its trigger is executing.
+	# The native event pump does not run a second T510 inside that transaction.
+	if _trigger_active:return
+	_trigger_active = true
+	await _execute_triggers(event)
+	_trigger_active = false
+	if not _round_active and pending_choice.is_empty():_commit_result()
+
+
+func _commit_result() -> void:
+	if native_result != 0 and not finished:
+		_finish("victory" if native_result > 0 else "defeat", _pending_result_message)
+
+
+func _execute_triggers(event: String) -> void:
 	if not pending_choice.is_empty():
 		return
 	for r in trigger_rules:
@@ -697,6 +692,10 @@ func _run_triggers(event: String) -> void:
 		var rule: Dictionary = r
 		if str(rule.get("on", "tick")) != event:
 			continue
+		# Per-rule gates and return edges come from the 47-entry T510 audit.
+		# A result write alone is not a return (notably L03/L12/L45).
+		if native_result != 0 and bool(rule.get("requires_result_zero", event != "turn")):
+			continue
 		var rid := str(rule.get("id", ""))
 		if bool(rule.get("once", false)) and trigger_done.has(rid):
 			continue
@@ -704,15 +703,21 @@ func _run_triggers(event: String) -> void:
 			continue
 		if bool(rule.get("once", false)):
 			trigger_done[rid] = true
-		_apply(rule.get("then", []))
+		_executing_rule = {"id":rid,"event":event,"turn":battle.turn}
+		await _apply(rule.get("then", []))
+		_executing_rule = {}
 		if finished or not pending_choice.is_empty():
 			return
+		if str(rule.get("on_match","continue")) in ["return","end_function"]:return
 
 
 func _cond(c) -> bool:
 	if not (c is Dictionary):
-		return true
+		push_error("剧情条件必须是对象")
+		return false
 	var d: Dictionary = c
+	if d.is_empty():
+		return true
 	if d.has("all"):
 		for x in d["all"]:
 			if not _cond(x):
@@ -738,12 +743,13 @@ func _cond(c) -> bool:
 				and p.y >= int(q["y"]) and p.y < int(q["y"]) + int(q["h"])
 	if d.has("adjacent"):
 		var q: Dictionary = d["adjacent"]
+		if _slot_stage(int(q["a"])) == 0 or _slot_stage(int(q["b"])) == 0: return false
 		var a := _slot_pos(int(q["a"]))
 		var b := _slot_pos(int(q["b"]))
 		return absi(a.x - b.x) + absi(a.y - b.y) == 1
 	if d.has("flag"):
 		var q: Dictionary = d["flag"]
-		var v := int(trigger_flags.get(str(q["addr"]), 0))
+		var v := _global_value(str(q["addr"]))
 		if q.has("eq") and v != int(q["eq"]):
 			return false
 		if q.has("neq") and v == int(q["neq"]):
@@ -753,15 +759,31 @@ func _cond(c) -> bool:
 		return true
 	if d.has("global"):
 		var q: Dictionary = d["global"]
-		var v := int(trigger_flags.get(str(q["addr"]), 0))
+		var v := _global_value(str(q["addr"]))
 		if q.has("eq") and v != int(q["eq"]):
 			return false
 		if q.has("neq") and v == int(q["neq"]):
 			return false
 		return true
+	if d.has("turn_eq_flag"):
+		var q: Dictionary = d["turn_eq_flag"]
+		return int(battle.turn) == ((_global_value(str(q["addr"])) + int(q.get("add", 0))) & 0xffffffff)
+	if d.has("flag_sum_lt") or d.has("flag_sum_eq"):
+		var q: Dictionary = d.get("flag_sum_lt",d.get("flag_sum_eq",{}))
+		var total := 0
+		for addr in q["addrs"]:
+			total += _global_value(str(addr))
+		return (total & 0xffffffff) < int(q["value"]) if d.has("flag_sum_lt") else (total & 0xffffffff) == int(q["value"])
+	if d.has("people_compare"):
+		var q: Dictionary = d["people_compare"]
+		var a: int = battle.get_slot_field(int(q["a"]), str(q["field"]))
+		var b: int = battle.get_slot_field(int(q["b"]), str(q["field"])) + int(q.get("add", 0))
+		return a > b if str(q.get("op", "gt")) == "gt" else a >= b
+	if d.has("all_players_dead"):
+		return (battle.alive_players() == 0) == bool(d["all_players_dead"])
 	if d.has("turn_gt_flag"):
 		var q: Dictionary = d["turn_gt_flag"]
-		return int(battle.turn) > int(trigger_flags.get(str(q["addr"]), 0)) + int(q.get("add", 0))
+		return (int(battle.turn)&0xffffffff) > ((_global_value(str(q["addr"])) + int(q.get("add", 0)))&0xffffffff)
 	if d.has("cell_region_gt"):
 		var q: Dictionary = d["cell_region_gt"]
 		for yy in range(int(q["y"]), int(q["y"]) + int(q["h"])):
@@ -775,7 +797,7 @@ func _cond(c) -> bool:
 		return _cell_code(p.x, p.y) == int(q.get("eq", 1))
 	if d.has("flag_bit"):
 		var q: Dictionary = d["flag_bit"]
-		var v := int(trigger_flags.get(str(q["addr"]), 0))
+		var v := _global_value(str(q["addr"]))
 		var on := (v & int(q["mask"])) != 0
 		return on == bool(q.get("set", false))
 	if d.has("all_units_dead"):
@@ -808,36 +830,44 @@ func _cond(c) -> bool:
 		return _last_dead_side == "player"
 	if d.has("unit_dead"):
 		return _last_dead_slot == int(d["unit_dead"])
-	return true
+	push_error("未知剧情条件: %s" % str(d))
+	return false
+
+
+func _global_value(addr: String) -> int:
+	var address := addr.hex_to_int()
+	if address >= 0x7d0ef8 and address < 0x7d0ef8 + 128 * 132:
+		var slot := (address - 0x7d0ef8) / 132
+		var offset := (address - 0x7d0ef8) % 132
+		var field: String = {24: "faction", 28: "wuli", 32: "zhili", 36: "level", 40: "xp", 44: "bingzhong"}.get(offset, "")
+		if field != "":
+			return battle.get_slot_field(slot, field)
+	return int(trigger_flags.get(addr.to_lower(), trigger_flags.get(addr, 0)))
+
+
+func _set_global(addr: String, value: int) -> void:
+	trigger_flags[addr.to_lower()] = value
+	var address := addr.hex_to_int()
+	if address >= 0x7d0ef8 and address < 0x7d0ef8 + 128 * 132:
+		var slot := (address - 0x7d0ef8) / 132
+		var offset := (address - 0x7d0ef8) % 132
+		if offset == 24:
+			battle.set_slot_faction(slot, value)
+		else:
+			var field: String = {28: "wuli", 32: "zhili", 36: "level", 40: "xp", 44: "bingzhong"}.get(offset, "")
+			if field != "":
+				battle.set_slot_field(slot, field, value)
+				battle.emit_story_event("person_field", {"slot": slot, "field": field, "value": value})
+	elif address < 0x583f18 or address > 0x583f54:
+		battle.emit_story_event("global", {"addr": addr.to_lower(), "value": value})
 
 
 func _slot_unit(slot: int):
 	if battle == null:
 		return null
-	# 0 号是原版 Fighter[0]（主角/队长）。不能用“第一个还活着的我方”
-	# 兜底，否则主角阵亡后 stage(0) 会被下一个人顶成 1。
-	if slot == 0 and protagonist != null:
-		if is_instance_valid(protagonist) and protagonist.alive:
-			return protagonist
-		return null
 	for u in battle.units:
 		if is_instance_valid(u) and u.alive and int(u.slot) == slot:
 			return u
-	# 0..39 是 PEOPLE.DAT 名册槽；复刻队伍用 pid 表示同一角色。
-	if slot < 40:
-		for u in battle.units:
-			if is_instance_valid(u) and u.alive and int(u.pid) == slot:
-				return u
-	# 复刻队伍不一定带 pid 0；原版 Fighter[0] 是“主角位”，这里落到队长。
-	# 优先部署队伍（slot=-1），避免把固定剧情 NPC 当成主角。
-	if slot == 0:
-		for u in battle.units:
-			if is_instance_valid(u) and u.alive and str(u.side) == "player" \
-					and int(u.slot) < 0:
-				return u
-		for u in battle.units:
-			if is_instance_valid(u) and u.alive and str(u.side) == "player":
-				return u
 	return null
 
 
@@ -850,7 +880,7 @@ func _slot_pos(slot: int) -> Vector2i:
 	if u != null:
 		return Vector2i(u.x, u.y)
 	# 未出场的 Fighter 仍然保留 dest 坐标，原版触发器用它当地图目标点。
-	for key in ["spawn_pool", "reserves", "units"]:
+	for key in ["slot_pool", "spawn_pool", "reserves", "units"]:
 		for rec in level.get(key, []):
 			if int(rec.get("slot", -1)) == slot:
 				return Vector2i(int(rec.get("x", -1)), int(rec.get("y", -1)))
@@ -858,49 +888,114 @@ func _slot_pos(slot: int) -> Vector2i:
 
 
 func _cell_code(x: int, y: int) -> int:
+	# 429D9E..429DB5: low byte=(People.side&255)+1, so faction2 is3.
 	# 原版 0x57BF10 每格 2 字节，低字节 0=空 / 1=我方 / >1=敌方。
 	# L12/L26 用 ==1 判定“我方占住”，L38/L42 用 >1 判定“敌军进入出口”。
-	var enemy := false
+	var enemy_code := 0
 	for u in battle.units:
-		if is_instance_valid(u) and u.alive and int(u.x) == x and int(u.y) == y:
+		if is_instance_valid(u) and u.alive and u.placed and int(u.x) == x and int(u.y) == y:
 			if str(u.side) == "player":
 				return 1
-			enemy = true
-	return 2 if enemy else 0
+			enemy_code = ((battle.unit_faction(u)&255)+1)&255
+	return enemy_code
 
 
 func _unit_count(q: Dictionary) -> int:
 	var n := 0
-	if q.has("slots"):
-		for s in q["slots"]:
-			if _slot_stage(int(s)) != 0:
-				n += 1
-		return n
 	var lo := int(q.get("from", 0))
 	var hi := int(q.get("to", 128))
 	for u in battle.units:
 		if is_instance_valid(u) and u.alive and int(u.slot) >= lo and int(u.slot) < hi:
+			if q.has("slots") and not q["slots"].has(int(u.slot)):continue
+			if q.has("faction"):
+				var f:Dictionary=q["faction"]
+				var value:int=battle.unit_faction(u)
+				if f.has("eq") and value!=int(f["eq"]):continue
+				if f.has("neq") and value==int(f["neq"]):continue
 			n += 1
 	return n
 
 
 func _apply(actions) -> void:
+	_apply_depth+=1
+	await _execute_actions(actions)
+	_apply_depth-=1
+	if _apply_depth==0 and not _trigger_active and not _round_active and pending_choice.is_empty():_commit_result()
+
+
+func _execute_actions(actions) -> void:
 	for a in actions:
 		if finished:
 			return
 		if not (a is Dictionary):
 			continue
 		var act: Dictionary = a
-		if act.has("message"):
+		if act.has("message_record"):
+			battle.trigger_message(int(act["message_record"]), "phase")
+		elif act.has("phase_movie"):
+			pass # Campaign播放；无界面模拟保留状态顺序。
+		elif act.has("phase_flm"):
+			pass # Campaign按单格40ms播放；无界面模拟不等待纯表现。
+		elif act.has("presentation_sequence"):
+			if bool(battle.battle_context.get("campaign_story",false)) and not battle.fast_sim:
+				battle.emit_story_event("visual_steps",{"steps":act["presentation_sequence"]})
+			else:
+				await _apply(act["presentation_sequence"])
+		elif act.has("phase_move"):
+			var q: Dictionary = act["phase_move"]
+			battle.set_slot_field(int(q["slot"]), "x", int(q["x"]))
+			battle.set_slot_field(int(q["slot"]), "y", int(q["y"]))
+		elif act.has("set_faction"):
+			var q: Dictionary = act["set_faction"]
+			battle.set_slot_faction(int(q["slot"]), int(q["value"]))
+		elif act.has("mine_bytes"):
+			var q: Dictionary = act["mine_bytes"]
+			battle.set_slot_inventory(int(q["slot"]), "mine_slots", q["values"])
+		elif act.has("clear_skills"):
+			for slot in act["clear_skills"]:
+				battle.clear_slot_skills(int(slot))
+		elif act.has("random_behavior"):
+			var q: Dictionary = act["random_behavior"]
+			for slot in q["slots"]:
+				if _choice_rng.randi_range(0, 99) < int(q["probability_percent"]):
+					battle.set_slot_field(int(slot), "behavior", int(q["behavior"]))
+		elif act.has("phase_mine"):
+			var q: Dictionary = act["phase_mine"]
+			await battle.scripted_mine(Vector2i(int(q["tile"][0]), int(q["tile"][1])), int(q["type"]), int(q["slot"]))
+		elif act.has("if"):
+			var q: Dictionary = act["if"]
+			await _apply(q.get("then", []) if _cond(q.get("when", {})) else q.get("else", []))
+		elif act.has("random_choice"):
+			var opts: Array = act["random_choice"].get("options", [])
+			if not opts.is_empty():
+				await _apply(opts[_choice_rng.randi_range(0, opts.size() - 1)])
+		elif act.has("adjust_field_range"):
+			var q: Dictionary = act["adjust_field_range"]
+			for slot in range(int(q["from"]), int(q["to"])):
+				var old: int = battle.get_slot_field(slot, str(q["field"]))
+				var value := old * int(q.get("mul", 1)) / maxi(1, int(q.get("div", 1))) + int(q.get("add", 0))
+				if q.has("min"):
+					value = maxi(int(q["min"]), value)
+				if str(q.get("source_semantics", "")) == "u32_sub15_lt2":
+					value = 1 if ((old - 15) & 0xffffffff) < 2 else old - 15
+				battle.set_slot_field(slot, str(q["field"]), value)
+		elif act.has("restore_hp_range"):
+			var q: Dictionary = act["restore_hp_range"]
+			for slot in range(int(q["from"]), int(q["to"])):
+				battle.set_slot_field(slot, "hp", battle.get_slot_field(slot, "max_hp"))
+		elif act.has("scripted_attack"):
+			var q: Dictionary = act["scripted_attack"]
+			await battle.scripted_attack(int(q["attacker_slot"]), int(q["target_slot"]))
+		elif act.has("message"):
 			var expr := str(act["message"])
 			var record := int(trigger_texts.get(expr, -1))
 			if battle != null:
 				battle.trigger_message(record, expr)
 		elif act.has("flag_set"):
-			trigger_flags[str(act["flag_set"]["addr"])] = int(act["flag_set"].get("value", 1))
+			_set_global(str(act["flag_set"]["addr"]), int(act["flag_set"].get("value", 1)))
 		elif act.has("flag_or"):
 			var addr := str(act["flag_or"]["addr"])
-			trigger_flags[addr] = int(trigger_flags.get(addr, 0)) | int(act["flag_or"]["mask"])
+			_set_global(addr,_global_value(addr) | int(act["flag_or"]["mask"]))
 		elif act.has("spawn"):
 			var su = battle.spawn_slot(int(act["spawn"]))
 			if su != null and str(su.side) == "player":
@@ -919,6 +1014,10 @@ func _apply(actions) -> void:
 				if bool(q.get("alive_only", false)) and _slot_stage(s) == 0:
 					continue
 				battle.remove_slot(s)
+		elif act.has("scripted_clear_range"):
+			var q: Dictionary = act["scripted_clear_range"]
+			for s in range(int(q["from"]), int(q["to"])):
+				battle.scripted_clear_slot(s)
 		elif act.has("set_field"):
 			var q: Dictionary = act["set_field"]
 			battle.set_slot_field(int(q["slot"]), str(q["field"]), int(q["value"]))
@@ -945,36 +1044,57 @@ func _apply(actions) -> void:
 			for o in cq.get("options", []):
 				labels.append(str((o as Dictionary).get("label", "?")))
 			pending_choice = (cq as Dictionary).duplicate(true)
+			_pending_choice_rule = _executing_rule.duplicate(true)
 			if battle != null:
 				battle.emit_story_event("trigger_choice",
 						{"prompt": str(cq.get("prompt", "")), "options": labels})
 				if bool(battle.fast_sim):
-					resolve_choice(int(cq.get("default", 0)))
+					await resolve_choice(int(cq.get("default", 0)))
 				else:
 					battle.show_trigger_choice(self, str(cq.get("prompt", "")), labels)
 			return
-		elif act.has("score"):
-			battle.stats["score_bonus"] = int(battle.stats.get("score_bonus", 0)) + int(act["score"])
+		elif act.has("party_levels"):
+			var q: Dictionary = act["party_levels"]
+			for slot in range(int(q["from"]), int(q["to"])):
+				var value := mini(99, battle.get_slot_field(slot, "level") + int(q["add"]))
+				battle.set_slot_field(slot, "level", value)
+				battle.emit_story_event("person_field", {"slot": slot, "field": "level", "value": value})
+		elif act.has("money"):
+			battle.stats["money_bonus"] = int(battle.stats.get("money_bonus", 0)) + int(act["money"])
+			battle.emit_story_event("money", {"amount": int(act["money"])})
 		elif act.has("global_set"):
-			trigger_flags[str(act["global_set"]["addr"])] = int(act["global_set"].get("value", 0))
+			_set_global(str(act["global_set"]["addr"]), int(act["global_set"].get("value", 0)))
 		elif act.has("global_add"):
 			var addr := str(act["global_add"]["addr"])
-			trigger_flags[addr] = int(trigger_flags.get(addr, 0)) + int(act["global_add"].get("value", 1))
+			_set_global(addr,_global_value(addr) + int(act["global_add"].get("value", 1)))
 		elif act.has("flag_set_from_turn"):
 			var tq: Dictionary = act["flag_set_from_turn"]
-			trigger_flags[str(tq["addr"])] = int(battle.turn) + int(tq.get("add", 0))
+			_set_global(str(tq["addr"]), int(battle.turn) + int(tq.get("add", 0)))
 		elif act.has("set_map_cell_at_slot"):
 			# 原版写 map cell 数组；复刻用单位占位/剧情旗标等价表示。
 			trigger_flags["cell_%d" % int(act["set_map_cell_at_slot"]["slot"])] = \
 					int(act["set_map_cell_at_slot"].get("value", 1))
 		elif act.has("success_text"):
 			level["success"] = str(act["success_text"])
+		elif act.has("text_digit_from_flags"):
+			var q:Dictionary=act["text_digit_from_flags"]
+			var mask:int=(1<<int(q.get("unsigned_bits",32)))-1
+			var total:=0
+			for addr in q.flags:total=(total+_global_value(str(addr)))&mask
+			var remaining:int=((int(q.subtract_from)-total)&mask)%int(q.modulus)
+			var field:String=str(q.field)
+			var bytes:PackedByteArray=preload("res://scripts/m2/GBK.gd").encode(str(level.get(field,"")),64)
+			bytes[int(q.gbk_byte_offset)]=str(q.digits).unicode_at(remaining)
+			level[field]=preload("res://scripts/m2/GBK.gd").decode(bytes)
+			_native_status_text=true
+			status_text=str(level[field])
 		elif act.has("failure_text"):
 			level["failure"] = str(act["failure_text"])
 		elif act.has("result"):
-			_finish(str(act["result"]), str(level.get(
-					"success" if str(act["result"]) == "victory" else "failure", "")))
-			return
+			battle.last_result_trigger = _executing_rule.duplicate(true)
+			native_result = 1 if str(act["result"]) == "victory" else -1
+			_pending_result_message = str(level.get("success" if native_result > 0 else "failure", ""))
+			result_writes.append({"value":native_result,"source":_executing_rule.duplicate(true)})
 
 
 func resolve_choice(index: int) -> void:
@@ -987,7 +1107,11 @@ func resolve_choice(index: int) -> void:
 		return
 	var idx := clampi(index, 0, opts.size() - 1)
 	var picked: Dictionary = opts[idx]
-	_apply(picked.get("then", []))
+	var previous_rule:Dictionary=_executing_rule
+	_executing_rule=_pending_choice_rule.duplicate(true)
+	_pending_choice_rule={}
+	await _apply(picked.get("then", []))
+	_executing_rule=previous_rule
 	_update_status()
 
 
@@ -1000,6 +1124,9 @@ func _finish(result: String, message: String) -> void:
 
 func _update_status() -> void:
 	if finished:
+		return
+	if _native_status_text:
+		status_text=str(level.get("success",""))
 		return
 	var t := str(objective.get("type", ""))
 	match t:

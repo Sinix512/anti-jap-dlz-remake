@@ -20,14 +20,43 @@ var result_canvas: CanvasLayer
 
 var mode := "world"
 var selected_town := 0
+var forge_fuse := 0
+var forge_kind := 0
+var forge_quantity := 0
 var party_selected := -1
 var k04_page := 0
+var k04_person := -999
+var k04_source := -1
+var k04_held := -1
 var _shop_detail: Label
 var shop_kind := "junxie"
 var shop_selling := false
+var shop_mode := 0
+var shop_item_page := 0
+var shop_people_page := 0
+var shop_person := -100
+var shop_pending: Dictionary = {}
+var info_panel: CanvasLayer
 var toast: Label
 var toast_bg: NinePatchRect
 var _ambient: AudioStreamPlayer
+var _drag_state: Dictionary = {}
+var service_screen: Control
+var native_service_timer_count:=0
+
+
+
+func _notification(what:int) -> void:
+	if what!=NOTIFICATION_DRAG_END or _drag_state.is_empty():return
+	var previous:=_drag_state
+	_drag_state={}
+	if get_viewport().gui_is_drag_successful():return
+	# A cancelled/invalid drop is not a click selection or a transaction.
+	shop_pending=previous.pending
+	k04_source=int(previous.source);k04_held=int(previous.held)
+	if is_instance_valid(previous.ui) and ui_root==previous.ui:
+		if previous.kind=="shop":call_deferred("_render_shop")
+		else:call_deferred("_show_k04_status",false)
 
 
 func setup(font_ref: Font) -> void:
@@ -52,7 +81,7 @@ func _load_json(path: String) -> Dictionary:
 	if f == null:
 		return {}
 	var parsed = JSON.parse_string(f.get_as_text())
-	return parsed if parsed is Dictionary else {}
+	return preload("res://scripts/battle/StateCodec.gd").integers(parsed) if parsed is Dictionary else {}
 
 
 func _fatal(msg: String) -> void:
@@ -97,9 +126,11 @@ func _button(text: String, pos: Vector2, size: Vector2,
 
 func _clear_ui() -> void:
 	if is_instance_valid(panel_root):
-		panel_root.queue_free()
+		panel_root.set_process_input(false);panel_root.hide();panel_root.queue_free()
 		panel_root = null
 	if is_instance_valid(ui_root):
+		ui_root.set_process_input(false);ui_root.hide()
+		if is_instance_valid(service_screen):service_screen.enabled=false
 		ui_root.queue_free()
 		ui_root = null
 	if is_instance_valid(toast):
@@ -385,7 +416,7 @@ func _service_zahuo() -> void:
 
 func _close_panel() -> void:
 	if is_instance_valid(panel_root):
-		panel_root.queue_free()
+		panel_root.set_process_input(false);panel_root.hide();panel_root.queue_free()
 		panel_root = null
 
 
@@ -432,84 +463,242 @@ func _shop_title(kind: String) -> String:
 
 
 func _open_shop(kind: String, selling: bool = false) -> void:
-	shop_kind = kind
-	shop_selling = selling
-	_new_ui()
-	var shop_bg := "res://assets/ui/k02.png" \
-			if kind in ["zahuo", "material"] else "res://assets/ui/k01.png"
-	var bg := TextureRect.new()
-	bg.texture = load(shop_bg) if ResourceLoader.exists(shop_bg) else null
-	bg.position = Vector2.ZERO
-	bg.size = Vector2(640, 480)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	ui_root.add_child(bg)
-	ui_root.add_child(OriginalUI.header(_shop_title(kind) + (" / 出售" if selling else " / 购买"),
-			font, Rect2(0, 0, 640, 30)))
-	var money := OriginalUI.label("资金：%d" % state.money, font, 16,
-			Color("#f2c14e"))
-	money.position = Vector2(470, 36)
-	money.size = Vector2(150, 22)
-	ui_root.add_child(money)
-	var tabs := [["购买", _open_shop.bind(kind, false)],
-			["出售", _open_shop.bind(kind, true)],
-			["材料", _open_shop.bind("material", false)],
-			["锻造", _open_forge],
-			["离开", func(): _show_town(selected_town)]]
-	for i in range(tabs.size()):
-		var b := _button(tabs[i][0], Vector2(24 + i * 74, 38),
-				Vector2(68, 26), tabs[i][1], 14)
-		ui_root.add_child(b)
-	var dbg := ColorRect.new()
-	dbg.color = Color(0, 0, 0, 0.66)
-	dbg.position = Vector2(404, 70)
-	dbg.size = Vector2(212, 250)
-	dbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui_root.add_child(dbg)
-	_shop_detail = OriginalUI.label("", font, 13, Color("#f0e4c8"))
-	_shop_detail.position = Vector2(412, 78)
-	_shop_detail.size = Vector2(196, 232)
-	_shop_detail.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-	ui_root.add_child(_shop_detail)
-	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(24, 76)
-	scroll.size = Vector2(374, 236)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	ui_root.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 2)
-	scroll.add_child(list)
-	var rows: Array = []
-	if selling:
-		var inv: Dictionary = state.materials if kind == "material" else state.items
-		for k in inv:
-			var rec: Dictionary = state.material(int(k)) if kind == "material" else state.item(int(k))
-			if not rec.is_empty():
-				rows.append({"rec": rec, "count": int(inv[k]), "id": int(k)})
-	else:
-		var shop: Dictionary = state.town(selected_town).get("shops", {})
-		for rec in shop.get(kind, []):
-			rows.append({"rec": rec, "count": 0, "id": int(rec["index"])})
-	for r in rows:
-		list.add_child(_shop_row(r, kind, selling))
-	if not rows.is_empty():
-		_shop_show_detail(rows[0]["rec"], selling)
-	if rows.is_empty():
-		list.add_child(_label("（空）", Vector2.ZERO, Vector2(340, 24), 16,
-				Color("#8b98aa")))
-	var code := "K02" if shop_bg.ends_with("k02.png") else "K01"
-	var info := OriginalUI.label("%s 原版商店\n\n商品：%d 种\n模式：%s\n\n点击右侧按钮\n买入/卖出" % [
-			code, rows.size(), "出售" if selling else "购买"], font, 14,
-			Color("#f0e4c8"))
-	info.position = Vector2(24, 320)
-	info.size = Vector2(580, 84)
-	ui_root.add_child(info)
-	var back := _button("返回城镇", Vector2(450, 410), Vector2(120, 30),
-			func(): _show_town(selected_town), 14)
-	ui_root.add_child(back)
+	# Original K01 initialization only, not every redraw or arbitrary person.
+	if kind!="material":
+		for person in _shop_roster():state.InventorySlots.compact(person.get("item_slots",[]))
+	shop_kind = "zahuo" if kind == "material" else kind
+	shop_mode = 3 if kind == "material" else (2 if selling else 0)
+	shop_item_page=0; shop_people_page=0; shop_pending.clear()
+	var roster:=_shop_roster();shop_person=int(roster[0].pid) if not roster.is_empty() else -999
+	_show_service("shop")
 
+
+func _shop_mode(mode_: int) -> void:
+	if mode_==shop_mode:return
+	shop_mode=mode_;shop_item_page=0;shop_people_page=0;shop_pending.clear()
+	var roster:=_shop_roster();shop_person=int(roster[0].pid) if not roster.is_empty() else -999
+	_render_shop()
+
+
+func _shop_roster() -> Array:
+	var people: Array=[]
+	for slot in range(32):
+		var person: Dictionary=state.person(slot)
+		if int(person.get("faction",1))==0:people.append(person)
+	return people
+
+
+func _shop_stock() -> Array:
+	var result: Array=[]
+	if shop_mode in [0,3]:
+		for record in state.town(selected_town).get("shops",{}).get("material" if shop_mode==3 else shop_kind,[]):
+			result.append({"id":int(record["index"]),"record":record,"slot":-1})
+	elif shop_mode==1:
+		var person=state.deploy_member(shop_person)
+		if person!=null:
+			var slots: Array=person.get("item_slots",[])
+			for index in range(slots.size()):
+				var iid:=int(slots[index])-1
+				result.append({"id":iid,"record":state.item(iid),"slot":index})
+	else:
+		for iid in range(80 if shop_kind=="junxie" else 0,156 if shop_kind=="junxie" else 80):
+			if state.item_count(iid)>0:result.append({"id":iid,"record":state.item(iid),"slot":-1})
+	return result
+
+
+# Native Godot drag/drop keeps click-source -> click-target as an accessible
+# alternative. No stock or money changes until the actual drop is committed.
+func _drag_payload(_position:Vector2,kind:String,record:Dictionary) -> Variant:
+	if kind=="shop" and shop_mode==3:return null
+	_drag_state={"kind":kind,"pending":shop_pending.duplicate(true),"source":k04_source,"held":k04_held,"ui":ui_root}
+	var preview:=TextureRect.new()
+	preview.texture=OriginalUI.first_frame(str(record.get("icon","")))
+	preview.custom_minimum_size=Vector2(48,48)
+	if kind=="shop":
+		shop_pending=record.item.duplicate(true)
+	else:
+		k04_source=int(record.slot);k04_held=int(record.code)
+	var owner:Control=get_viewport().gui_get_hovered_control()
+	if owner!=null:owner.set_drag_preview(preview)
+	else:preview.queue_free()
+	return {"dlz_drag":kind}
+
+
+func _accept_drop(_position:Vector2,payload:Variant,kind:String) -> bool:
+	return payload is Dictionary and payload.get("dlz_drag","")==kind
+
+
+func _shop_drop(_position:Vector2,_payload:Variant,destination:String,pid:int) -> void:
+	_shop_commit(destination,pid,false)
+
+
+func _mine_drop(_position:Vector2,_payload:Variant,pid:int) -> void:
+	if pid==-999:_k04_store()
+	elif pid==-998:_k04_sell()
+	else:_k04_target(pid)
+
+
+func _service_input_blocked() -> bool:
+	return is_instance_valid(panel_root) or is_instance_valid(result_canvas) or is_instance_valid(info_panel)
+
+func _service_palette(_key:String) -> void:pass
+
+func _show_service(screen:String) -> void:
+	if is_instance_valid(ui_root):preload("res://scripts/ui/OriginalPaletteFade.gd").play(ui_root,false)
+	_new_ui()
+	mode=screen
+	_service_palette({"shop":"K01","forge":"K03","mines":"K04"}[screen])
+	ui_root.set_meta("original_screen",screen)
+	service_screen=preload("res://scripts/ui/OriginalServiceScreen.gd").new()
+	ui_root.add_child(service_screen);service_screen.setup(self,screen)
+	preload("res://scripts/ui/OriginalPaletteFade.gd").play(ui_root,true)
+	preload("res://scripts/ui/OriginalPaletteFade.gd").discard_buffered_input(get_tree())
+
+func _service_return_town() -> void:
+	preload("res://scripts/ui/OriginalPaletteFade.gd").play(ui_root,false)
+	_show_town(selected_town)
+	preload("res://scripts/ui/OriginalPaletteFade.gd").play(ui_root,true)
+	preload("res://scripts/ui/OriginalPaletteFade.gd").discard_buffered_input(get_tree())
+
+func _refresh_service(screen:String) -> void:
+	if is_instance_valid(service_screen) and service_screen.is_visible_in_tree() and service_screen.kind==screen:service_screen.refresh()
+	else:_show_service(screen)
+
+func _render_shop() -> void:
+	var stock:=_shop_stock()
+	shop_item_page=clampi(shop_item_page,0,maxi(0,(stock.size()-1)/12))
+	shop_people_page=clampi(shop_people_page,0,maxi(0,(_shop_roster().size()-1)/8))
+	_refresh_service("shop")
+
+
+func _info_right_input(event: InputEvent, kind: String, id: int) -> void:
+	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_RIGHT and not event.pressed:
+		get_viewport().set_input_as_handled()
+		_open_original_info(kind,id)
+
+
+func _open_original_info(kind: String, id: int) -> void:
+	if is_instance_valid(info_panel):return
+	info_panel=preload("res://scripts/ui/OriginalInfo.gd").new()
+	add_child(info_panel)
+	var origin_ui=ui_root
+	info_panel.closed.connect(func():
+		info_panel=null
+		if kind=="person" and is_instance_valid(origin_ui) and ui_root==origin_ui and origin_ui.get_meta("original_screen","")=="shop":_render_shop()
+	)
+	var person:Dictionary={}
+	if kind=="person":
+		var member=state.deploy_member(id)
+		if member!=null:person=member
+	info_panel.setup(font,m2,kind,id,person)
+
+
+func _service_confirm(prompt:String,callback:Callable) -> void:
+	_close_panel()
+	panel_root=preload("res://scripts/ui/OriginalConfirm.gd").new();ui_root.add_child(panel_root)
+	var dialog=panel_root
+	dialog.setup(font,prompt,Vector2(320,200),Color("#a4fcfc"),preload("res://scripts/ui/OriginalPalette.gd").colors("K01"))
+	dialog.answered.connect(func(yes:bool):_close_panel();callback.call(yes))
+
+func _service_notice(value:String) -> void:
+	_close_panel()
+	panel_root=preload("res://scripts/ui/OriginalNotice.gd").new();ui_root.add_child(panel_root)
+	panel_root.setup(font,value,preload("res://scripts/ui/OriginalPalette.gd").colors("K01"))
+	panel_root.closed.connect(_close_panel)
+
+func _shop_bulk_input(event: InputEvent) -> void:
+	if shop_mode==2 and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_RIGHT and event.pressed and event.double_click:
+		get_viewport().set_input_as_handled()
+		_service_confirm("全卖掉吗",func(yes:bool):
+			if yes:_shop_bulk_sell()
+		)
+
+
+func _shop_bulk_sell() -> void:
+	if shop_mode!=2:return
+	# Preserve the original odd boundary: individual military pages include80,
+	# but bulk military starts81; bulk grocery includes80. Round each kind once.
+	for iid in range(81 if shop_kind=="junxie" else 0,156 if shop_kind=="junxie" else 81):
+		var count:int=state.item_count(iid)
+		if count<=0:continue
+		state.money+=int(state.item(iid).get("price",0))*count*(7-state.difficulty)/10
+		state.add_item(iid,-count)
+	shop_pending.clear();_render_shop()
+
+
+func _shop_page(delta: int, people: bool) -> void:
+	if people:shop_people_page+=delta
+	else:shop_item_page+=delta
+	shop_pending.clear();_render_shop()
+
+
+func _shop_pick(item: Dictionary) -> void:
+	if shop_mode==3:
+		_shop_material(int(item.id))
+		return
+	shop_pending=item.duplicate(true)
+	_render_shop()
+
+
+func _shop_target(pid: int) -> void:
+	if shop_pending.is_empty():
+		if shop_mode==1:shop_person=pid;_render_shop()
+	else:_shop_commit("person",pid,false)
+
+
+func _shop_commit(destination: String, pid: int, confirmed: bool) -> void:
+	if shop_pending.is_empty():return
+	var iid:=int(shop_pending.id)
+	var record:Dictionary=state.item(iid)
+	var target=state.deploy_member(pid)
+	var source=state.deploy_member(shop_person)
+	if destination=="person":
+		if target==null or not (target.get("item_slots",[]) as Array).has(0):shop_pending.clear();_render_shop();return
+		if shop_mode==1 and source==target:shop_pending.clear();_render_shop();return
+		if not confirmed and not state.item_compatible(target,iid):
+			var pending:=shop_pending.duplicate(true)
+			_service_confirm("不能用，保留吗",func(yes:bool):
+				shop_pending.clear()
+				if yes:shop_pending=pending;_shop_commit(destination,pid,true)
+				else:_render_shop()
+			)
+			return
+	if shop_mode==0:
+		if state.money<int(record.get("price",0)):shop_pending.clear();_render_shop();_service_notice("资金不够！");return
+		state.money-=int(record.get("price",0))
+	elif shop_mode==2:
+		if state.item_count(iid)<=0:return
+		state.add_item(iid,-1)
+	elif shop_mode==1:
+		var slots:Array=source.get("item_slots",[])
+		var index:=int(shop_pending.slot)
+		if int(slots[index])!=iid+1:return
+		state.InventorySlots.remove_id(slots,iid+1)
+	if destination=="person":
+		var slots:Array=target.get("item_slots",[]);state.InventorySlots.add_id(slots,iid+1)
+	elif destination=="sell":state.money+=int(record.get("price",0))*(7-state.difficulty)/10
+	elif destination=="store":state.add_item(iid,1)
+	shop_pending.clear();_render_shop()
+
+
+func _shop_material(id: int) -> void:
+	var material:Dictionary=state.material(id)
+	var price:=int(material.get("price",0))
+	if price<=0:return
+	var stock:=_shop_stock()
+	for slot in range(stock.size()):
+		if int(stock[slot].id)==id:
+			# 436AFC uses grid-slot price here, mapped-ID price below.
+			if state.money<int(state.material(slot).get("price",0)):return
+			break
+	var maximum:int=mini(1000/price,state.money/price)
+	_close_panel()
+	panel_root=preload("res://scripts/ui/OriginalQuantity.gd").new();ui_root.add_child(panel_root)
+	panel_root.setup(font,preload("res://scripts/ui/OriginalPalette.gd").colors("K01"),service_screen.quantity_backdrop(),maximum,str(material.name),str(material.unit))
+	panel_root.chosen.connect(func(count:int):
+		if count*price<=state.money:state.money-=count*price;state.add_material(id,count)
+		_close_panel();_render_shop()
+	)
 
 
 func _shop_show_detail(rec: Dictionary, selling: bool) -> void:
@@ -580,66 +769,41 @@ func _shop_action(kind: String, id: int, selling: bool) -> void:
 
 # ---------------- 锻造 ----------------
 
+func _forge_max() -> int:
+	var kind: Dictionary = state.mine(forge_kind)
+	var maximum: int = 9999
+	var recipe: Array = kind.get("recipe",[])
+	for material in range(recipe.size()):
+		if int(recipe[material]) > 0: maximum = mini(maximum,state.material_count(material)/int(recipe[material]))
+	var price: int = [0,0,80,300][forge_fuse]
+	if price > 0: maximum = mini(maximum,state.money/price)
+	if not bool(state.can_craft(forge_fuse*10+forge_kind).get("ok",false)): return 0
+	return maxi(0,maximum)
+
+
 func _open_forge() -> void:
-	var content := _panel_shell("作坊 / 锻造地雷", 560, 390)
-	var k3 := _button("K03 原版作坊", Vector2.ZERO, Vector2(130, 28),
-			_show_k03_workshop, 14)
-	content.add_child(k3)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 8)
-	content.add_child(top)
-	var buy := _button("材料商店", Vector2.ZERO, Vector2(100, 28),
-			func(): _open_shop("material", false), 14)
-	buy.custom_minimum_size = Vector2(100, 28)
-	top.add_child(buy)
-	var back := _button("返回", Vector2.ZERO, Vector2(60, 28),
-			func(): _close_panel(); _show_town(selected_town), 14)
-	back.custom_minimum_size = Vector2(60, 28)
-	top.add_child(back)
-	var summary := _label("材料库存：\n%s" % _material_summary(), Vector2.ZERO,
-			Vector2(520, 40), 16, Color("#c8d3e2"))
-	summary.custom_minimum_size = Vector2(520, 40)
-	content.add_child(summary)
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(520, 230)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	content.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 2)
-	scroll.add_child(list)
-	for mid in range(10):
-		var mine: Dictionary = state.mine(mid)
-		var row := HBoxContainer.new()
-		row.custom_minimum_size = Vector2(0, 34)
-		row.add_theme_constant_override("separation", 6)
-		var icon := TextureRect.new()
-		icon.custom_minimum_size = Vector2(30, 30)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		var icon_path := str(mine.get("icon", ""))
-		if ResourceLoader.exists(icon_path):
-			var at := AtlasTexture.new()
-			at.atlas = load(icon_path)
-			at.region = Rect2(0, 0, 48, 48)
-			icon.texture = at
-		row.add_child(icon)
-		var nm := _label(str(mine.get("name", "")), Vector2.ZERO,
-				Vector2(70, 24), 16)
-		nm.custom_minimum_size = Vector2(60, 24)
-		row.add_child(nm)
-		var rec := _recipe_text(mine.get("recipe", []))
-		var rl := _label(rec, Vector2.ZERO, Vector2(290, 24), 16,
-				Color("#b8c4d4"))
-		rl.custom_minimum_size = Vector2(290, 24)
-		row.add_child(rl)
-		var can: Dictionary = state.can_craft(mid)
-		var btn := _button("锻造", Vector2.ZERO, Vector2(70, 28), Callable(), 14)
-		btn.custom_minimum_size = Vector2(70, 28)
-		btn.disabled = not bool(can.get("ok", false))
-		btn.pressed.connect(_forge.bind(mid))
-		row.add_child(btn)
-		list.add_child(row)
+	forge_kind=0;forge_fuse=0;forge_quantity=0
+	_show_service("forge")
+
+func _set_forge_kind(kind_: int) -> void:
+	if kind_==forge_kind or kind_<0 or kind_>=10 or int(state.script_globals.get("0x%x"%(0x95eb08+kind_*4),0))==0:return
+	forge_kind=kind_;forge_quantity=0;_refresh_service("forge")
+func _set_forge_fuse(fuse: int) -> void:
+	if fuse==forge_fuse or fuse<0 or fuse>=4 or int(state.script_globals.get("0x%x"%(0x95eaf8+fuse*4),0))==0:return
+	forge_fuse=fuse;forge_quantity=0;_refresh_service("forge")
+func _forge_adjust(delta: int) -> void:
+	forge_quantity=clampi(forge_quantity+delta,0,_forge_max());_refresh_service("forge")
+func _forge_reset() -> void:
+	forge_quantity=0;_refresh_service("forge")
+func _forge_set_max() -> void:
+	forge_quantity=_forge_max();_refresh_service("forge")
+func _forge_batch() -> void:
+	var made:=0
+	for i in range(forge_quantity):
+		if not bool(state.craft_mine(forge_fuse*10+forge_kind).get("ok",false)):break
+		made+=1
+	if made>0:OriginalUI.play_native_sfx(13)
+	forge_quantity=0;_refresh_service("forge")
 
 
 func _material_summary() -> String:
@@ -673,111 +837,151 @@ func _forge(mid: int) -> void:
 # ---------------- 队伍 / 转职 ----------------
 
 func _open_party() -> void:
-	var content := _panel_shell("队伍 / 转职", 560, 390)
-	var k4 := _button("K04 人物状态", Vector2.ZERO, Vector2(130, 28),
-			_show_k04_status, 14)
-	content.add_child(k4)
+	var content := _panel_shell("队伍 / 携带 / 转职", 584, 408)
+	var top := HBoxContainer.new()
+	content.add_child(top)
+	top.add_child(_button("仓库", Vector2.ZERO, Vector2(90,28), _open_inventory,16))
 	var body := HBoxContainer.new()
-	body.add_theme_constant_override("separation", 10)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation",10)
 	content.add_child(body)
-	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(230, 0)
-	left.add_theme_constant_override("separation", 2)
-	body.add_child(left)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(228, 270)
+	scroll.custom_minimum_size = Vector2(190,260)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	left.add_child(scroll)
+	body.add_child(scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 2)
 	scroll.add_child(list)
-	var roster: Array = [state.protagonist_member()] + state.party
-	if state.deploy_member(party_selected) == null:
-		party_selected = state.PROTAGONIST_PID
-	for m in roster:
-		var is_hero := int(m.get("pid", -1)) < 0
-		var label := "%s  Lv%d\n%s" % [m["name"], m["level"], m["unit_name"]]
-		if is_hero:
-			label = "★ " + label + "（主角）"
-		var b := _button(label, Vector2.ZERO, Vector2(220, 44),
-				_party_select.bind(int(m["pid"])), 16)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		if int(m["pid"]) == party_selected:
-			b.modulate = Color(1, 0.88, 0.55)
-		list.add_child(b)
+	var roster: Array = state.all_members()
+	if state.deploy_member(party_selected) == null: party_selected = state.PROTAGONIST_PID
+	for person in roster:
+		var button := _button("%s  Lv%d\n%s" % [person["name"],person["level"],person["unit_name"]],Vector2.ZERO,Vector2(180,46),_party_select.bind(int(person["pid"])),16)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		if int(person["pid"]) == party_selected: button.modulate = Color(1,0.88,0.55)
+		list.add_child(button)
+	var right_scroll := ScrollContainer.new()
+	right_scroll.custom_minimum_size = Vector2(320,260)
+	right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(right_scroll)
 	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation",8)
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 4)
-	body.add_child(right)
+	right_scroll.add_child(right)
 	var m = state.deploy_member(party_selected)
-	if m == null:
-		right.add_child(_label("队伍为空", Vector2.ZERO, Vector2(260, 30), 16))
-		return
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	right.add_child(row)
-	var portrait := TextureRect.new()
-	portrait.custom_minimum_size = Vector2(64, 80)
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	if ResourceLoader.exists(str(m.get("face_png", ""))):
-		portrait.texture = load(m["face_png"])
-	row.add_child(portrait)
-	var info := _label("%s\n%s  Lv%d\nHP %d/%d\n武力 %d  智力 %d" % [
-		m["name"], m["unit_name"], m["level"], m["hp"], m["max_hp"],
-		m["wuli"], m["zhili"]],
-		Vector2.ZERO, Vector2(250, 90), 16)
-	info.custom_minimum_size = Vector2(250, 90)
-	row.add_child(info)
-	var u: Dictionary = state.unit_of(m)
-	var atk := int(round(float(u.get("gongji", 0)) + float(m["wuli"]) * 0.6))
-	var df := int(round(float(u.get("fangyu", 0)) + float(m["zhili"]) * 0.3))
-	right.add_child(_label("攻击 %d   防御 %d   移动 %d" % [
-		atk, df, int(u.get("yidong", 0))],
-		Vector2.ZERO, Vector2(300, 24), 16))
-	if int(m.get("pid", -1)) < 0:
-		var hero_note := _label("出征队长，不占队伍槽位。\n姓名只用于剧情 GG。\n装备/转职仍用原作队员。",
-				Vector2.ZERO, Vector2(300, 64), 16, Color("#e5d4ad"))
-		right.add_child(hero_note)
+	if m == null: return
+	var bonuses: Dictionary = state.equipment_bonuses(m)
+	var cls: Dictionary = state.unit_of(m)
+	var rules = preload("res://scripts/battle/CombatRules.gd")
+	var atk: int = rules.attack_power(m,cls,100,100,int(m.get("attack_count",1)),int(bonuses.get("attack",0)))
+	var defense: int = rules.defense_power(m,cls,100,0,int(bonuses.get("defense",0)))
+	var info := _label("%s  %s\n等级%d  经验%d/100\n体力%d/%d  武力%d 智力%d\n攻击%d 防御%d 移动%d" % [m["name"],m["unit_name"],m["level"],m.get("xp",0),m["hp"],m["max_hp"],m["wuli"],m["zhili"],atk,defense,int(cls.get("yidong",0))+int(bonuses.get("move",0))],Vector2.ZERO,Vector2(310,96),16)
+	info.custom_minimum_size = Vector2(310,96)
+	right.add_child(info)
+	var carried: Array = m.get("item_slots",[])
+	var mine_slots: Array = m.get("mine_slots",[])
+	right.add_child(_button("物品 %d/8（管理携带）" % (carried.size()-carried.count(0)),Vector2.ZERO,Vector2(280,30),_open_loadout.bind(int(m["pid"]),"items"),16))
+	right.add_child(_button("地雷 %d/8（管理携带）" % (mine_slots.size()-mine_slots.count(0)),Vector2.ZERO,Vector2(280,30),_open_loadout.bind(int(m["pid"]),"mines"),16))
+	var check: Dictionary = state.can_promote(m)
+	if bool(check.get("ok",false)):
+		right.add_child(_button("转职为%s" % check.get("target_name",""),Vector2.ZERO,Vector2(280,30),_promote.bind(int(m["pid"])),16))
 	else:
-		var eq_id := int(m.get("equip", -1))
-		var eq_text := "未装备"
-		if eq_id >= 0:
-			var eq_b: Dictionary = state.equip_bonus(eq_id)
-			eq_text = "%s  攻+%d 防+%d" % [state.item(eq_id).get("name", "?"),
-					int(eq_b["attack"]), int(eq_b["defense"])]
-		right.add_child(_label("装备：" + eq_text, Vector2.ZERO, Vector2(300, 22), 16,
-				Color("#e8ba4c") if eq_id >= 0 else Color("#b8c4d4")))
-		var eq_row := HBoxContainer.new()
-		eq_row.add_theme_constant_override("separation", 6)
-		right.add_child(eq_row)
-		var eb := _button("换装备", Vector2.ZERO, Vector2(100, 28),
-				_open_equip_panel.bind(int(m["pid"])), 16)
-		eb.custom_minimum_size = Vector2(100, 28)
-		eq_row.add_child(eb)
-		if eq_id >= 0:
-			var ub := _button("卸下", Vector2.ZERO, Vector2(80, 28),
-					_unequip.bind(int(m["pid"])), 16)
-			ub.custom_minimum_size = Vector2(80, 28)
-			eq_row.add_child(ub)
-		var c: Dictionary = state.can_promote(m)
-		if bool(c.get("ok", false)):
-			right.add_child(_label("可转职：%s → %s" % [m["unit_name"], c["target_name"]],
-					Vector2.ZERO, Vector2(300, 24), 16, Color("#8fd18f")))
-			var item_id := int(c.get("item_id", -1))
-			if item_id >= 0:
-				right.add_child(_label("需要：%s ×1（库存 %d）" % [
-					state.item(item_id).get("name", "道具"), state.item_count(item_id)],
-					Vector2.ZERO, Vector2(300, 24), 16, Color("#c8d3e2")))
-			var pb := _button("转职", Vector2.ZERO, Vector2(100, 30),
-					_promote.bind(int(m["pid"])), 16)
-			pb.custom_minimum_size = Vector2(100, 30)
-			right.add_child(pb)
-		else:
-			right.add_child(_label(str(c.get("msg", "无转职路线")), Vector2.ZERO,
-					Vector2(300, 24), 16, Color("#b8c4d4")))
+		right.add_child(_label(str(check.get("msg","")),Vector2.ZERO,Vector2(310,26),16))
+
+
+func _loadout_name(kind: String, id: int) -> String:
+	if kind == "items": return str(state.item(id).get("name","?"))
+	return "%s%s" % [["普通","引爆","定时","遥控"][id/10],state.mine(id%10).get("name","地雷")]
+
+
+func _open_loadout(pid: int, kind: String) -> void:
+	var m = state.deploy_member(pid)
+	if m == null: return
+	var content := _panel_shell("%s / %s" % [m["name"],"物品携带" if kind == "items" else "地雷携带"],584,408)
+	content.add_child(_button("返回队伍",Vector2.ZERO,Vector2(120,28),_open_party,16))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(540,288)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	var slots: Array = m.get("item_slots" if kind == "items" else "mine_slots",[])
+	list.add_child(OriginalUI.label("已携带（每类八格）",font,16))
+	for index in range(slots.size()):
+		if int(slots[index]) == 0: continue
+		var row := HBoxContainer.new()
+		list.add_child(row)
+		var label := OriginalUI.label(_loadout_name(kind,int(slots[index])-1),font,16)
+		label.custom_minimum_size = Vector2(260,28)
+		row.add_child(label)
+		row.add_child(_button("退仓",Vector2.ZERO,Vector2(70,28),_return_loadout.bind(pid,kind,index),16))
+		row.add_child(_button("交给",Vector2.ZERO,Vector2(70,28),_open_transfer.bind(pid,kind,index),16))
+	list.add_child(OriginalUI.label("仓库（战场不能直接使用，请在此分配）",font,16))
+	var stock: Dictionary = state.items if kind == "items" else state.mines
+	var keys := stock.keys()
+	keys.sort_custom(func(a,b): return int(a)<int(b))
+	for key in keys:
+		if int(stock[key]) <= 0: continue
+		var row := HBoxContainer.new()
+		list.add_child(row)
+		var label := OriginalUI.label("%s ×%d" % [_loadout_name(kind,int(key)),stock[key]],font,16)
+		label.custom_minimum_size = Vector2(330,28)
+		row.add_child(label)
+		var button := _button("携带",Vector2.ZERO,Vector2(90,28),_give_loadout.bind(pid,kind,int(key)),16)
+		button.disabled = not slots.has(0)
+		row.add_child(button)
+
+
+func _give_loadout(pid: int, kind: String, id: int) -> void:
+	var m = state.deploy_member(pid)
+	var result: Dictionary = state.give_item(m,id) if kind == "items" else state.give_mine(m,id)
+	_toast(str(result.get("msg","")))
+	_open_loadout(pid,kind)
+
+
+func _return_loadout(pid: int, kind: String, index: int) -> void:
+	var m = state.deploy_member(pid)
+	var result: Dictionary = state.return_item(m,index) if kind == "items" else state.return_mine(m,index)
+	_toast(str(result.get("msg","")))
+	_open_loadout(pid,kind)
+
+
+func _open_transfer(pid: int, kind: String, index: int) -> void:
+	var content := _panel_shell("交给谁？",540,380)
+	content.add_child(_button("返回",Vector2.ZERO,Vector2(90,28),_open_loadout.bind(pid,kind),16))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(480,260)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+	var list := VBoxContainer.new()
+	scroll.add_child(list)
+	for m in state.all_members():
+		if int(m["pid"]) == pid: continue
+		var slots: Array = m.get("item_slots" if kind == "items" else "mine_slots",[])
+		var button := _button(str(m["name"]),Vector2.ZERO,Vector2(460,30),_do_transfer.bind(pid,int(m["pid"]),kind,index),16)
+		button.disabled = not slots.has(0)
+		list.add_child(button)
+
+
+func _do_transfer(from_pid: int, to_pid: int, kind: String, index: int) -> void:
+	var a = state.deploy_member(from_pid)
+	var b = state.deploy_member(to_pid)
+	var result: Dictionary = state.transfer_item(a,index,b) if kind == "items" else state.transfer_mine(a,b,index)
+	_toast(str(result.get("msg","")))
+	_open_loadout(from_pid,kind)
+
+
+func _open_inventory() -> void:
+	_close_panel()
+	var inv := preload("res://scripts/ui/InventoryPanel.gd").new()
+	ui_root.add_child(inv)
+	panel_root = inv
+	inv.setup(font, m2, state.items, state.mines, state.materials)
+	inv.closed.connect(_close_panel)
 
 
 func _open_equip_panel(pid: int) -> void:
@@ -854,144 +1058,62 @@ func _auto_equip_all() -> void:
 	_open_party()
 
 
-func _show_k04_status() -> void:
-	_new_ui()
-	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/k04.png") \
-			if ResourceLoader.exists("res://assets/ui/k04.png") else null
-	bg.position = Vector2.ZERO
-	bg.size = Vector2(640, 480)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	ui_root.add_child(bg)
-	ui_root.add_child(OriginalUI.header("人 物 状 态 / K04", font,
-			Rect2(0, 0, 640, 30)))
-	if state.party.is_empty():
-		ui_root.add_child(OriginalUI.label("队伍为空", font, 16, Color("#f0e4c8")))
+func _native_icon(path: String, position_: Vector2, size_: Vector2 = Vector2(48,48)) -> TextureRect:
+	var image := TextureRect.new()
+	image.texture = OriginalUI.first_frame(path)
+	image.position = position_
+	image.size = size_
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	image.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(image)
+	return image
+
+
+func _show_k04_status(enter:=true) -> void:
+	if enter:
+		for person in _shop_roster():state.InventorySlots.compact(person.get("mine_slots",[]))
+		k04_person=-999;k04_page=0;k04_source=-1;k04_held=-1
+		_show_service("mines")
+	else:_refresh_service("mines")
+
+func _k04_pick(index: int, packed: int) -> void:
+	k04_source=index;k04_held=packed;_show_k04_status(false)
+
+func _k04_target(pid: int) -> void:
+	if k04_held<0:
+		if k04_person!=-999:k04_person=pid;k04_source=-1;_show_k04_status(false)
 		return
-	k04_page = clampi(k04_page, 0, state.party.size() - 1)
-	var m: Dictionary = state.party[k04_page]
-	var portrait := TextureRect.new()
-	portrait.position = Vector2(552, 150)
-	portrait.size = Vector2(56, 154)
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	if ResourceLoader.exists(str(m.get("face_png", ""))):
-		portrait.texture = load(m["face_png"])
-	ui_root.add_child(portrait)
-	var mine_total := 0
-	for k in state.mines:
-		mine_total += int(state.mines[k])
-	var eq: Dictionary = state.item(int(m.get("equip", -1)))
-	var equip_name := str(eq.get("name", "无"))
-	var skill_keys := ["buji", "jili", "yiliao", "huogong", "gunmu", "leishi",
-			"weishe", "saorao", "pohuai", "lueduo", "fanjian", "yibing",
-			"duzhan", "ansha", "shidu", "kongxi"]
-	var learned: Array = []
-	var counts: Dictionary = m.get("skills", {})
-	for i in range(skill_keys.size()):
-		if int(counts.get(skill_keys[i], 0)) > 0:
-			learned.append(str((m2.get("skills", []) as Array)[i].get("name", skill_keys[i])))
-	var skill_text := "、".join(learned) if not learned.is_empty() else "未学"
-	var info := "姓名：%s\n兵种：%s\n等级：%d\nHP：%d/%d\n武力：%d  智力：%d\n地雷库存：%d\n武器：%s\n技能：%s" % [
-		m.get("name", ""), m.get("unit_name", ""), int(m.get("level", 1)),
-		int(m.get("hp", 0)), int(m.get("max_hp", 0)),
-		int(m.get("wuli", 0)), int(m.get("zhili", 0)),
-		mine_total, equip_name, skill_text]
-	var info_l := OriginalUI.label(info, font, 15, Color("#f0e4c8"))
-	info_l.position = Vector2(310, 70)
-	info_l.size = Vector2(220, 290)
-	ui_root.add_child(info_l)
-	var prev := _button("上 页", Vector2(40, 400), Vector2(80, 30),
-			_k04_page.bind(-1), 14)
-	prev.disabled = k04_page <= 0
-	ui_root.add_child(prev)
-	var next := _button("下 页", Vector2(130, 400), Vector2(80, 30),
-			_k04_page.bind(1), 14)
-	next.disabled = k04_page >= state.party.size() - 1
-	ui_root.add_child(next)
-	var pg := OriginalUI.label("%d / %d" % [k04_page + 1, state.party.size()],
-			font, 12, Color("#e8dcc2"))
-	pg.position = Vector2(220, 406)
-	pg.size = Vector2(60, 20)
-	ui_root.add_child(pg)
-	var back := _button("返 回 队 伍", Vector2(450, 400), Vector2(140, 30),
-			_open_party, 14)
-	ui_root.add_child(back)
+	var target=state.deploy_member(pid)
+	var source=state.deploy_member(k04_person)
+	if target!=null and target!=source:
+		if source==null:state.give_mine(target,k04_held)
+		else:state.transfer_mine(source,target,k04_source)
+	k04_held=-1;k04_source=-1;_show_k04_status(false)
 
+func _k04_switch() -> void:
+	var roster:=_shop_roster()
+	k04_person=int(roster[0].pid) if k04_person==-999 and not roster.is_empty() else -999
+	k04_page=0;k04_source=-1;k04_held=-1;_show_k04_status(false)
 
-func _k04_page(delta: int) -> void:
-	k04_page = clampi(k04_page + delta, 0, maxi(0, state.party.size() - 1))
-	_show_k04_status()
+func _k04_fuse(delta: int) -> void:
+	if k04_person!=-999:return
+	k04_page=clampi(k04_page+delta,0,3);k04_source=-1;k04_held=-1;_show_k04_status(false)
 
+func _k04_store() -> void:
+	if k04_source<0:return
+	var person=state.deploy_member(k04_person)
+	if person!=null:state.return_mine(person,k04_source)
+	k04_source=-1;k04_held=-1;_show_k04_status(false)
 
-func _show_k03_workshop() -> void:
-	_new_ui()
-	var bg := TextureRect.new()
-	bg.texture = load("res://assets/ui/k03.png") \
-			if ResourceLoader.exists("res://assets/ui/k03.png") else null
-	bg.position = Vector2.ZERO
-	bg.size = Vector2(640, 480)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	ui_root.add_child(bg)
-	ui_root.add_child(OriginalUI.header("作 坊 / 材 料 与 配 方", font,
-			Rect2(0, 0, 640, 30)))
-	var mats: Dictionary = m2.get("materials", {})
-	var keys: Array = mats.keys()
-	keys.sort()
-	var shown := mini(4, keys.size())
-	for i in range(shown):
-		var mid := int(keys[i])
-		var m: Dictionary = mats[str(mid)]
-		var slot := Vector2(28 + (i % 2) * 80, 126 + int(i / 2) * 80)
-		var icon := TextureRect.new()
-		icon.position = slot
-		icon.size = Vector2(64, 52)
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		if ResourceLoader.exists(str(m.get("icon", ""))):
-			icon.texture = load(m["icon"])
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ui_root.add_child(icon)
-		var l := OriginalUI.label("%s ×%d" % [m.get("name", ""),
-				state.material_count(mid)], font, 12, Color("#f0e4c8"))
-		l.position = slot + Vector2(0, 54)
-		l.size = Vector2(74, 18)
-		ui_root.add_child(l)
-	var info_bg := ColorRect.new()
-	info_bg.color = Color(0, 0, 0, 0.62)
-	info_bg.position = Vector2(276, 78)
-	info_bg.size = Vector2(316, 252)
-	info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui_root.add_child(info_bg)
-	var lines := "材料库存\n"
-	for mid in keys:
-		lines += "%s：%d\n" % [mats[mid].get("name", ""),
-				state.material_count(int(mid))]
-	var info := OriginalUI.label(lines, font, 14, Color("#f0e4c8"))
-	info.position = Vector2(286, 90)
-	info.size = Vector2(300, 190)
-	ui_root.add_child(info)
-	var recip := OriginalUI.label("地雷配方：%d 种" % (m2.get("mine_recipes", []) as Array).size(),
-			font, 14, OriginalUI.GOLD_LIGHT)
-	recip.position = Vector2(286, 292)
-	recip.size = Vector2(300, 22)
-	ui_root.add_child(recip)
-	var forge := _button("打开锻造面板", Vector2(286, 326), Vector2(140, 30),
-			_open_forge, 14)
-	ui_root.add_child(forge)
-	var back := _button("返 回 城 镇", Vector2(450, 400), Vector2(140, 30),
-			func(): _close_panel(); _show_town(selected_town), 14)
-	ui_root.add_child(back)
-	var note := OriginalUI.label("K03 原版作坊 / 材料与配方", font, 12,
-			Color("#c8b88f"))
-	note.position = Vector2(40, 440)
-	ui_root.add_child(note)
+func _k04_sell() -> void:
+	if k04_held<0:return
+	var person=state.deploy_member(k04_person)
+	state.recycle_mine(k04_held,person if person!=null else {},k04_source)
+	k04_source=-1;k04_held=-1;_show_k04_status(false)
+
+func _k04_page(delta: int) -> void:_k04_fuse(delta)
+func _show_k03_workshop() -> void:_open_forge()
 
 
 func _party_select(pid: int) -> void:
@@ -1175,7 +1297,7 @@ func _open_save_impl(load_first: bool) -> void:
 			_import_original, 14)
 	imp.custom_minimum_size = Vector2(130, 28)
 	orow.add_child(imp)
-	var olabel := _label("实验：85072 B / 未用原始 EXE 回读", Vector2.ZERO,
+	var olabel := _label("实验：仅战略档57；战斗档150尚不支持", Vector2.ZERO,
 			Vector2(240, 24), 12, Color("#9aa8ba"))
 	olabel.custom_minimum_size = Vector2(240, 24)
 	orow.add_child(olabel)
@@ -1203,7 +1325,7 @@ func _import_original() -> void:
 		_toast("已导入原版布局")
 		_show_world()
 	else:
-		_toast("导入失败：缺 user://dlz_original.dat")
+		_toast("导入失败：缺少文件、格式无效，或是不支持的原版战斗档")
 
 
 func _save_slot(slot: int) -> void:

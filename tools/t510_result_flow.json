@@ -1,0 +1,1406 @@
+{
+  "evidence": "extract/research_t510_result_guards_20261025.evidence.json",
+  "scope": "Only battle_result==0 dominance and source-order/return semantics for current rule IDs; predicate, message/action equivalence and event-dispatch correctness NOT established by this audit.",
+  "rules": {
+    "0": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "reach_north_house_clear": {
+        "requires_result_zero": true,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "reach_north_house_win": {
+        "requires_result_zero": true,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "behaviour_40_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "spawn_40_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "spawn_42_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "flag_5_17": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "flag_8_16": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 7
+      }
+    },
+    "1": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "escort_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "join_1": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "2": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_49_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "3": {
+      "li_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "meet_li": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "4": {
+      "target_escaped": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 1
+      }
+    },
+    "5": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "win": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 1
+      }
+    },
+    "6": {
+      "protect_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "7": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "ambush": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "8": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "escort_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "9": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "10": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "boss_win": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 2
+      },
+      "spawn_65": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "spawn_63": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "spawn_64": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "rescued_65_lost": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 6
+      },
+      "rescued_63_lost": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 7
+      },
+      "rescued_64_lost": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 8
+      },
+      "spawn_12": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 9
+      },
+      "all_rescued_win": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 10
+      }
+    },
+    "11": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_13_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 2
+      },
+      "target_x_19": {
+        "requires_result_zero": true,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 4
+      }
+    },
+    "12": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "annihilate_win": {
+        "requires_result_zero": true,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "warehouse_win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "13": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "14": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_41_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "15": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_33_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_55_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 2
+      },
+      "unit_56_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 3
+      },
+      "win_after_turn_9": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 4
+      }
+    },
+    "16": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_33_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_35_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 2
+      },
+      "escape_win": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 3
+      },
+      "railway_event": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "all_dead_event": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 5
+      }
+    },
+    "17": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "meet_20": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "occupy_25_6": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "occupy_32_6": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "occupy_39_6": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "occupy_44_7": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "occupy_43_5": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "all_five_win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 8
+      },
+      "refresh_remaining_crates_text": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 7
+      }
+    },
+    "18": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "meet_21": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "annihilate_win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      },
+      "unrecruited_21_lost_win": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 2
+      }
+    },
+    "19": {
+      "any_player_death": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "group_1_win": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "group_2_win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "20": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_23_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_48_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "21": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "target_lost": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 1
+      }
+    },
+    "22": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_24_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_25_lost": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "23": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "unit_41_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "all_clear": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "spawn_34_win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 5
+      }
+    },
+    "24": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_27_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "25": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_57_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "26": {
+      "any_player_death": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "reach_cell": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 1
+      }
+    },
+    "27": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_76_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "six_must_live": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 4
+      }
+    },
+    "28": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "meet_30": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "turn_target": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "escape_defeat": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "target_lost": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 4
+      }
+    },
+    "29": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_32_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_41_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "flee_target": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "escape_defeat": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "target_lost": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 5
+      }
+    },
+    "30": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_33_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 3
+      },
+      "escape_win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 4
+      }
+    },
+    "31": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "meet_31": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "win_before_meet": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      },
+      "win_after_meet": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 3
+      }
+    },
+    "32": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "33": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "34": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "unit_70_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "unit_71_lost": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 4
+      }
+    },
+    "35": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "loss_cue_40": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "loss_cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "loss_cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "loss_cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "loss_cue_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "loss_cue_45": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "loss_cue_46": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 7
+      },
+      "loss_cue_47": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 8
+      },
+      "loss_cue_48": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 9
+      },
+      "loss_cue_49": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 10
+      },
+      "loss_cue_50": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 11
+      },
+      "loss_cue_51": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 12
+      },
+      "loss_cue_52": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 13
+      },
+      "loss_cue_53": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 14
+      },
+      "loss_cue_54": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 15
+      },
+      "loss_cue_55": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 16
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 17
+      }
+    },
+    "36": {
+      "hero_down_40": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 0
+      },
+      "hero_down_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "hero_down_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "hero_down_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "hero_down_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "all_players_lost": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 5
+      }
+    },
+    "37": {
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 0
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "cue_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_45": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_58": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "reinforce": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "continue",
+        "source_order": 7
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 8
+      }
+    },
+    "38": {
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "reinforce": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "crowd_defeat": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 2
+      },
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "cue_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "cue_45": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 7
+      },
+      "cue_46": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 8
+      },
+      "cue_61": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 9
+      },
+      "cue_62": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 10
+      },
+      "cue_67": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 11
+      },
+      "cue_68": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 12
+      },
+      "cue_69": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 13
+      },
+      "cue_70": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 14
+      },
+      "cue_71": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 15
+      },
+      "cue_72": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 16
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 17
+      }
+    },
+    "39": {
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_61": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_62": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "cue_63": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "unit_64_down": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 7
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 8
+      }
+    },
+    "40": {
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "cue_40": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "all_five_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 6
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 7
+      }
+    },
+    "41": {
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 0
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "cue_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_45": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_58": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 6
+      },
+      "hero_lost_2": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 7
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 8
+      }
+    },
+    "42": {
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "crowd_defeat": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 2
+      },
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "cue_44": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "cue_45": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 7
+      },
+      "cue_46": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 8
+      },
+      "cue_61": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 9
+      },
+      "cue_62": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 10
+      },
+      "cue_67": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 11
+      },
+      "cue_68": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 12
+      },
+      "cue_69": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 13
+      },
+      "cue_70": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 14
+      },
+      "cue_71": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 15
+      },
+      "cue_72": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 16
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 17
+      }
+    },
+    "43": {
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "hero_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 1
+      },
+      "cue_41": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 2
+      },
+      "cue_42": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 3
+      },
+      "cue_43": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 4
+      },
+      "cue_61": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 5
+      },
+      "cue_62": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 6
+      },
+      "cue_63": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 7
+      },
+      "unit_64_down": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 8
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 9
+      }
+    },
+    "44": {
+      "unit_40_lost": {
+        "requires_result_zero": true,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "win": {
+        "requires_result_zero": true,
+        "on_match": "end_function",
+        "source_order": 1
+      }
+    },
+    "45": {
+      "unit_40_lost": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "win_reach": {
+        "requires_result_zero": false,
+        "on_match": "continue",
+        "source_order": 1
+      },
+      "rival_reach": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 2
+      }
+    },
+    "46": {
+      "too_few": {
+        "requires_result_zero": false,
+        "on_match": "return",
+        "source_order": 0
+      },
+      "win": {
+        "requires_result_zero": false,
+        "on_match": "end_function",
+        "source_order": 1
+      }
+    }
+  },
+  "supplement_evidence": "extract/research_t510_fragments_followup_20261025.evidence.json"
+}

@@ -19,8 +19,9 @@ from __future__ import annotations
 
 # ---------------------------------------------------------------- helpers
 
-def _rule(rid, when, then, *, on="tick", once=False, note=""):
+def _rule(rid, when, then, *, on="tick", once=False, note="", requires_result_zero=True):
     r = {"id": rid, "when": when, "then": then}
+    r["requires_result_zero"] = requires_result_zero
     if on != "tick":
         r["on"] = on
     if once:
@@ -131,17 +132,19 @@ def map_cell_slot(slot, value=1):
     return {"set_map_cell_at_slot": {"slot": slot, "value": value}}
 
 
-def range_count(lo, hi, eq=None, lt=None):
+def range_count(lo, hi, eq=None, lt=None, faction=None):
     c = {"from": lo, "to": hi}
     if eq is not None:
         c["eq"] = eq
     if lt is not None:
         c["lt"] = lt
+    if faction is not None:
+        c["faction"] = faction
     return {"unit_count": c}
 
 
 def any_player_death():
-    return {"any_player_death": True}
+    return {"all_players_dead": True}
 
 
 def message(ptr):
@@ -159,7 +162,7 @@ def random_slot_dest(slot, options, direction=1):
 
 
 def party_morale(add):
-    return {"party_morale": add}
+    return {"party_levels": {"from": 0, "to": 24, "add": add}}
 
 
 def recruit(slots):
@@ -197,6 +200,11 @@ def remove_range(lo, hi, alive_only=False):
     return {"remove_range": a}
 
 
+def scripted_clear_range(lo, hi):
+    # 409E16..409E55: live slots only, remove -> 42AFD2 loot -> gun count.
+    return {"scripted_clear_range": {"from": lo, "to": hi}}
+
+
 def behavior(slot, value):
     return {"set_field": {"slot": slot, "field": "behavior", "value": value}}
 
@@ -223,7 +231,7 @@ def lose():
 
 
 def score(n):
-    return {"score": n}
+    return {"money": n}
 
 
 def global_set(addr, value):
@@ -309,11 +317,11 @@ TRIGGERS = {
             _rule("escort_lost", stage(1), [lose()], note="0x408F9D：1 号槽阵亡即失败"),
             _rule("join_1", all_(adjacent(0, 1), flag("0x583F18", 0)),
                   [message("0x4725B0"), field(1, "pad3e", 1),
-                   many(41, 46, "behavior", 6),
+                   many(41, 47, "behavior", 6),
                    success_text("全歼敌人"), failure_text("超过五十回合"),
                    set_flag("0x583F18", 1)],
-                  note="0x408FC1：与 1 号相邻后 41–45 转为 behavior 6"),
-            _rule("win", all_(all_dead(), flag("0x583F18", 1)),
+                  note="0x408FC1：与 1 号相邻后 41–46 转为 behavior 6"),
+            _rule("win", all_(all_dead(), flag("0x583F18", neq=0)),
                   [message("0x472990"), win()], note="0x409044"),
         ],
     },
@@ -352,7 +360,8 @@ TRIGGERS = {
         "entry": "0x409232",
         "rules": [
             _rule("hero_lost", stage(0), [message("0x472598"), lose()], note="0x409235"),
-            _rule("win", all_dead(), [win()], note="0x409264"),
+            _rule("win", all_dead(), [win()], note="0x409264/40926D: unguarded result write",
+                  requires_result_zero=False),
         ],
     },
     6: {
@@ -368,12 +377,12 @@ TRIGGERS = {
         "entry": "0x409307",
         "rules": [
             _rule("hero_lost", stage(0), [message("0x472598"), lose()], note="0x40930B"),
-            _rule("ambush", all_(area(7, 5, 5, 8, 5), flag("0x583F18", 0)),
+            _rule("ambush", all_(area(7, 5, 8, 5, 5), flag("0x583F18", 0)),
                   [set_flag("0x583F18", 1),
                    message("0x47294C"), message("0x472950"), message("0x472954"),
                    many(40, 47, "behavior", 6),
                    many(40, 47, "target_slot", 7)],
-                  note="0x40933D：7 号槽进入 (5..12,5..9)，40–46 围攻 7"),
+                  note="0x40933D：7 号槽进入 (5..9,8..12)，40–46 围攻 7"),
             _rule("unit_40_lost", all_(stage(40), flag("0x583F1C", 0)),
                   [set_flag("0x583F1C", 1), message("0x472958"), message("0x47295C")],
                   note="0x4093DC"),
@@ -384,7 +393,7 @@ TRIGGERS = {
         "entry": "0x409445",
         "rules": [
             _rule("hero_lost", stage(0), [message("0x472598"), lose()], note="0x409448"),
-            _rule("escort_lost", stage(9), [lose()], note="0x40947A：9 号槽阵亡"),
+            _rule("escort_lost", stage(9), [message("0x472984"), lose()], note="0x40947A：9 号槽阵亡"),
             _rule("unit_40_lost", all_(stage(40), flag("0x583F18", 0)),
                   [message("0x472970"), set_flag("0x583F18", 1)], note="0x4094AE"),
             _rule("win", all_dead(),
@@ -515,7 +524,7 @@ TRIGGERS = {
                   [message("0x472748"), message("0x47274C"),
                    global_set("0x7D18DC", 0),
                    map_cell_slot(19, 1), field(19, "behavior", 0),
-                   remove_range(40, 61, True),
+                   scripted_clear_range(40, 61),
                    message("0x472750"), spawn(33), spawn(35),
                    flag_turn("0x583F50"), set_flag("0x583F18", 1),
                    set_flag("0x583F1C", 1)],
@@ -537,16 +546,22 @@ TRIGGERS = {
             _rule("occupy_%d_%d" % (x, y),
                   all_(cell(x, y, 1), flag("0x583F18", 0) if i == 0 else
                        flag("0x%06X" % (0x583F18 + i * 4), 0)),
-                  [message("0x472A44"), global_set("0x7D1648", 1),
+                  [message("0x472A44"), {"if": {"when": {"not": stage(14)},
+                    "then": [global_set("0x7D1648", 1)]}},
                    set_flag("0x%06X" % (0x583F18 + i * 4), 1)],
                   note="0x409FCA：5 个占位点之一")
             for i, (x, y) in enumerate([(25, 6), (32, 6), (39, 6), (44, 7), (43, 5)])
         ] + [
+            _rule("refresh_remaining_crates_text", {}, [{"text_digit_from_flags": {
+                "field": "success", "gbk_byte_offset": 12,
+                "flags": ["0x583F18", "0x583F1C", "0x583F20", "0x583F24", "0x583F28"],
+                "subtract_from": 5, "modulus": 6, "unsigned_bits": 32,
+                "digits": "012345"}}], requires_result_zero=False,
+                  note="0x40A03D..40A073: success[12] = '0' + uint32(5-sum(flags))%6"),
             _rule("all_five_win",
-                  all_(flag("0x583F18", neq=0), flag("0x583F1C", neq=0),
-                       flag("0x583F20", neq=0), flag("0x583F24", neq=0),
-                       flag("0x583F28", neq=0)),
-                  [message("0x47276C"), global_set("0x7D1960", 1), win()],
+                  {"flag_sum_eq": {"addrs": ["0x583F18", "0x583F1C", "0x583F20", "0x583F24", "0x583F28"], "value": 5}},
+                  [message("0x47276C"), {"if": {"when": {"not": stage(20)},
+                    "then": [global_set("0x7D1960", 1)]}}, win()],
                   note="0x40A03D：五个点都占完"),
         ],
     },
@@ -560,16 +575,19 @@ TRIGGERS = {
                    field(21, "pad3e", 1), message("0x472A5C"),
                    set_flag("0x583F50", 1)],
                   note="0x40A0F0：与郑之光相邻，等待对话结果"),
+            _rule("unrecruited_21_lost_win", all_(stage(21), flag("0x7D19E4", neq=0)),
+                  [message("0x472A64"), remove_range(40, 77), message("0x472A68"), win()],
+                  note="0x40A16D..40A1D9: People21.side!=0; new-game initialized to1"),
             _rule("annihilate_win", all_dead(),
                   [message("0x472A60"), win()], note="0x40A1DB"),
         ],
-        "notes": ["0x7D19E4 在全 EXE 中只有 0x40A126 写 0，没有任何写非 0 的指令；\n0x40A16D 的劝降胜利分支在原版就是不可达的，复刻不实现该分支。"],
+        "notes": ["0x7D19E4 is People21.side, initialized by the bulk PEOPLE.DAT load, not an independent zero global. Killing unrecruited21 wins; meeting changes side0 first."],
     },
     19: {
         "entry": "0x40A209",
         "rules": [
-            _rule("any_player_death", any_player_death(), [lose()], on="death",
-                  note="0x40A20D：0x406C8C 任何阵亡即失败；复刻按我军阵亡解释"),
+            _rule("any_player_death", any_player_death(), [lose()],
+                  note="0x40A20D：0x406C8C 扫描全128槽，无存活side0即失败（tick）"),
             _rule("group_1_win", slots_count([40, 41, 42], eq=0),
                   [message("0x472788"), message("0x47278C"), message("0x472790"),
                    score(1000), win()],
@@ -579,7 +597,7 @@ TRIGGERS = {
                    global_set("0x7D1A68", 1), score(2000), win()],
                   note="0x40A2A2：43–45 全部离场，+2000"),
         ],
-        "notes": ["0x406C8C 的确切阵营语义未证；按“我军阵亡”实现，避免击毙敌人即失败。"],
+        "notes": ["0x406C8C：全场没有stage非0且People.side0的单位时失败；不是任一阵亡。"],
     },
     20: {
         "entry": "0x40A325",
@@ -589,16 +607,20 @@ TRIGGERS = {
                   [message("0x4727AC"), set_flag("0x583F18", 1)], note="0x40A35A"),
             _rule("unit_48_lost", all_(stage(48), flag("0x583F1C", 0)),
                   [message("0x4727B0"), set_flag("0x583F1C", 1)], note="0x40A387"),
-            _rule("win", all_dead(), [message("0x472A90"), win()], note="0x40A3B5"),
+            _rule("win", all_dead(), [message("0x472A90"),
+                   {"if": {"when": {"people_compare": {"a": 0, "b": 23, "field": "level", "op": "gt"}},
+                           "then": [message("0x4727C8"), message("0x4727CC"), {"set_faction": {"slot": 23, "value": 0}}],
+                           "else": [message("0x4727D0")]}}, win()], note="0x40A3B5/40A3D5"),
         ],
-        "notes": ["0x40A3D5 的 0x7D0F1C/0x7D1AF8 分支是额外音效，未复刻数值比较。"],
+        "notes": ["0x40A3D5 的 People0.level>People23.level决定招募。"],
     },
     21: {
         "entry": "0x40A427",
         "rules": [
             _rule("hero_lost", stage(0), [message("0x472598"), lose()], note="0x40A42A"),
             _rule("target_lost", stage(40),
-                  [message("0x4727D4"), message("0x472AE0"), win()],
+                  [message("0x4727D4"), {"if": {"when": {"not": all_dead()},
+                    "then": [message("0x472ADC")]}}, message("0x472AE0"), win()],
                   note="0x40A459：40 号离场即胜利"),
         ],
     },
@@ -608,15 +630,17 @@ TRIGGERS = {
             _rule("hero_lost", stage(0), [message("0x472598"), lose()], note="0x40A4B5"),
             _rule("unit_24_lost", stage(24),
                   [message("0x472804"), message("0x472808"),
-                   choice("怎么处置向天虎、向天豹？", [
-                       option("枪毙", [message("0x47280C"), party_morale(2),
+                   choice("", [
+                       option("枪  毙", [message("0x47280C"), party_morale(2),
                                        message("0x47281C"), win()]),
-                       option("放了", [message("0x472810"), score(5000),
+                       option("放  逐", [message("0x472810"), score(5000),
                                        message("0x47281C"), win()]),
-                       option("收编", [message("0x472814"), message("0x472818"),
-                                       recruit([24, 25]), message("0x47281C"), win()]),
-                   ], 1)],
-                  note="0x40A4E7：0x426E7D 三选一；0=枪毙(全军士气+2)/1=放走(+5000)/2=收编"),
+                       option("收  编", [message("0x472814"), message("0x472818"),
+                                       {"set_faction": {"slot": 24, "value": 0}},
+                                       {"set_faction": {"slot": 25, "value": 0}},
+                                       message("0x47281C"), win()]),
+                   ], 0)],
+                  note="0x40A4E7：0x426E7D 三选一；0=枪毙(People0..23等级+2)/1=放走(+5000)/2=收编"),
             _rule("unit_25_lost", all_(stage(25), flag("0x583F18", 0)),
                   [message("0x4727E0"), set_flag("0x583F18", 1)], note="0x40A648"),
         ],
@@ -639,7 +663,7 @@ TRIGGERS = {
                   [set_flag("0x583F1C", 1), message("0x47282C")], note="0x40A6DB"),
             _rule("all_clear", all_(all_dead(), flag("0x583F20", 0)),
                   [set_flag("0x583F20", 1), message("0x47283C")], note="0x40A709"),
-            _rule("spawn_34_win", all_(slot_cell(34, 1), flag("0x583F20", neq=0)),
+            _rule("spawn_34_win", all_({"not": slot_cell(34, 0)}, flag("0x583F20", neq=0)),
                   [spawn(34), message("0x472840"), message("0x472844"), win()],
                   note="0x40A733：全歼后 34 号目标格被占，34 出场并胜利"),
         ],
@@ -653,7 +677,8 @@ TRIGGERS = {
             _rule("unit_27_lost", all_(stage(27), flag("0x583F1C", 0)),
                   [message("0x472860"), global_set("0x7D1CFC", 0),
                    message("0x472864"), global_set("0x7D1C78", 0),
-                   map_cell_slot(26, 1), message("0x472868"),
+                   {"if": {"when": {"not": stage(26)}, "then": [map_cell_slot(26, 1)]}},
+                   message("0x472868"),
                    set_flag("0x583F1C", 1)],
                   note="0x40A7FE：27 号离场，26 号目标格标记"),
             _rule("win", all_dead(), [message("0x472AE8"), win()], note="0x40A886"),
@@ -673,12 +698,12 @@ TRIGGERS = {
     26: {
         "entry": "0x40A95C",
         "rules": [
-            _rule("any_player_death", any_player_death(), [lose()], on="death",
-                  note="0x40A95F：0x406C8C 任何阵亡即失败"),
+            _rule("any_player_death", any_player_death(), [lose()],
+                  note="0x40A95F：0x406C8C 扫描全128槽，无存活side0即失败（tick）"),
             _rule("reach_cell", cell(2, 39, 1), [message("0x472AEC"), win()],
                   note="0x40A97D：地图格 (2,39) 被我方占住"),
         ],
-        "notes": ["0x406C8C 按我军阵亡解释，避免击毙敌人即失败。"],
+        "notes": ["0x406C8C：全场无存活side0时失败；不检查last_dead。"],
     },
     27: {
         "entry": "0x40A9B9",
@@ -699,18 +724,19 @@ TRIGGERS = {
             _rule("hero_lost", stage(0), [message("0x472598"), lose()], note="0x40AAC5"),
             _rule("meet_30", all_(adjacent(0, 30), flag("0x583F18", 0)),
                   [message("0x4728D8"), set_flag("0x583F18", 1),
-                   message("0x4728DC"), message("0x4728E0"), set_flag("0x583F1C", 1)],
-                  note="0x40AAf7：与 30 号相邻；HP 比较分支未复刻"),
-            _rule("turn_target", area(40, 0, 8, 3, 1),
+                   {"if": {"when": {"people_compare": {"a": 0, "b": 30, "field": "zhili", "op": "gte", "add": 10}},
+                           "then": [message("0x4728DC"), message("0x4728E0"), set_flag("0x583F1C", 1)]}}],
+                  note="0x40AAf7：与 30 号相邻；People0智力>=People30智力+10"),
+            _rule("turn_target", area(40, 8, 0, 3, 1),
                   [field(40, "target_x", 0)], note="0x40AB61：把 40 号目标改到左侧"),
             _rule("escape_defeat", area(40, 0, 0, 1, 1),
                   [lose()], note="0x40AB8C：40 号到达 (0,0) 失败"),
             _rule("target_lost", stage(40),
-                  [message("0x4728E4"), message("0x4728D4"),
-                   global_set("0x7D1E88", 1), win()],
+                  [message("0x4728E4"), win(), {"if": {"when": flag("0x583F1C", 0),
+                    "then": [message("0x4728D4"), global_set("0x7D1E88", 1)]}}],
                   note="0x40ABB7：40 号离场即胜利"),
         ],
-        "notes": ["0x40AB29 的 0x7D0F18/0x7D1E90 是额外奖励音效，未复刻。"],
+        "notes": ["0x40AB29 的 People0/30智力比较决定台词与People30阵营。"],
     },
     29: {
         "entry": "0x40AC08",
@@ -813,8 +839,9 @@ TRIGGERS = {
                    set_flag("0x%06X" % (0x583F18 + i * 4), 1)],
                   note="0x40B2CF：五壮士逐个阵亡音效")
             for i in range(5)
-        ],
-        "notes": ["0x406C8C 的“任何阵亡”在此关按保护五壮士处理；失败条件仍是全部阵亡。"],
+        ] + [_rule("all_players_lost", {"all_players_dead": True},
+                   [message("0x472C5C"), lose()], note="0x40B3E1/0x40B3F3")],
+        "notes": ["0x406C8C 扫描全场128槽：无存活side0时失败，不是任一阵亡。"],
     },
     37: {
         "entry": "0x40B46C",
@@ -831,11 +858,11 @@ TRIGGERS = {
                   [message("0x472CB8"), set_flag("0x583F2C", 1)], note="0x40B52E"),
             _rule("cue_58", all_(stage(58), flag("0x583F30", 0)),
                   [message("0x472CC0"), set_flag("0x583F30", 1)], note="0x40B55B"),
-            _rule("reinforce", all_(range_count(40, 128, lt=2), flag("0x583F34", 0)),
+            _rule("reinforce", all_(range_count(40, 128, lt=2, faction={"neq": 0}), flag("0x583F34", 0)),
                   [set_flag("0x583F34", 1), spawn_range(95, 105),
                    message("0x472C90"), spawn(44), spawn(48), spawn(49),
-                   message("0x472C94"), many(95, 105, "unknown_08", 80)],
-                  note="0x40B589：存活单位<2 时大举增援"),
+                   message("0x472C94"), many(95, 105, "morale", 80)],
+                  note="0x40B589：40..127存活且People.side非0的单位<2 时大举增援"),
             _rule("unit_40_lost", stage(40),
                   [message("0x472CBC"), lose()], note="0x40B639"),
             _rule("win", all_dead(), [message("0x472CC4"), win()], note="0x40B666"),
@@ -875,7 +902,7 @@ TRIGGERS = {
                 (61, 0x40, "0x472D30", 4), (62, 0x80, "0x472D34", 4),
                 (67, 0x100, "0x472D38", None), (68, 0x200, "0x472D3C", 0),
                 (69, 0x400, "0x472D40", 0), (70, 0x800, "0x472D44", None),
-                (71, 0x1000, "0x472D48", 0), (72, 0x2000, "0x472D4C", 0),
+                (71, 0x1000, "0x472D48", 0), (72, 0x2000, "0x472D4C", None),
             ]
         ] + [
             _rule("win", all_dead(), [message("0x472D50"), win()], note="0x40BC01"),

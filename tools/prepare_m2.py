@@ -23,25 +23,40 @@ ASSETS = GODOT / "assets"
 GODOT_DATA = GODOT / "data"
 TILE = 48
 
-STARTING_PARTY = [3, 2, 1, 4, 7]          # 张嘎 / 赵虎 / 朱老忠 / 李向阳 / 柳忻
-STARTING_MONEY = 6000
+STARTING_PARTY = []  # 原版只People0入队；主角独立持久对象映射slot0
+STARTING_MONEY = 500
 STARTING_DAY = 1
-MAX_PARTY = 10
+MAX_PARTY = 32
 STARTING_TOWN = 0
 RECRUIT_BASE = 200
 RECRUIT_PER_LEVEL = 80
 BATTLE_REWARD = 800
 BATTLE_LEVELS = [14, 8]
 
-STARTING_ITEMS = {68: 1, 69: 1, 71: 1, 79: 1, 1: 2, 14: 2, 21: 1, 81: 1}
-# 武功/野战/战术/红巾 + 复刻初始补给（核桃/干粮/米酒）+ 钢刀
-STARTING_MATERIALS = {0: 30, 1: 30, 2: 20, 3: 15, 4: 15,
-                      5: 15, 6: 15, 7: 6, 8: 6, 9: 3}
-STARTING_MINES = {0: 1}
+STARTING_ITEMS = {}
+STARTING_MATERIALS = {}
+STARTING_MINES = {}
 
 
 def load(name: str):
     return json.loads((DATA / name).read_text(encoding="utf-8"))
+
+
+def town_shops(record: dict, items: dict, materials: dict) -> dict:
+    """Original K01 catalogs: 12 goods slots, but only 10 material slots.
+
+    Bound the fields here too: run_game can consume a previously extracted
+    town.json with the old, erroneous twelve-material array. Do not deduplicate
+    legitimate catalog entries or discard material0 (clay) itself.
+    """
+    return {
+        "junxie": [items[str(i)] for i in record["goods_junxie"][:12]
+                   if str(i) in items],
+        "zahuo": [items[str(i)] for i in record["goods_zahuo"][:12]
+                  if str(i) in items],
+        "material": [materials[str(i)] for i in record["goods_material"][:10]
+                     if str(i) in materials],
+    }
 
 
 def _m1_module():
@@ -70,30 +85,28 @@ def main():
     ASSETS.mkdir(parents=True, exist_ok=True)
     GODOT_DATA.mkdir(parents=True, exist_ok=True)
 
+    # Godot无内置GBK codec；确定性字符表用于原版姓名编码，绝不写UTF-8冒充GBK。
+    codec = {}
+    for hi in range(0x81, 0xff):
+        for lo in range(0x40, 0xff):
+            if lo == 0x7f:
+                continue
+            raw = bytes([hi, lo])
+            try:
+                char = raw.decode("gbk")
+            except UnicodeDecodeError:
+                continue
+            codec[char] = raw.hex()
+    codec["\ue000"] = "d7fa"  # Native name-table cell; see prepare_m1.hzk_glyph.
+    (GODOT_DATA / "gbk_codec.json").write_text(json.dumps(codec, ensure_ascii=False), encoding="utf-8")
+
     # 全量资产（M2 的角色/商店可能用到任意图标）
     for i in range(19):
         copy_asset(OUT / "place" / f"place_{i:02d}.png",
                    f"place/place_{i:02d}.png")
-    for i in range(170):
-        p = OUT / "face" / f"face_{i:03d}.png"
-        if p.exists():
-            copy_asset(p, f"face/face_{i:03d}.png")
-    for i in range(91):
-        p = OUT / "army" / f"army_{i:03d}.png"
-        if p.exists():
-            copy_asset(p, f"army/army_{i:03d}.png")
-    for i in range(128):
-        p = OUT / "goods" / f"goods_{i:03d}.png"
-        if p.exists():
-            copy_asset(p, f"goods/goods_{i:03d}.png")
-    for i in range(10):
-        p = OUT / "material" / f"material_{i:02d}.png"
-        if p.exists():
-            copy_asset(p, f"material/material_{i:02d}.png")
-    for i in range(10):
-        p = OUT / "mine" / f"mine_{i:03d}.png"
-        if p.exists():
-            copy_asset(p, f"mine/mine_{i:03d}.png")
+    # Old out/ previews may predate KUANG04 and contain BOX palette colors.
+    from native_sprite_assets import generate as native_sprites
+    native_sprites(("face", "army", "goods", "material", "mine"))
     bigmap = ""
     if (OUT / "img" / "BIGMAP.png").exists():
         bigmap = copy_asset(OUT / "img" / "BIGMAP.png", "ui/bigmap.png")
@@ -106,12 +119,9 @@ def main():
             **it,
             "icon": icon,
         }
-        # 投掷类物品的 ANM 效果（由 FFPACT 帧内容对照推断，非原版表）。
-        throw_anm = {41: 11, 42: 6, 43: 8, 44: 41, 45: 42, 46: 41,
-                47: 43, 48: 43, 49: 43, 50: 43, 51: 44, 52: 44,
-                53: 5, 54: 5, 55: 5, 56: 4}
-        if int(it["index"]) in throw_anm:
-            item_rec["anm_index"] = throw_anm[int(it["index"])]
+        # 41FC6E：ANM索引直接取para3，FLM索引取para4。
+        if 41 <= int(it["index"]) <= 56:
+            item_rec["anm_index"] = int(it["para3"])
         items[str(it["index"])] = item_rec
     materials = {}
     for m in game["materials"]:
@@ -143,12 +153,14 @@ def main():
             "bingzhong": p["bingzhong"],
             "unit_name": u["name"],
             "level": p["level"],
+            "jingyan": p.get("jingyan",0),
             "wuli": p["wuli"],
             "zhili": p["zhili"],
             "unknown_18": p["unknown_18"],
             "wupin": p["wupin"],
             "dilei": p["dilei"],
-            "skills": p["skills"],
+            "skills": {k: int(v)*[1,10,25,45,70,100,135,175,225,300][min(int(p["level"])//6,9)] for k,v in u["skills"].items()},
+            "attack_count": [1,10,25,45,70,100,135,175,225,300][min(int(p["level"])//6,9)],
             "max_hp": max_hp,
             "army_png": f"res://assets/army/army_{u['img_index']:03d}.png",
             "unit": u,
@@ -170,14 +182,7 @@ def main():
             "bg": f"res://assets/place/place_{t['index']:02d}.png",
             "buildings": t["buildings"],
             "sound_hotspots": t["sound_hotspots"],
-            "shops": {
-                "junxie": [items[str(i)] for i in t["goods_junxie"]
-                            if str(i) in items],
-                "zahuo": [items[str(i)] for i in t["goods_zahuo"]
-                           if str(i) in items],
-                "material": [materials[str(i)] for i in t["goods_material"]
-                             if str(i) in materials],
-            },
+            "shops": town_shops(t, items, materials),
         }
         towns_out.append(town)
 
@@ -215,15 +220,17 @@ def main():
             "battle_reward": BATTLE_REWARD,
             "battle_levels": BATTLE_LEVELS,
             "save_prefix": "dlz_m2_save_",
-            "save_slots": 3,
+            "save_slots": 5,
         },
         "towns": towns_out,
         "people": people_out,
         "items": items,
+        "item_valid": game["item_valid"],
         "materials": materials,
         "mines": mines,
         "units": units,
         "skills": game["skills"],
+        "apply_ranges": {str(i): game["apply_ranges"][i] for i in range(len(game["apply_ranges"]))},
         "mine_recipes": game["mine_recipes"],
         "starting": {
             "party": STARTING_PARTY,
