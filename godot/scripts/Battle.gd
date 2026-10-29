@@ -1295,7 +1295,7 @@ func _process(delta: float) -> void:
 	var modal_open:=is_instance_valid(action_panel) or is_instance_valid(context_menu)
 	# A modal can open without moving the mouse. Hide/reveal the aim aid even
 	# when the usual hover-update branch below is intentionally suspended.
-	if mode=="skill" and is_instance_valid(overlay):overlay.queue_redraw()
+	if mode in ["attack","skill"] and is_instance_valid(overlay):overlay.queue_redraw()
 	_advance_display_timer(delta)
 	# 触发器必须在无头 bot（camera 为空）下也继续跑。
 	if scenario != null and not finished_flag and not busy and not modal_open and not progress_fx_active and action_resolution_depth==0 and not _movement_active:
@@ -1597,6 +1597,7 @@ func _set_native_range(mask:PackedByteArray,range_phase:String) -> void:
 		# so force_draw during menu entry could capture stale range pixels.
 		native_range_layer.visible=mask.count(1)>0
 		native_range_layer.queue_redraw()
+	if is_instance_valid(overlay):overlay.queue_redraw()
 	presentation_step.emit("range_mask",{"phase":range_phase,"dark_count":mask.count(1)})
 
 
@@ -1899,12 +1900,15 @@ func _perform_attack_at(attacker:Node2D,tile:Vector2i) -> void:
 	update_hud()
 	_play_sfx(int(unit_class(attacker).get("audio_gongji",-1)))
 	var facing:=_face_target(attacker,tile)
+	# Freeze the same area for animation and resolution before per-victim
+	# practice/XP can change the attacker. This also matches the aim preview.
+	var cells:=normal_attack_cells(attacker,tile,facing)
 	attacker.display_action_lock=true
 	await _attack_anim(attacker, _unit_at(tile))
 	# 4212A7 vs4043EA: player becomes s0 before FLM/damage; AI after.
 	if phase=="player":attacker.display_state=0;attacker.refresh()
-	_play_flm(int(unit_class(attacker).get("flm_gongji", -1)), (Vector2(tile*TILE+Vector2i(24,24)) + attacker.position) * 0.5)
-	await _resolve_attack_at(attacker,tile,facing)
+	await _play_action_effect("",int(unit_class(attacker).get("flm_gongji",-1)),Vector2(tile*TILE+Vector2i(24,24)),cells,-1)
+	await _resolve_attack_at(attacker,tile,facing,cells)
 	attacker.display_action_lock=false
 	attacker.display_state=0;attacker.refresh()
 	await _wait_for_progress_fx()
@@ -1920,14 +1924,27 @@ func _resolve_attack(attacker, defender, facing: int) -> void:
 	await _resolve_attack_at(attacker,Vector2i(defender.x,defender.y),facing)
 
 
-func _resolve_attack_at(attacker,center:Vector2i,facing:int) -> void:
+func normal_attack_cells(attacker,center:Vector2i,facing:int) -> Array:
+	var apply:=CombatRules.attack_apply(int(unit_class(attacker).get("apply",0)),int(attacker.attack_count))
+	return _apply_tiles(center,apply,facing)
+
+
+func attack_preview_cells() -> Array:
+	if mode!="attack" or busy or phase!="player" or finished_flag or progress_fx_active:return []
+	if is_instance_valid(action_panel) or is_instance_valid(context_menu):return []
+	if selected==null or not is_instance_valid(selected) or not selected.alive or selected.acted:return []
+	if not attack_tiles.has(hover_tile):return []
+	return normal_attack_cells(selected,hover_tile,_facing(Vector2i(selected.x,selected.y),hover_tile))
+
+
+func _resolve_attack_at(attacker,center:Vector2i,facing:int,cells=null) -> void:
 	var base_xp := 0
 	var kill_xp := 0
 	var attack_power := _effective_attack(attacker)
-	var apply := CombatRules.attack_apply(int(unit_class(attacker).get("apply",0)),int(attacker.attack_count))
+	if cells==null:cells=normal_attack_cells(attacker,center,facing)
 	var deaths: Array = []
 	# 41307F：使用兵种原始作用模板，先累计命中经验cap48，再加击杀经验；无反击。
-	for cell in _apply_tiles(center, apply, facing):
+	for cell in cells:
 		var target = _unit_at(cell["tile"])
 		if target == null or same_faction(target,attacker):
 			continue
@@ -2496,7 +2513,7 @@ func _effect_clip_material() -> ShaderMaterial:
 
 
 func _play_anm_sheet(path: String, world: Vector2) -> void:
-	if fast_sim or not animations_enabled or (DisplayServer.get_name()=="headless" and not presentation_in_headless) or not ResourceLoader.exists(path):return
+	if path.is_empty() or fast_sim or not animations_enabled or (DisplayServer.get_name()=="headless" and not presentation_in_headless) or not ResourceLoader.exists(path):return
 	var tex:Texture2D=load(path)
 	if tex==null:return
 	var n:=int(tex.get_width()/320)
@@ -3995,7 +4012,7 @@ func _on_attack() -> void:
 	for tile in RangeMask.cells(native_dark_mask,map_w,map_h):attack_tiles[tile]=_unit_at(tile)
 	mode = "attack"
 	move_tiles.clear()
-	_log("选择攻击目标")
+	_log("选择落点（橙格为伤害范围）")
 	update_hud()
 
 
@@ -4047,10 +4064,12 @@ func _on_cancel() -> void:
 # ---------------- 绘制 / 特效 ----------------
 
 func draw_overlay(ci: CanvasItem) -> void:
-	# Strategy aim aid: the native light mask is SELECTABLE LANDINGS, not
-	# the effect area. Show actual success probability, gray for no effect.
+	# Modern aim-only aid: the native light mask is SELECTABLE LANDINGS, not
+	# the effect area. Normal attacks retain their strength percentages;
+	# skills show actual success probability, gray for no possible effect.
 	# Never paint over HUD.
-	var cells:=skill_preview_cells()
+	var skill_preview:=mode=="skill"
+	var cells:=skill_preview_cells() if skill_preview else attack_preview_cells()
 	if cells.is_empty():return
 	var clip:=Rect2(Vector2.ZERO,Vector2(map_w*TILE,map_h*TILE))
 	if camera!=null:
@@ -4059,14 +4078,14 @@ func draw_overlay(ci: CanvasItem) -> void:
 		var rect:=Rect2(Vector2(cell.tile*TILE)+Vector2(1,1),Vector2(TILE-2,TILE-2))
 		var visible:=rect.intersection(clip)
 		if not visible.has_area():continue
-		var effective:=bool(cell.effective)
+		var effective:=not skill_preview or bool(cell.effective)
 		ci.draw_rect(visible,Color(1.0,0.52,0.1,0.25) if effective else Color(0.42,0.45,0.49,0.34))
 		ci.draw_rect(visible,Color(1.0,0.68,0.22,0.95) if effective else Color(0.64,0.67,0.7,0.9),false,1.0)
 		var label_pos:=rect.position+Vector2(4,16)
 		if font!=null and clip.encloses(Rect2(label_pos-Vector2(0,13),Vector2(38,16))):
-			var text:=str(int(cell.chance))+"%"
+			var text:=str(int(cell.chance) if skill_preview else int(cell.pct))+"%"
 			# HZK16's native size keeps probability digits crisp at 1:1 zoom.
-			var label_size:=16
+			var label_size:=16 if skill_preview else 12
 			ci.draw_string_outline(font,label_pos,text,HORIZONTAL_ALIGNMENT_LEFT,-1,label_size,3,Color(0.12,0.1,0.05,0.95))
 			ci.draw_string(font,label_pos,text,HORIZONTAL_ALIGNMENT_LEFT,-1,label_size,Color(1.0,0.92,0.65) if effective else Color(0.86,0.88,0.9))
 	var aim:=Rect2(Vector2(hover_tile*TILE)+Vector2(3,3),Vector2(TILE-6,TILE-6)).intersection(clip)

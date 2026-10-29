@@ -51,6 +51,7 @@ TESTS = {
     "CapturedFoodProvisionTest": "CAPTURED_FOOD_PROVISION checks=12 failures=0",
     "TriggerTest": "TRIGGER_TEST_OK",
     "OriginalCombatTest": "ORIGINAL_COMBAT checks=56 failures=0",
+    "AttackAreaPresentationTest": "ATTACK_AREA_PRESENTATION_OK",
     "SkillAreaPresentationTest": "SKILL_AREA_PRESENTATION_OK",
     "OriginalRelationsTest": "ORIGINAL_RELATIONS checks=168 failures=0",
     "OriginalMediaTest": "ORIGINAL_MEDIA checks=86 failures=0",
