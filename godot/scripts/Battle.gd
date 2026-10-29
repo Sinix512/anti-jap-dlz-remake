@@ -1293,6 +1293,9 @@ func _advance_display_timer(delta:float) -> void:
 
 func _process(delta: float) -> void:
 	var modal_open:=is_instance_valid(action_panel) or is_instance_valid(context_menu)
+	# A modal can open without moving the mouse. Hide/reveal the aim aid even
+	# when the usual hover-update branch below is intentionally suspended.
+	if mode=="skill" and is_instance_valid(overlay):overlay.queue_redraw()
 	_advance_display_timer(delta)
 	# 触发器必须在无头 bot（camera 为空）下也继续跑。
 	if scenario != null and not finished_flag and not busy and not modal_open and not progress_fx_active and action_resolution_depth==0 and not _movement_active:
@@ -2780,6 +2783,75 @@ func _skill_targets(caster: Node2D, skill: Dictionary, occupied_only := false) -
 	return out
 
 
+func _skill_success_chance(caster, target, sid:int, count:int) -> int:
+	# Actual roll probability, not the template's effect-strength percentage.
+	# Keep the theft bonus after the original lower clamp (4138EA).
+	if sid in [0,1,2,15]:return 100
+	var chance:=maxi(0,30+2*(int(caster.data.get("zhili",0))-int(target.data.get("zhili",0))))
+	if sid==9:chance+=CombatRules.skill_level(count)
+	return mini(100,chance)
+
+
+func _skill_would_affect(caster, target, sid:int, count:int, pct:int) -> bool:
+	# Pure hover prediction. Do not use this to skip resolver iterations:
+	# native rolls/practice still occur for several no-change status effects.
+	var e1:=CombatRules.skill_effect(int(caster.data.get("zhili",0)),int(active_skill.get("para1",0)),count)*pct/100
+	var e2:=CombatRules.skill_effect(int(caster.data.get("zhili",0)),int(active_skill.get("para2",0)),count)*pct/100
+	match sid:
+		0,1,2:
+			return (sid!=1 and mini(e1,int(target.max_hp)-int(target.hp))>0) or (sid!=0 and mini(e2,100-int(target.morale))>0)
+		3,4,5,13,14,15:
+			var modifier:=0
+			if sid in [3,4,5]:
+				var terrain_id:=_terrain_at(Vector2i(target.x,target.y))
+				var modifiers:Array=data.get("terrain_modifiers",[])
+				if terrain_id>=0 and terrain_id<modifiers.size():modifier=int(modifiers[terrain_id][0 if sid==3 else 1])
+			return mini(int(target.hp),maxi(0,e1*(100+modifier)/100))>0 or (sid==14 and maxi(0,int(target.morale)-e2)<int(target.morale))
+		6:
+			return mini(int(target.morale),e2)>0
+		7:
+			return maxi(20,int(target.defense_integrity)*7/10)!=int(target.defense_integrity)
+		8:
+			return maxi(50,int(target.integrity)*7/10)!=int(target.integrity)
+		9:
+			for raw in target.item_slots:
+				if int(raw)>0:return true # A full caster bag sends theft to battle loot.
+			return false
+		10:
+			var old_level:=int(target.data.get("level",1))
+			var new_level:=maxi(1,old_level-1)
+			var new_max_hp:=maxi(1,int(unit_class(target).get("tili",50))+(new_level-1)*int(unit_class(target).get("tili_plus",0)))
+			return new_level!=old_level or new_max_hp!=int(target.max_hp) or int(target.hp)>new_max_hp
+		11:
+			return not target.acted or not target.moved
+		12:
+			return target.acted or target.moved or int(target.integrity)!=100 or int(target.defense_integrity)!=100
+	return false
+
+
+func skill_preview_cells() -> Array:
+	if mode!="skill" or busy or phase!="player" or finished_flag or progress_fx_active:return []
+	if is_instance_valid(action_panel) or is_instance_valid(context_menu):return []
+	if selected==null or not is_instance_valid(selected) or not selected.alive or selected.acted:return []
+	if active_skill.is_empty() or active_skill_id<0 or active_skill_id>=SKILL_KEYS.size():return []
+	if not attack_tiles.has(hover_tile) or not RangeMask.allows(native_dark_mask,map_w,map_h,hover_tile):return []
+	var sid:=active_skill_id
+	var count:=_skill_count(selected,sid)
+	var apply:=CombatRules.skill_apply(int(active_skill.get("apply_fw",0)),count)
+	# _face_target mutates direction; hover must only compute a facing.
+	var cells:=_apply_tiles(hover_tile,apply,_facing(Vector2i(selected.x,selected.y),hover_tile))
+	var support:=sid in [0,1,2,12]
+	for cell in cells:
+		var target:=_unit_at(cell.tile)
+		var chance:=0
+		if target!=null and support==same_faction(target,selected) and not (sid==12 and int(target.bingzhong)==45):
+			if _skill_would_affect(selected,target,sid,count,int(cell.pct)):
+				chance=_skill_success_chance(selected,target,sid,count)
+		cell["chance"]=chance
+		cell["effective"]=chance>0
+	return cells
+
+
 func _open_skill_menu() -> void:
 	if selected == null or busy or phase != "player" or selected.acted:return
 	var ids:=available_skills(selected)
@@ -2869,9 +2941,7 @@ func _execute_skill_at(tile: Vector2i) -> void:
 		if target == null or not target.alive or support != (same_faction(target,caster)):
 			continue
 		if sid not in [0, 1, 2, 15]:
-			var chance := maxi(0, 30 + 2 * (int(caster.data.get("zhili", 0)) - int(target.data.get("zhili", 0))))
-			if sid == 9:
-				chance += CombatRules.skill_level(count)
+			var chance := _skill_success_chance(caster,target,sid,count)
 			if _rand100() >= chance:
 				_spawn_float("未奏效", target.position, Color("#b0b0b0"))
 				continue
@@ -3976,9 +4046,31 @@ func _on_cancel() -> void:
 
 # ---------------- 绘制 / 特效 ----------------
 
-func draw_overlay(_ci: CanvasItem) -> void:
-	# 4170AA has no blue/red translucent squares, yellow selection, or hover grid.
-	pass
+func draw_overlay(ci: CanvasItem) -> void:
+	# Strategy aim aid: the native light mask is SELECTABLE LANDINGS, not
+	# the effect area. Show actual success probability, gray for no effect.
+	# Never paint over HUD.
+	var cells:=skill_preview_cells()
+	if cells.is_empty():return
+	var clip:=Rect2(Vector2.ZERO,Vector2(map_w*TILE,map_h*TILE))
+	if camera!=null:
+		clip=Rect2(camera.position+map_rect().position-Vector2(320,240),map_rect().size)
+	for cell in cells:
+		var rect:=Rect2(Vector2(cell.tile*TILE)+Vector2(1,1),Vector2(TILE-2,TILE-2))
+		var visible:=rect.intersection(clip)
+		if not visible.has_area():continue
+		var effective:=bool(cell.effective)
+		ci.draw_rect(visible,Color(1.0,0.52,0.1,0.25) if effective else Color(0.42,0.45,0.49,0.34))
+		ci.draw_rect(visible,Color(1.0,0.68,0.22,0.95) if effective else Color(0.64,0.67,0.7,0.9),false,1.0)
+		var label_pos:=rect.position+Vector2(4,16)
+		if font!=null and clip.encloses(Rect2(label_pos-Vector2(0,13),Vector2(38,16))):
+			var text:=str(int(cell.chance))+"%"
+			# HZK16's native size keeps probability digits crisp at 1:1 zoom.
+			var label_size:=16
+			ci.draw_string_outline(font,label_pos,text,HORIZONTAL_ALIGNMENT_LEFT,-1,label_size,3,Color(0.12,0.1,0.05,0.95))
+			ci.draw_string(font,label_pos,text,HORIZONTAL_ALIGNMENT_LEFT,-1,label_size,Color(1.0,0.92,0.65) if effective else Color(0.86,0.88,0.9))
+	var aim:=Rect2(Vector2(hover_tile*TILE)+Vector2(3,3),Vector2(TILE-6,TILE-6)).intersection(clip)
+	if aim.has_area():ci.draw_rect(aim,Color(1.0,0.95,0.65),false,2.0)
 
 
 func _spawn_float(text: String, world: Vector2, color: Color) -> void:

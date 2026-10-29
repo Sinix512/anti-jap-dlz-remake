@@ -51,6 +51,7 @@ TESTS = {
     "CapturedFoodProvisionTest": "CAPTURED_FOOD_PROVISION checks=12 failures=0",
     "TriggerTest": "TRIGGER_TEST_OK",
     "OriginalCombatTest": "ORIGINAL_COMBAT checks=56 failures=0",
+    "SkillAreaPresentationTest": "SKILL_AREA_PRESENTATION_OK",
     "OriginalRelationsTest": "ORIGINAL_RELATIONS checks=168 failures=0",
     "OriginalMediaTest": "ORIGINAL_MEDIA checks=86 failures=0",
     "OriginalActionOrderTest": "ORIGINAL_ACTION_ORDER checks=34 failures=0",
@@ -189,6 +190,7 @@ def main() -> int:
         tests["OriginalStrategicQA"] = "ORIGINAL_STRATEGIC_UI PASS"
         tests["OriginalStoryReportQA"] = "ORIGINAL_STORY_REPORT_UI PASS"
         tests["OriginalServicesQA"] = "ORIGINAL_SERVICES_UI PASS"
+        tests["SkillAreaPresentationQA"] = "SKILL_AREA_UI PASS"
     if args.legal or args.require_campaign:
         for mode in chain_ids:
             tests[f"NativeCampaignProbe_{mode}"] = "NATIVE_CAMPAIGN completed="
@@ -230,6 +232,8 @@ def main() -> int:
         if test in {"NativeServicesUI", "OriginalServicesQA"}:
             command = [sys.executable, str(ROOT / "tools" / "verify_services_ui.py")]
             if test == "OriginalServicesQA": command.append("--render")
+        if test == "SkillAreaPresentationQA":
+            command = [sys.executable, str(ROOT / "tools" / "verify_skill_area_ui.py"), "--render"]
         if test == "NativeBattleANM":
             command = [sys.executable, str(ROOT / "tools" / "verify_anm_battle.py")]
         if test == "StoryStreamContract":
