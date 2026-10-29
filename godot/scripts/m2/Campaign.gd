@@ -36,6 +36,9 @@ var shop_item_page := 0
 var shop_people_page := 0
 var shop_person := -100
 var shop_pending: Dictionary = {}
+# Modern shop input is opt-out so native input/palette fixtures can retain their
+# exact original contract without making normal players use drag-only input.
+var shop_convenience_enabled := true
 var info_panel: CanvasLayer
 var toast: Label
 var toast_bg: NinePatchRect
@@ -51,6 +54,10 @@ func _notification(what:int) -> void:
 	var previous:=_drag_state
 	_drag_state={}
 	if get_viewport().gui_is_drag_successful():return
+	if previous.kind=="shop" and shop_convenience_enabled:
+		_shop_clear_interaction()
+		if is_instance_valid(previous.ui) and ui_root==previous.ui:call_deferred("_render_shop")
+		return
 	# A cancelled/invalid drop is not a click selection or a transaction.
 	shop_pending=previous.pending
 	k04_source=int(previous.source);k04_held=int(previous.held)
@@ -125,6 +132,7 @@ func _button(text: String, pos: Vector2, size: Vector2,
 
 
 func _clear_ui() -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	if is_instance_valid(panel_root):
 		panel_root.set_process_input(false);panel_root.hide();panel_root.queue_free()
 		panel_root = null
@@ -463,6 +471,7 @@ func _shop_title(kind: String) -> String:
 
 
 func _open_shop(kind: String, selling: bool = false) -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	# Original K01 initialization only, not every redraw or arbitrary person.
 	if kind!="material":
 		for person in _shop_roster():state.InventorySlots.compact(person.get("item_slots",[]))
@@ -474,6 +483,7 @@ func _open_shop(kind: String, selling: bool = false) -> void:
 
 
 func _shop_mode(mode_: int) -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	if mode_==shop_mode:return
 	shop_mode=mode_;shop_item_page=0;shop_people_page=0;shop_pending.clear()
 	var roster:=_shop_roster();shop_person=int(roster[0].pid) if not roster.is_empty() else -999
@@ -555,6 +565,7 @@ func _show_service(screen:String) -> void:
 	preload("res://scripts/ui/OriginalPaletteFade.gd").discard_buffered_input(get_tree())
 
 func _service_return_town() -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	preload("res://scripts/ui/OriginalPaletteFade.gd").play(ui_root,false)
 	_show_town(selected_town)
 	preload("res://scripts/ui/OriginalPaletteFade.gd").play(ui_root,true)
@@ -579,6 +590,7 @@ func _info_right_input(event: InputEvent, kind: String, id: int) -> void:
 
 func _open_original_info(kind: String, id: int) -> void:
 	if is_instance_valid(info_panel):return
+	if shop_convenience_enabled:_shop_clear_interaction()
 	info_panel=preload("res://scripts/ui/OriginalInfo.gd").new()
 	add_child(info_panel)
 	var origin_ui=ui_root
@@ -594,6 +606,7 @@ func _open_original_info(kind: String, id: int) -> void:
 
 
 func _service_confirm(prompt:String,callback:Callable) -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	_close_panel()
 	panel_root=preload("res://scripts/ui/OriginalConfirm.gd").new();ui_root.add_child(panel_root)
 	var dialog=panel_root
@@ -601,8 +614,10 @@ func _service_confirm(prompt:String,callback:Callable) -> void:
 	dialog.answered.connect(func(yes:bool):_close_panel();callback.call(yes))
 
 func _service_notice(value:String) -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	_close_panel()
-	panel_root=preload("res://scripts/ui/OriginalNotice.gd").new();ui_root.add_child(panel_root)
+	panel_root=preload("res://scripts/ui/ShopNotice.gd").new() if shop_convenience_enabled and mode=="shop" else preload("res://scripts/ui/OriginalNotice.gd").new()
+	ui_root.add_child(panel_root)
 	panel_root.setup(font,value,preload("res://scripts/ui/OriginalPalette.gd").colors("K01"))
 	panel_root.closed.connect(_close_panel)
 
@@ -616,6 +631,7 @@ func _shop_bulk_input(event: InputEvent) -> void:
 
 func _shop_bulk_sell() -> void:
 	if shop_mode!=2:return
+	if shop_convenience_enabled:_shop_clear_interaction()
 	# Preserve the original odd boundary: individual military pages include80,
 	# but bulk military starts81; bulk grocery includes80. Round each kind once.
 	for iid in range(81 if shop_kind=="junxie" else 0,156 if shop_kind=="junxie" else 81):
@@ -627,6 +643,7 @@ func _shop_bulk_sell() -> void:
 
 
 func _shop_page(delta: int, people: bool) -> void:
+	if shop_convenience_enabled:_shop_clear_interaction()
 	if people:shop_people_page+=delta
 	else:shop_item_page+=delta
 	shop_pending.clear();_render_shop()
@@ -646,7 +663,85 @@ func _shop_target(pid: int) -> void:
 	else:_shop_commit("person",pid,false)
 
 
+func _shop_clear_interaction() -> void:
+	shop_pending.clear()
+	if _drag_state.get("kind","")=="shop":_drag_state.clear()
+	if is_instance_valid(service_screen) and service_screen.kind=="shop":service_screen.clear_shop_interaction()
+
+
+func _shop_cancel_selection() -> void:
+	_shop_clear_interaction()
+	_render_shop()
+
+
+func _shop_failure(message:String) -> void:
+	_shop_cancel_selection()
+	_service_notice(message)
+
+
+func _shop_continue_sale(iid:int) -> void:
+	# Keep only the selected kind, never the old slot: removing an item compacts
+	# personal bags and may move a different kind into that slot immediately.
+	_shop_clear_interaction()
+	for entry in _shop_stock():
+		if int(entry.id)==iid:
+			shop_pending=entry.duplicate(true)
+			break
+	_render_shop()
+
+
+func _shop_commit_convenient(destination:String,pid:int,confirmed:bool) -> void:
+	if shop_pending.is_empty():return
+	# Validate the destination and source again at commit, never on mouse DOWN.
+	if not (destination=="person" or destination=="store" and shop_mode in [0,1] or destination=="sell" and shop_mode in [1,2]):
+		_shop_cancel_selection();return
+	var iid:=int(shop_pending.get("id",-1))
+	if iid<0 or not shop_mode in [0,1,2]:_shop_cancel_selection();return
+	var record:Dictionary=state.item(iid)
+	var target=state.deploy_member(pid)
+	var source=state.deploy_member(shop_person)
+	if shop_mode==0:
+		var available:=false
+		for entry in _shop_stock():
+			if int(entry.id)==iid:available=true;break
+		if not available:_shop_failure("商品已变化，请重新选择。");return
+	elif shop_mode==1:
+		if source==null:_shop_failure("物品来源已变化，请重新选择。");return
+		var slots:Array=source.get("item_slots",[])
+		var index:=int(shop_pending.get("slot",-1))
+		if index<0 or index>=slots.size() or int(slots[index])!=iid+1:
+			_shop_failure("物品来源已变化，请重新选择。");return
+	elif state.item_count(iid)<=0:_shop_failure("库房中已没有这件物品。");return
+	if destination=="person":
+		if target==null:_shop_failure("请选择有效的人物。");return
+		if shop_mode==1 and source==target:_shop_failure("请选择其他人物或库房。");return
+		if not (target.get("item_slots",[]) as Array).has(0):_shop_failure("该人物携带物品已满！");return
+		if not confirmed and not state.item_compatible(target,iid):
+			var pending:=shop_pending.duplicate(true)
+			var source_person:=shop_person
+			var source_mode:=shop_mode
+			_service_confirm("不能用，保留吗",func(yes:bool):
+				if yes and mode=="shop" and shop_mode==source_mode and shop_person==source_person:
+					shop_pending=pending;_shop_commit(destination,pid,true)
+				else:_shop_cancel_selection()
+			)
+			return
+	if shop_mode==0:
+		if state.money<int(record.get("price",0)):_shop_failure("资金不够！");return
+		state.money-=int(record.get("price",0))
+	elif shop_mode==2:state.add_item(iid,-1)
+	else:state.InventorySlots.remove_id(source.get("item_slots",[]),iid+1)
+	if destination=="person":state.InventorySlots.add_id(target.get("item_slots",[]),iid+1)
+	elif destination=="sell":state.money+=int(record.get("price",0))*(7-state.difficulty)/10
+	elif destination=="store":state.add_item(iid,1)
+	if destination=="sell":_shop_continue_sale(iid)
+	else:_shop_cancel_selection()
+
+
 func _shop_commit(destination: String, pid: int, confirmed: bool) -> void:
+	if shop_convenience_enabled:
+		_shop_commit_convenient(destination,pid,confirmed)
+		return
 	if shop_pending.is_empty():return
 	var iid:=int(shop_pending.id)
 	var record:Dictionary=state.item(iid)
@@ -685,13 +780,28 @@ func _shop_material(id: int) -> void:
 	var material:Dictionary=state.material(id)
 	var price:=int(material.get("price",0))
 	if price<=0:return
+	var maximum:int=mini(1000/price,state.money/price)
+	if shop_convenience_enabled:
+		_shop_clear_interaction()
+		_close_panel()
+		panel_root=preload("res://scripts/ui/ShopQuantity.gd").new();ui_root.add_child(panel_root)
+		panel_root.setup(font,str(material.name),str(material.unit),price,maximum,state.money)
+		panel_root.chosen.connect(func(count:int):
+			_close_panel()
+			var current_maximum:int=mini(1000/price,state.money/price)
+			if count>0 and count<=current_maximum:
+				state.money-=count*price;state.add_material(id,count)
+			elif count>0:_service_notice("资金或可购数量已变化，请重新选择。")
+			_render_shop()
+		)
+		panel_root.cancelled.connect(func():_close_panel();_render_shop())
+		return
 	var stock:=_shop_stock()
 	for slot in range(stock.size()):
 		if int(stock[slot].id)==id:
 			# 436AFC uses grid-slot price here, mapped-ID price below.
 			if state.money<int(state.material(slot).get("price",0)):return
 			break
-	var maximum:int=mini(1000/price,state.money/price)
 	_close_panel()
 	panel_root=preload("res://scripts/ui/OriginalQuantity.gd").new();ui_root.add_child(panel_root)
 	panel_root.setup(font,preload("res://scripts/ui/OriginalPalette.gd").colors("K01"),service_screen.quantity_backdrop(),maximum,str(material.name),str(material.unit))

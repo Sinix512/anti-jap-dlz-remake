@@ -31,6 +31,8 @@ func down(point:Vector2) -> void:
 func run() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://../out/ui_services"))
 	c=load("res://scripts/m4/Campaign.gd").new();root.add_child(c);c.qa_mode=true;c.setup(load("res://assets/font/hzk16.fnt"));c.set_process(false)
+	# Explicit legacy rendering oracle, not a claim about the modern shop UI.
+	c.shop_convenience_enabled=false
 	for i in range(22):c.state.set_person_side(i,0)
 	c.state.money=12345;c.selected_town=1
 	c.state.protagonist.item_slots=[82,132,1,2,3,4,5,0];c.state.protagonist.mine_slots=[1,11,21,31,2,12,22,32]

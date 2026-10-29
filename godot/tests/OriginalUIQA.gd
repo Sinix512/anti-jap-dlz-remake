@@ -52,6 +52,8 @@ func run() -> void:
 	await shot("01_title")
 	main._show_character_create();await shot("02_creation")
 	main._start_campaign();camp=main.campaign
+	# Native screenshot contracts remain isolated from the modern shop UI.
+	camp.shop_convenience_enabled=false
 	camp.state.data=camp.state.data.duplicate(true)
 	camp.state.data.meta.save_prefix="dlz_qa_ui_"
 	camp._show_town(0);await shot("03_town")

@@ -22,6 +22,9 @@ func ids(stock:Array) -> Array:
 	return stock.map(func(entry):return int(entry.id))
 func run() -> void:
 	c=load("res://scripts/m4/Campaign.gd").new();root.add_child(c);c.setup(load("res://assets/font/hzk16.fnt"));c.qa_mode=true
+	# Legacy quantity gestures are deliberate here; default modern transactions
+	# and quantity confirmation are covered by ShopConvenienceTest.
+	c.shop_convenience_enabled=false
 	var raw:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://../data/town.json"))
 	c.state.money=100000
 	# Every actual catalog entry fits the two original rows; duplicates in the

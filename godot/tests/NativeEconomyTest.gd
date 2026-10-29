@@ -25,7 +25,9 @@ func run() -> void:
 	camp._shop_commit("person",-100,false)
 	if not state.item_compatible(state.protagonist,iid):
 		check(state.money==before-price and state.protagonist.item_slots==slots_before,"incompatible prompt no side effects")
-		camp._close_panel();camp._shop_commit("person",-100,true)
+		# Confirm through the dialog's connection: the modern modal intentionally
+		# clears the live selection and restores its frozen source only on Yes.
+		camp.panel_root.answered.emit(true)
 	check(state.money==before-price*2 and state.protagonist.item_slots.has(iid+1),"buy into person after confirmation")
 	camp._shop_mode(1);camp.shop_person=-100
 	var source:Array=camp._shop_stock()

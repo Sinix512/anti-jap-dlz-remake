@@ -21,6 +21,9 @@ func run() -> void:
 	check(fade.colors_at([0,1,4,128,252],32,true)==[0,1,4,128,128],"native fade in approaches target4 per component")
 	check(fade.colors_at([252,128,0],63,false)==[0,0,0] and fade.colors_at([252,128,0],64,false)==[0,0,0],"native63 black64 redundant write")
 	c=load("res://scripts/m4/Campaign.gd").new();root.add_child(c);c.setup(load("res://assets/font/hzk16.fnt"));c.qa_mode=true;s=c.state
+	# This fixture retains the native input contract; modern defaults have their
+	# own real-input coverage in ShopConvenienceTest/ShopQuantityTest.
+	c.shop_convenience_enabled=false
 	for i in range(22):s.set_person_side(i,0)
 	s.money=10000;c.selected_town=1;c._open_shop("junxie");await process_frame
 	check(c.shop_person==-100 and c.shop_people_page==0 and c.shop_mode==0,"K01 enter first original roster person")

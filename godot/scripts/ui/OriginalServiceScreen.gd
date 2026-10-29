@@ -19,6 +19,15 @@ var timer_count:int:
 		if campaign!=null:campaign.native_service_timer_count=value
 var elapsed:=0.0
 var enabled:=true
+# The original path below stays intact. These fields belong only to the
+# opt-in-by-default click/drag adapter, not to native fixture state.
+const SHOP_DRAG_THRESHOLD:=6.0
+var shop_pointer_active:=false
+var shop_down_point:=Vector2.ZERO
+var shop_down_item:Dictionary={}
+var shop_down_target:Dictionary={}
+var shop_dragging:=false
+var shop_swallow_release:=false
 
 func setup(owner_campaign,screen:String) -> void:
 	campaign=owner_campaign;kind=screen
@@ -106,6 +115,8 @@ func _draw_shop() -> void:
 		if mode in [2,3]:
 			_text(str(campaign.state.material_count(int(entry.id)) if mode==3 else campaign.state.item_count(int(entry.id))),x,y+80)
 		_text(str(rec.get("price",0)),x,y+(96 if mode in [2,3] else 80))
+		if campaign.shop_convenience_enabled and not campaign.shop_pending.is_empty() and int(campaign.shop_pending.get("id",-1))==int(entry.id) and int(campaign.shop_pending.get("slot",-1))==int(entry.slot):
+			_outline(Vector2(x-2,y-2),Vector2(52,114 if mode==2 else 98))
 	var people:Array=campaign._shop_roster()
 	for offset in range(mini(16,people.size()-campaign.shop_people_page*8)):
 		var member:Dictionary=people[campaign.shop_people_page*8+offset]
@@ -114,6 +125,26 @@ func _draw_shop() -> void:
 		_text("LV  "+str(member.level),x,y+32);_text(str(member.name),x,y+48)
 		_capacity(member,Vector2(x+52,y+44),true)
 		if mode==1 and int(member.pid)==campaign.shop_person:_outline(Vector2(x,y))
+	if campaign.shop_convenience_enabled:_draw_shop_help()
+
+func _shop_footer_text(value:String,y:int,color:Color) -> void:
+	var text:=value.replace("\\u3000","　")
+	while text.length()>0 and campaign.font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x>600:text=text.left(text.length()-1)
+	draw_string(campaign.font,Vector2(20,y+campaign.font.get_ascent(16)),text,HORIZONTAL_ALIGNMENT_LEFT,600,16,color)
+
+func _draw_shop_help() -> void:
+	# This unused footer is below every person cell, not over shop controls.
+	draw_rect(Rect2(0,434,640,46),Color("#192632"))
+	var hint:String={0:"点选商品→点人物/库房；双击商品快速买入库房",1:"点选随身物品→人物/库房；可重复点上交，每次1件",2:"点选库房物品→人物；可重复点上交每次1件；滚轮翻页",3:"点击材料选择数量；确认后才扣款"}.get(campaign.shop_mode,"")
+	_shop_footer_text(hint,438,Color("#f2d78a"))
+	var detail:="右键：详情/取消　Esc：取消/返回　人物区滚轮：翻页"
+	if not campaign.shop_pending.is_empty():
+		var record:Dictionary=campaign.shop_pending.get("record",{})
+		var price:=int(campaign.state.item(int(campaign.shop_pending.id)).get("price",0))
+		var label:="买入价" if campaign.shop_mode==0 else "上交价"
+		var amount:int=price if campaign.shop_mode==0 else price*(7-campaign.state.difficulty)/10
+		detail="已选：%s　%s：%d　右键/Esc取消"%[str(record.get("name","")).replace("\\u3000","　"),label,amount]
+	_shop_footer_text(detail,460,Color("#e5edf4"))
 
 func _draw_forge() -> void:
 	draw_rect(Rect2(22,34,600,66),Palette.color_at(palette,0xFF))
@@ -205,6 +236,9 @@ func _control_at(point:Vector2) -> String:
 func _input(event:InputEvent) -> void:
 	if not enabled or not is_visible_in_tree() or campaign._service_input_blocked():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if kind=="shop" and campaign.shop_convenience_enabled:
+		_shop_convenience_input(event)
+		return
 	if event is InputEventMouseMotion:
 		if not drag.is_empty():drag_point=_drag_origin(event.position);queue_redraw()
 		return
@@ -233,6 +267,98 @@ func _input(event:InputEvent) -> void:
 			if old==control:_activate(old)
 			return
 		_release_selection(point)
+
+func clear_shop_interaction() -> void:
+	pressed="";drag.clear();shop_pointer_active=false
+	shop_down_item.clear();shop_down_target.clear();shop_dragging=false
+	shop_swallow_release=false
+	queue_redraw()
+
+func _shop_destination_at(point:Vector2) -> Dictionary:
+	var pid:=shop_person_at(point)
+	if pid!=-999:return {"destination":"person","pid":pid}
+	if Rect2(536,134,64,54).has_point(point) and campaign.shop_mode in [1,2]:return {"destination":"sell","pid":-1}
+	if Rect2(536,204,64,54).has_point(point) and campaign.shop_mode in [0,1]:return {"destination":"store","pid":-1}
+	return {}
+
+func _shop_same_source(first:Dictionary,second:Dictionary) -> bool:
+	return not first.is_empty() and not second.is_empty() and int(first.id)==int(second.id) and int(first.slot)==int(second.slot)
+
+func _shop_convenience_input(event:InputEvent) -> void:
+	if event is InputEventKey:
+		if event.pressed and not event.echo and event.keycode==KEY_ESCAPE:
+			if not campaign.shop_pending.is_empty() or shop_pointer_active or not drag.is_empty():campaign._shop_cancel_selection()
+			else:campaign._service_return_town()
+		return
+	if event is InputEventMouseMotion:
+		if shop_pointer_active and not shop_down_item.is_empty() and campaign.shop_mode!=3:
+			if event.position.distance_to(shop_down_point)>SHOP_DRAG_THRESHOLD:shop_dragging=true
+			if shop_dragging:
+				drag={"bank":"goods","icon":int(shop_down_item.record.goods)}
+				drag_point=_drag_origin(event.position);queue_redraw()
+		return
+	if not event is InputEventMouseButton:return
+	var point:Vector2=event.position
+	if event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
+		if event.pressed:
+			var delta:=-1 if event.button_index==MOUSE_BUTTON_WHEEL_UP else 1
+			if Rect2(24,304,512,128).has_point(point):campaign._shop_page(delta,true)
+			elif campaign.shop_mode==2 and Rect2(24,28,384,240).has_point(point):campaign._shop_page(delta,false)
+		return
+	if event.button_index==MOUSE_BUTTON_RIGHT:
+		if event.pressed:
+			campaign._shop_cancel_selection()
+			if event.double_click and campaign.shop_mode==2 and Rect2(536,134,64,54).has_point(point):campaign._shop_bulk_input(event)
+		else:_right_up(point)
+		return
+	if event.button_index!=MOUSE_BUTTON_LEFT:return
+	if not event.pressed and shop_swallow_release:
+		shop_swallow_release=false
+		return
+	var control:=_control_at(point)
+	if event.pressed:
+		# A release swallowed by a modal cannot suppress a later fresh gesture.
+		shop_swallow_release=false
+		if shop_pointer_active:return
+		if not control.is_empty():
+			campaign._shop_clear_interaction()
+			if control.begins_with("mode"):campaign._shop_mode(control.trim_prefix("mode").to_int())
+			else:pressed=control
+			queue_redraw();return
+		var item:=shop_stock_at(point)
+		if not item.is_empty():
+			campaign._shop_clear_interaction()
+			if campaign.shop_mode==0 and event.double_click:
+				campaign._shop_pick(item);campaign._shop_commit("store",-1,false)
+				shop_swallow_release=true
+				return
+			shop_pointer_active=true;shop_down_point=point;shop_down_item=item.duplicate(true)
+			if campaign.shop_mode!=3:campaign._shop_pick(item)
+			queue_redraw();return
+		var target:=_shop_destination_at(point)
+		if not campaign.shop_pending.is_empty() and not target.is_empty():
+			shop_pointer_active=true;shop_down_point=point;shop_down_target=target
+		elif campaign.shop_mode==1 and not target.is_empty() and target.destination=="person":
+			campaign._shop_clear_interaction();campaign.shop_person=int(target.pid);campaign._render_shop()
+		else:campaign._shop_cancel_selection()
+		return
+	if not pressed.is_empty():
+		var old:=pressed;pressed="";queue_redraw()
+		if old==control:_activate(old)
+		return
+	if not shop_pointer_active:return
+	var source:=shop_down_item.duplicate(true)
+	var target:=shop_down_target.duplicate(true)
+	var click:=not shop_dragging and point.distance_to(shop_down_point)<=SHOP_DRAG_THRESHOLD
+	clear_shop_interaction()
+	if not source.is_empty():
+		if click and _shop_same_source(source,shop_stock_at(point)):
+			if campaign.shop_mode==3:campaign._shop_material(int(source.id))
+			else:campaign._render_shop()
+		elif campaign.shop_mode==3:campaign._shop_cancel_selection()
+		else:_drop(point)
+	elif click and not target.is_empty() and target==_shop_destination_at(point):campaign._shop_commit(str(target.destination),int(target.pid),false)
+	else:campaign._shop_cancel_selection()
 func _down_source(point:Vector2) -> void:
 	if kind=="shop":
 		if campaign.shop_mode==3:return
