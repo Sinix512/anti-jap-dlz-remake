@@ -2,7 +2,9 @@
 
 《抗日：地雷战》（1998）的Godot复刻。原版`../dlz/ANTI-JAP/`只读，未运行EXE。
 
-**47关正常成长尚未完成验收，goal active；旧增强bot47/47已撤回。**
+**2026-10-27：用户已停止旧47关目标，本会话改为整理当前实现版攻略；可玩性/成长验证由另一会话负责。好玩优先，不要求严格原味或兼容原版旧存档。踩雷软锁仍有未解决反馈。以下验收/试验状态为历史记录，不是自动续跑指令。**
+
+[玩家攻略](docs/guide/README.md) · [离线合订版](docs/guide/guide.html) · [地形图鉴](docs/guide/terrain.md) · [兵种范围图](docs/guide/unit_ranges.md) · [全部数值](docs/guide/reference.md) · [47关任务事件](docs/guide/missions.md)
 
 [交接](HANDOVER.md) · [缺口](GAPS.md) · [计划](PLAN.md) · [验收](ACCEPTANCE.md) · [试玩](MANUAL_PLAYTEST.md)
 

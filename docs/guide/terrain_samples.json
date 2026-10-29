@@ -1,0 +1,536 @@
+[
+  {
+    "type": 0,
+    "appearance": "密植草木/作物",
+    "map_cells": 5209,
+    "samples": [
+      {
+        "tileset": 11,
+        "tile": 483,
+        "occurrences": 914,
+        "mission_index": 2,
+        "x": 11,
+        "y": 5
+      },
+      {
+        "tileset": 9,
+        "tile": 483,
+        "occurrences": 681,
+        "mission_index": 27,
+        "x": 19,
+        "y": 10
+      },
+      {
+        "tileset": 2,
+        "tile": 483,
+        "occurrences": 437,
+        "mission_index": 1,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "tileset": 5,
+        "tile": 366,
+        "occurrences": 197,
+        "mission_index": 10,
+        "x": 9,
+        "y": 0
+      }
+    ]
+  },
+  {
+    "type": 1,
+    "appearance": "田圃/草灌边缘",
+    "map_cells": 1398,
+    "samples": [
+      {
+        "tileset": 14,
+        "tile": 257,
+        "occurrences": 109,
+        "mission_index": 32,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "tileset": 6,
+        "tile": 159,
+        "occurrences": 77,
+        "mission_index": 15,
+        "x": 0,
+        "y": 7
+      },
+      {
+        "tileset": 2,
+        "tile": 159,
+        "occurrences": 65,
+        "mission_index": 1,
+        "x": 17,
+        "y": 0
+      },
+      {
+        "tileset": 7,
+        "tile": 284,
+        "occurrences": 63,
+        "mission_index": 12,
+        "x": 16,
+        "y": 24
+      }
+    ]
+  },
+  {
+    "type": 2,
+    "appearance": "草丛/绿地",
+    "map_cells": 1760,
+    "samples": [
+      {
+        "tileset": 12,
+        "tile": 87,
+        "occurrences": 806,
+        "mission_index": 37,
+        "x": 8,
+        "y": 0
+      },
+      {
+        "tileset": 4,
+        "tile": 427,
+        "occurrences": 66,
+        "mission_index": 7,
+        "x": 6,
+        "y": 1
+      },
+      {
+        "tileset": 12,
+        "tile": 253,
+        "occurrences": 34,
+        "mission_index": 37,
+        "x": 14,
+        "y": 2
+      },
+      {
+        "tileset": 9,
+        "tile": 319,
+        "occurrences": 27,
+        "mission_index": 25,
+        "x": 24,
+        "y": 2
+      }
+    ]
+  },
+  {
+    "type": 3,
+    "appearance": "保留未用",
+    "map_cells": 0,
+    "samples": []
+  },
+  {
+    "type": 4,
+    "appearance": "山石/设施",
+    "map_cells": 458,
+    "samples": [
+      {
+        "tileset": 11,
+        "tile": 101,
+        "occurrences": 32,
+        "mission_index": 0,
+        "x": 3,
+        "y": 19
+      },
+      {
+        "tileset": 15,
+        "tile": 439,
+        "occurrences": 32,
+        "mission_index": 39,
+        "x": 0,
+        "y": 4
+      },
+      {
+        "tileset": 11,
+        "tile": 141,
+        "occurrences": 31,
+        "mission_index": 0,
+        "x": 18,
+        "y": 0
+      },
+      {
+        "tileset": 11,
+        "tile": 3,
+        "occurrences": 31,
+        "mission_index": 0,
+        "x": 1,
+        "y": 7
+      }
+    ]
+  },
+  {
+    "type": 5,
+    "appearance": "普通地面/道路",
+    "map_cells": 35627,
+    "samples": [
+      {
+        "tileset": 9,
+        "tile": 123,
+        "occurrences": 4464,
+        "mission_index": 25,
+        "x": 2,
+        "y": 0
+      },
+      {
+        "tileset": 2,
+        "tile": 0,
+        "occurrences": 4157,
+        "mission_index": 1,
+        "x": 9,
+        "y": 0
+      },
+      {
+        "tileset": 11,
+        "tile": 0,
+        "occurrences": 3495,
+        "mission_index": 0,
+        "x": 18,
+        "y": 10
+      },
+      {
+        "tileset": 9,
+        "tile": 5,
+        "occurrences": 2639,
+        "mission_index": 25,
+        "x": 8,
+        "y": 9
+      }
+    ]
+  },
+  {
+    "type": 6,
+    "appearance": "深灰路面",
+    "map_cells": 167,
+    "samples": [
+      {
+        "tileset": 9,
+        "tile": 156,
+        "occurrences": 33,
+        "mission_index": 25,
+        "x": 10,
+        "y": 1
+      },
+      {
+        "tileset": 9,
+        "tile": 154,
+        "occurrences": 16,
+        "mission_index": 25,
+        "x": 13,
+        "y": 2
+      },
+      {
+        "tileset": 7,
+        "tile": 397,
+        "occurrences": 12,
+        "mission_index": 12,
+        "x": 1,
+        "y": 8
+      },
+      {
+        "tileset": 7,
+        "tile": 396,
+        "occurrences": 11,
+        "mission_index": 12,
+        "x": 1,
+        "y": 7
+      }
+    ]
+  },
+  {
+    "type": 7,
+    "appearance": "铁路",
+    "map_cells": 227,
+    "samples": [
+      {
+        "tileset": 6,
+        "tile": 344,
+        "occurrences": 141,
+        "mission_index": 15,
+        "x": 0,
+        "y": 12
+      },
+      {
+        "tileset": 14,
+        "tile": 199,
+        "occurrences": 86,
+        "mission_index": 32,
+        "x": 3,
+        "y": 0
+      }
+    ]
+  },
+  {
+    "type": 8,
+    "appearance": "保留未用",
+    "map_cells": 0,
+    "samples": []
+  },
+  {
+    "type": 9,
+    "appearance": "房屋",
+    "map_cells": 1063,
+    "samples": [
+      {
+        "tileset": 9,
+        "tile": 97,
+        "occurrences": 218,
+        "mission_index": 25,
+        "x": 13,
+        "y": 9
+      },
+      {
+        "tileset": 9,
+        "tile": 96,
+        "occurrences": 100,
+        "mission_index": 25,
+        "x": 11,
+        "y": 23
+      },
+      {
+        "tileset": 9,
+        "tile": 84,
+        "occurrences": 56,
+        "mission_index": 25,
+        "x": 24,
+        "y": 9
+      },
+      {
+        "tileset": 9,
+        "tile": 83,
+        "occurrences": 51,
+        "mission_index": 25,
+        "x": 22,
+        "y": 13
+      }
+    ]
+  },
+  {
+    "type": 10,
+    "appearance": "城门/石墙",
+    "map_cells": 40,
+    "samples": [
+      {
+        "tileset": 9,
+        "tile": 24,
+        "occurrences": 11,
+        "mission_index": 33,
+        "x": 26,
+        "y": 9
+      },
+      {
+        "tileset": 9,
+        "tile": 33,
+        "occurrences": 11,
+        "mission_index": 33,
+        "x": 27,
+        "y": 9
+      },
+      {
+        "tileset": 9,
+        "tile": 25,
+        "occurrences": 7,
+        "mission_index": 33,
+        "x": 28,
+        "y": 11
+      },
+      {
+        "tileset": 9,
+        "tile": 34,
+        "occurrences": 7,
+        "mission_index": 33,
+        "x": 29,
+        "y": 11
+      }
+    ]
+  },
+  {
+    "type": 11,
+    "appearance": "石墙/设施",
+    "map_cells": 12,
+    "samples": [
+      {
+        "tileset": 11,
+        "tile": 64,
+        "occurrences": 3,
+        "mission_index": 0,
+        "x": 8,
+        "y": 16
+      },
+      {
+        "tileset": 9,
+        "tile": 24,
+        "occurrences": 2,
+        "mission_index": 33,
+        "x": 21,
+        "y": 21
+      },
+      {
+        "tileset": 9,
+        "tile": 33,
+        "occurrences": 2,
+        "mission_index": 33,
+        "x": 22,
+        "y": 21
+      },
+      {
+        "tileset": 9,
+        "tile": 25,
+        "occurrences": 2,
+        "mission_index": 33,
+        "x": 21,
+        "y": 22
+      }
+    ]
+  },
+  {
+    "type": 12,
+    "appearance": "牌楼/建筑",
+    "map_cells": 15,
+    "samples": [
+      {
+        "tileset": 9,
+        "tile": 95,
+        "occurrences": 8,
+        "mission_index": 33,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "tileset": 14,
+        "tile": 95,
+        "occurrences": 5,
+        "mission_index": 32,
+        "x": 26,
+        "y": 0
+      },
+      {
+        "tileset": 7,
+        "tile": 195,
+        "occurrences": 2,
+        "mission_index": 12,
+        "x": 8,
+        "y": 3
+      }
+    ]
+  },
+  {
+    "type": 13,
+    "appearance": "水边/桥面",
+    "map_cells": 220,
+    "samples": [
+      {
+        "tileset": 11,
+        "tile": 302,
+        "occurrences": 66,
+        "mission_index": 44,
+        "x": 0,
+        "y": 17
+      },
+      {
+        "tileset": 11,
+        "tile": 238,
+        "occurrences": 21,
+        "mission_index": 44,
+        "x": 0,
+        "y": 19
+      },
+      {
+        "tileset": 11,
+        "tile": 323,
+        "occurrences": 18,
+        "mission_index": 3,
+        "x": 10,
+        "y": 1
+      },
+      {
+        "tileset": 11,
+        "tile": 261,
+        "occurrences": 17,
+        "mission_index": 44,
+        "x": 0,
+        "y": 16
+      }
+    ]
+  },
+  {
+    "type": 14,
+    "appearance": "水面",
+    "map_cells": 3807,
+    "samples": [
+      {
+        "tileset": 11,
+        "tile": 302,
+        "occurrences": 465,
+        "mission_index": 2,
+        "x": 12,
+        "y": 0
+      },
+      {
+        "tileset": 6,
+        "tile": 185,
+        "occurrences": 316,
+        "mission_index": 15,
+        "x": 5,
+        "y": 3
+      },
+      {
+        "tileset": 4,
+        "tile": 302,
+        "occurrences": 284,
+        "mission_index": 7,
+        "x": 26,
+        "y": 4
+      },
+      {
+        "tileset": 9,
+        "tile": 419,
+        "occurrences": 265,
+        "mission_index": 25,
+        "x": 31,
+        "y": 0
+      }
+    ]
+  },
+  {
+    "type": 15,
+    "appearance": "林木/墙体/障碍",
+    "map_cells": 9428,
+    "samples": [
+      {
+        "tileset": 11,
+        "tile": 87,
+        "occurrences": 1211,
+        "mission_index": 0,
+        "x": 10,
+        "y": 2
+      },
+      {
+        "tileset": 9,
+        "tile": 55,
+        "occurrences": 409,
+        "mission_index": 25,
+        "x": 8,
+        "y": 8
+      },
+      {
+        "tileset": 9,
+        "tile": 4,
+        "occurrences": 352,
+        "mission_index": 25,
+        "x": 6,
+        "y": 8
+      },
+      {
+        "tileset": 9,
+        "tile": 72,
+        "occurrences": 274,
+        "mission_index": 25,
+        "x": 7,
+        "y": 28
+      }
+    ]
+  }
+]
