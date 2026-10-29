@@ -546,10 +546,12 @@ TRIGGERS = {
             _rule("occupy_%d_%d" % (x, y),
                   all_(cell(x, y, 1), flag("0x583F18", 0) if i == 0 else
                        flag("0x%06X" % (0x583F18 + i * 4), 0)),
-                  [message("0x472A44"), {"if": {"when": {"not": stage(14)},
-                    "then": [global_set("0x7D1648", 1)]}},
+                  # Intentional gameplay exception, user-approved 2026-10-29:
+                  # native 40A023 changes live Yulai to enemy after ANY crate.
+                  # TXT303 only reports a machine gun; keep his current faction.
+                  [message("0x472A44"),
                    set_flag("0x%06X" % (0x583F18 + i * 4), 1)],
-                  note="0x409FCA：5 个占位点之一")
+                  note="0x409FCA：5 个占位点之一；可玩性修正：不再执行原40A023将雨来改为敌方的写入")
             for i, (x, y) in enumerate([(25, 6), (32, 6), (39, 6), (44, 7), (43, 5)])
         ] + [
             _rule("refresh_remaining_crates_text", {}, [{"text_digit_from_flags": {

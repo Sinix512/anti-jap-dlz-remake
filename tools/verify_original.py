@@ -41,6 +41,7 @@ TESTS = {
     "OriginalItemsTest": "ORIGINAL_ITEMS checks=26 failures=0",
     "OriginalMinesTest": "ORIGINAL_MINES checks=30 failures=0",
     "OriginalFactionTest": "ORIGINAL_FACTION checks=36 failures=0",
+    "YulaiCrateFactionTest": "YULAI_CRATE_FACTION PASS",
     "OriginalTriggerPredicateTest": "ORIGINAL_TRIGGER_PREDICATE checks=60 failures=0",
     "OriginalRoundTailTest": "ORIGINAL_ROUND_TAIL checks=41 failures=0",
     "PublicRoundForecastTest": "PUBLIC_ROUND_FORECAST checks=605 failures=0",

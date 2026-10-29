@@ -1,6 +1,7 @@
 extends SceneTree
 # Static contracts: People.side controls statistics, XP and406C30 all128 scan.
 # Synthetic resolver fixtures, NOT legal campaign play/completion evidence.
+# L17 crate14 is an explicit user-approved gameplay exception (2026-10-29).
 const Builder=preload("res://scripts/m4/LevelBuilder.gd")
 const Codec=preload("res://scripts/battle/StateCodec.gd")
 var checks:=0
@@ -114,7 +115,7 @@ func run() -> void:
 			if kind=="person_side":side_events.append(payload))
 		if not active:b.remove_slot(14);b.remove_slot(20)
 		hero.set_tile(25,6);await b.scenario.on_tick()
-		check(int(fourteen.data.faction)==(1 if active else 0),"L17 crate14 faction write requires live stage %s"%active)
+		check(int(fourteen.data.faction)==0,"L17 gameplay exception: crate preserves Yulai faction, active=%s"%active)
 		for tile in [Vector2i(32,6),Vector2i(39,6),Vector2i(44,7),Vector2i(43,5)]:
 			hero.set_tile(tile.x,tile.y);await b.scenario.on_tick()
 		check(int(twenty.data.faction)==(1 if active else 0) and b.last_result=="victory","L17 final20 faction write requires live stage %s"%active)
