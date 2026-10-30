@@ -1,0 +1,190 @@
+{
+  "source": "../dlz/ANTI-JAP/ISO/抗日地雷战音效光盘.nrg",
+  "tracks": [
+    {
+      "track": 1,
+      "sector_bytes": 2048,
+      "index0_offset": 0,
+      "index1_offset": 307200,
+      "end_offset": 665600,
+      "byte_length": 358400,
+      "lba_index1": 0
+    },
+    {
+      "track": 2,
+      "sector_bytes": 2352,
+      "index0_offset": 1018400,
+      "index1_offset": 1018400,
+      "end_offset": 30437216,
+      "byte_length": 29418816,
+      "lba_index1": 325,
+      "sectors": 12508,
+      "duration_seconds": 166.77333333333334
+    },
+    {
+      "track": 3,
+      "sector_bytes": 2352,
+      "index0_offset": 30437216,
+      "index1_offset": 30437216,
+      "end_offset": 72716768,
+      "byte_length": 42279552,
+      "lba_index1": 12833,
+      "sectors": 17976,
+      "duration_seconds": 239.68
+    },
+    {
+      "track": 4,
+      "sector_bytes": 2352,
+      "index0_offset": 72716768,
+      "index1_offset": 72716768,
+      "end_offset": 93945920,
+      "byte_length": 21229152,
+      "lba_index1": 30809,
+      "sectors": 9026,
+      "duration_seconds": 120.34666666666666
+    },
+    {
+      "track": 5,
+      "sector_bytes": 2352,
+      "index0_offset": 93945920,
+      "index1_offset": 93945920,
+      "end_offset": 123115424,
+      "byte_length": 29169504,
+      "lba_index1": 39835,
+      "sectors": 12402,
+      "duration_seconds": 165.36
+    },
+    {
+      "track": 6,
+      "sector_bytes": 2352,
+      "index0_offset": 123115424,
+      "index1_offset": 123115424,
+      "end_offset": 159663152,
+      "byte_length": 36547728,
+      "lba_index1": 52237,
+      "sectors": 15539,
+      "duration_seconds": 207.18666666666667
+    },
+    {
+      "track": 7,
+      "sector_bytes": 2352,
+      "index0_offset": 159663152,
+      "index1_offset": 159663152,
+      "end_offset": 178679072,
+      "byte_length": 19015920,
+      "lba_index1": 67776,
+      "sectors": 8085,
+      "duration_seconds": 107.8
+    },
+    {
+      "track": 8,
+      "sector_bytes": 2352,
+      "index0_offset": 178679072,
+      "index1_offset": 178679072,
+      "end_offset": 195422960,
+      "byte_length": 16743888,
+      "lba_index1": 75861,
+      "sectors": 7119,
+      "duration_seconds": 94.92
+    },
+    {
+      "track": 9,
+      "sector_bytes": 2352,
+      "index0_offset": 195422960,
+      "index1_offset": 195422960,
+      "end_offset": 215330288,
+      "byte_length": 19907328,
+      "lba_index1": 82980,
+      "sectors": 8464,
+      "duration_seconds": 112.85333333333334
+    },
+    {
+      "track": 10,
+      "sector_bytes": 2352,
+      "index0_offset": 215330288,
+      "index1_offset": 215330288,
+      "end_offset": 245781632,
+      "byte_length": 30451344,
+      "lba_index1": 91444,
+      "sectors": 12947,
+      "duration_seconds": 172.62666666666667
+    },
+    {
+      "track": 11,
+      "sector_bytes": 2352,
+      "index0_offset": 245781632,
+      "index1_offset": 245781632,
+      "end_offset": 270564656,
+      "byte_length": 24783024,
+      "lba_index1": 104391,
+      "sectors": 10537,
+      "duration_seconds": 140.49333333333334
+    },
+    {
+      "track": 12,
+      "sector_bytes": 2352,
+      "index0_offset": 270564656,
+      "index1_offset": 270564656,
+      "end_offset": 298322960,
+      "byte_length": 27758304,
+      "lba_index1": 114928,
+      "sectors": 11802,
+      "duration_seconds": 157.36
+    },
+    {
+      "track": 13,
+      "sector_bytes": 2352,
+      "index0_offset": 298322960,
+      "index1_offset": 298322960,
+      "end_offset": 320398832,
+      "byte_length": 22075872,
+      "lba_index1": 126730,
+      "sectors": 9386,
+      "duration_seconds": 125.14666666666666
+    },
+    {
+      "track": 14,
+      "sector_bytes": 2352,
+      "index0_offset": 320398832,
+      "index1_offset": 320398832,
+      "end_offset": 331201568,
+      "byte_length": 10802736,
+      "lba_index1": 136116,
+      "sectors": 4593,
+      "duration_seconds": 61.24
+    },
+    {
+      "track": 15,
+      "sector_bytes": 2352,
+      "index0_offset": 331201568,
+      "index1_offset": 331201568,
+      "end_offset": 333708800,
+      "byte_length": 2507232,
+      "lba_index1": 140709,
+      "sectors": 1066,
+      "duration_seconds": 14.213333333333333
+    },
+    {
+      "track": 16,
+      "sector_bytes": 2352,
+      "index0_offset": 333708800,
+      "index1_offset": 333708800,
+      "end_offset": 336874592,
+      "byte_length": 3165792,
+      "lba_index1": 141775,
+      "sectors": 1346,
+      "duration_seconds": 17.946666666666665
+    },
+    {
+      "track": 17,
+      "sector_bytes": 2352,
+      "index0_offset": 336874592,
+      "index1_offset": 336874592,
+      "end_offset": 339029024,
+      "byte_length": 2154432,
+      "lba_index1": 143121,
+      "sectors": 916,
+      "duration_seconds": 12.213333333333333
+    }
+  ]
+}

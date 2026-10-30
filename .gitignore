@@ -36,3 +36,6 @@ save[0-9]*.dat*
 /save*.json
 hiscore.dat
 dlz_playtest*.jsonl
+
+# 本地原版归档不入库
+/anti-jap-original-data*.zip

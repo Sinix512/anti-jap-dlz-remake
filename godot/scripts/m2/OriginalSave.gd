@@ -1,7 +1,7 @@
 extends RefCounted
 
 ## 实验性原版28块布局：战略导出mode57；导入转战略状态，不声称战斗中途续存。
-## 静态证据见extract/research_save_20261025.md及审计；尚无原EXE回读实测。
+## 依据原版静态28块布局实现；尚无原EXE回读实测。
 const SIZE := 85072
 const BLOCK_SIZES := [4,4,4,4,700,4,4,4,4,4,64,76,56,380,8192,8192,16896,16896,320,320,80,40,32768,8,28,12,4,4]
 const SKILL_KEYS := ["buji","jili","yiliao","huogong","gunmu","leishi","weishe","saorao","pohuai","lueduo","fanjian","yibing","duzhan","ansha","shidu","kongxi"]

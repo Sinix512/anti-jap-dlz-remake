@@ -1,0 +1,327 @@
+{
+  "history_photos": [
+    {
+      "id": "npic_01",
+      "size": [
+        640,
+        366
+      ],
+      "original_position": [
+        0,
+        57
+      ],
+      "nearest_black_index": 30,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_02",
+      "size": [
+        489,
+        480
+      ],
+      "original_position": [
+        75,
+        0
+      ],
+      "nearest_black_index": 30,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_03",
+      "size": [
+        345,
+        480
+      ],
+      "original_position": [
+        147,
+        0
+      ],
+      "nearest_black_index": 32,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_04",
+      "size": [
+        571,
+        480
+      ],
+      "original_position": [
+        34,
+        0
+      ],
+      "nearest_black_index": 31,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_05",
+      "size": [
+        640,
+        449
+      ],
+      "original_position": [
+        0,
+        15
+      ],
+      "nearest_black_index": 31,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_06",
+      "size": [
+        640,
+        449
+      ],
+      "original_position": [
+        0,
+        15
+      ],
+      "nearest_black_index": 31,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_07",
+      "size": [
+        640,
+        460
+      ],
+      "original_position": [
+        0,
+        10
+      ],
+      "nearest_black_index": 31,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_08",
+      "size": [
+        640,
+        439
+      ],
+      "original_position": [
+        0,
+        20
+      ],
+      "nearest_black_index": 31,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_18",
+      "size": [
+        633,
+        480
+      ],
+      "original_position": [
+        3,
+        0
+      ],
+      "nearest_black_index": 32,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_19",
+      "size": [
+        640,
+        424
+      ],
+      "original_position": [
+        0,
+        28
+      ],
+      "nearest_black_index": 32,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_20",
+      "size": [
+        373,
+        480
+      ],
+      "original_position": [
+        133,
+        0
+      ],
+      "nearest_black_index": 30,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_21",
+      "size": [
+        380,
+        480
+      ],
+      "original_position": [
+        130,
+        0
+      ],
+      "nearest_black_index": 30,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_22",
+      "size": [
+        353,
+        480
+      ],
+      "original_position": [
+        143,
+        0
+      ],
+      "nearest_black_index": 32,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_25",
+      "size": [
+        609,
+        275
+      ],
+      "original_position": [
+        15,
+        102
+      ],
+      "nearest_black_index": 32,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "npic_29",
+      "size": [
+        640,
+        445
+      ],
+      "original_position": [
+        0,
+        17
+      ],
+      "nearest_black_index": 0,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "history_77_1",
+      "size": [
+        640,
+        480
+      ],
+      "original_position": [
+        0,
+        0
+      ],
+      "nearest_black_index": 0,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "history_77_2",
+      "size": [
+        580,
+        480
+      ],
+      "original_position": [
+        30,
+        0
+      ],
+      "nearest_black_index": 0,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "history_918_2",
+      "size": [
+        640,
+        276
+      ],
+      "original_position": [
+        0,
+        102
+      ],
+      "nearest_black_index": 0,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "history_918_3",
+      "size": [
+        640,
+        367
+      ],
+      "original_position": [
+        0,
+        56
+      ],
+      "nearest_black_index": 0,
+      "fill_RGB": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

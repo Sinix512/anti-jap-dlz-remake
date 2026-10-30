@@ -51,7 +51,7 @@ def expected(name,a):
     image=Image.new('RGBA',(640,480),tuple(BATTLE[255])+(255,))
     if name=='exit10':return image
     panel=(GAME/'MENU03.IMG').read_bytes()[16:16+128*88];image.alpha_composite(raster(panel,(128,88),BATTLE),(320,200))
-    lut=bytes(json.loads((ROOT/'extract/research_ui_controls_20261025.json').read_text())['menu13']['selected_background_lut'])
+    lut=bytes(json.loads((ROOT/'extract/contracts/ui_controls.json').read_text())['menu13']['selected_background_lut'])
     strip=b''.join(panel[y*128+4:y*128+124] for y in range(32,56)).translate(lut)
     image.alpha_composite(raster(strip,(120,24),BATTLE),(324,232))
     text(image,'退出吗?',356,204,BATTLE[0x7F]);text(image,'是',376,236,(252,140,0));text(image,'否',376,260,BATTLE[0x7F]);return image

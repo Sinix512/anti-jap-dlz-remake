@@ -1,6 +1,6 @@
 """Exact transcription of DLZ.exe's 47-entry per-round table at 0x446750.
 
-Read-only evidence: extract/research_ai_combat_asm/T750_Lxx.json (REA/Ghidra).
+Static rule facts decoded from the per-turn table at 0x446750.
 NOT the 0x4465D0 intro table. Called by 0x40497D after turn increments,
 then terrain recovery (0x42A395), mine timers (0x41F2E2), then 0x446510.
 Rules must run ONCE PER ROUND, in listed source order; not on each UI tick.
@@ -66,7 +66,7 @@ def dests(lo, hi, x, y, behavior):
             many(lo, hi, "target_y", y)]
 
 TURN_TRIGGERS = {i: {"entry": "0x%06X" % e, "table": "0x446750",
-                       "rules": [], "evidence": "extract/research_ai_combat_asm/T750_L%02d.json" % i}
+                       "rules": []}
                  for i, e in enumerate(ENTRIES)}
 
 # Source order is important: e.g. L16/L18/L20 skip all events on timeout.

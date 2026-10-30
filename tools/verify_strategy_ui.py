@@ -10,8 +10,8 @@ from PIL import Image
 from verify_title_ui import raster,text,wrong
 from verify_save_ui import palette
 ROOT=Path(__file__).resolve().parents[1]; GAME=ROOT.parent/'dlz/ANTI-JAP'; OUT=ROOT/'out/ui_strategy'; UI=ROOT/'godot/assets/ui'
-CONTRACT=json.loads((ROOT/'extract/research_strategic_ui_contract_20261025.evidence.json').read_text())
-LUT=bytes(json.loads((ROOT/'extract/research_ui_controls_20261025.json').read_text())['menu13']['selected_background_lut'])
+CONTRACT=json.loads((ROOT/'extract/contracts/strategic_ui.json').read_text())
+LUT=bytes(json.loads((ROOT/'extract/contracts/ui_controls.json').read_text())['menu13']['selected_background_lut'])
 def img(name,size,pal,key=None):return raster((GAME/(name+'.IMG')).read_bytes()[16:16+size[0]*size[1]],size,pal,key)
 def tga(name,size,pal,key=None):
     blob=(GAME/(name+'.TGA')).read_bytes();w,h=size

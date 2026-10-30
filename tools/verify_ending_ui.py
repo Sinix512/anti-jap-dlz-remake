@@ -56,7 +56,7 @@ def expected(entry):
         return image
     raw = tga_indices('MENU', 88, 120)
     panel = bytearray(raw[:88 * 32] + raw[88 * 56:88 * 88])
-    lut = bytes(json.loads((ROOT / 'extract/research_ui_controls_20261025.json').read_text())['menu13']['selected_background_lut'])
+    lut = bytes(json.loads((ROOT / 'extract/contracts/ui_controls.json').read_text())['menu13']['selected_background_lut'])
     row = entry['row']
     for y in range(8 + row * 24, 32 + row * 24):
         for x in range(4, 84):

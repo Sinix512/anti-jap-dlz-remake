@@ -1,0 +1,659 @@
+{
+  "schema": "dlz-mine-ui-mask-static-fixtures-v1",
+  "mask_vectors": [
+    {
+      "name": "place_filters_unit_mine_terrain",
+      "mode": 2,
+      "width": 5,
+      "height": 5,
+      "center": [
+        2,
+        2
+      ],
+      "selected_code": 17,
+      "terrain_row": 4,
+      "occupied": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "mines_present": [
+        [
+          1,
+          2
+        ]
+      ],
+      "terrain_disallowed": [
+        [
+          3,
+          3
+        ]
+      ],
+      "remaining_candidate_terrain_allowed": true,
+      "expected_rows": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "place_level14_17_forbidden",
+      "mode": 2,
+      "width": 5,
+      "height": 5,
+      "center": [
+        2,
+        2
+      ],
+      "level_indexes": [
+        14,
+        17
+      ],
+      "expected_rows": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "place_at_map_corner",
+      "mode": 2,
+      "width": 5,
+      "height": 5,
+      "center": [
+        0,
+        0
+      ],
+      "occupied": [
+        [
+          0,
+          0
+        ]
+      ],
+      "mines_present": [],
+      "all_terrain_allowed": true,
+      "expected_rows": [
+        [
+          1,
+          0,
+          1,
+          1,
+          1
+        ],
+        [
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "recover_give_timer_geometry_only",
+      "modes": [
+        3,
+        4,
+        5
+      ],
+      "width": 5,
+      "height": 5,
+      "center": [
+        2,
+        2
+      ],
+      "occupancy_and_mines_do_not_change_mask": true,
+      "expected_rows": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          1,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "remote_geometry_only",
+      "mode": 7,
+      "width": 13,
+      "height": 13,
+      "center": [
+        6,
+        6
+      ],
+      "expected_zero_count": 60,
+      "expected_rows": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      ],
+      "checks": [
+        {
+          "tile": [
+            11,
+            6
+          ],
+          "mask": 0
+        },
+        {
+          "tile": [
+            9,
+            9
+          ],
+          "mask": 1
+        },
+        {
+          "tile": [
+            6,
+            6
+          ],
+          "mask": 1
+        }
+      ]
+    }
+  ],
+  "qualification_vectors": [
+    {
+      "mode": 3,
+      "kind": "recover",
+      "mask": 0,
+      "occupancy_presence": 0,
+      "mine_low": 0,
+      "mine_code": 0,
+      "target_qualified": false
+    },
+    {
+      "mode": 3,
+      "kind": "recover",
+      "mask": 0,
+      "occupancy_presence": 2,
+      "mine_low": 1,
+      "mine_code": 30,
+      "target_qualified": true
+    },
+    {
+      "mode": 3,
+      "kind": "recover",
+      "mask": 1,
+      "occupancy_presence": 0,
+      "mine_low": 1,
+      "mine_code": 30,
+      "target_qualified": false
+    },
+    {
+      "mode": 4,
+      "kind": "give",
+      "mask": 0,
+      "occupancy_presence": 0,
+      "mine_low": 0,
+      "mine_code": 0,
+      "target_qualified": false
+    },
+    {
+      "mode": 4,
+      "kind": "give",
+      "mask": 0,
+      "occupancy_presence": 1,
+      "mine_low": 0,
+      "mine_code": 0,
+      "target_qualified": true
+    },
+    {
+      "mode": 4,
+      "kind": "give",
+      "mask": 0,
+      "occupancy_presence": 2,
+      "mine_low": 0,
+      "mine_code": 0,
+      "target_qualified": true
+    },
+    {
+      "mode": 4,
+      "kind": "give",
+      "mask": 1,
+      "occupancy_presence": 1,
+      "mine_low": 0,
+      "mine_code": 0,
+      "target_qualified": false
+    },
+    {
+      "mode": 5,
+      "kind": "timer",
+      "mask": 0,
+      "occupancy_presence": 0,
+      "mine_low": 1,
+      "mine_code": 20,
+      "target_qualified": false
+    },
+    {
+      "mode": 5,
+      "kind": "timer",
+      "mask": 0,
+      "occupancy_presence": 0,
+      "mine_low": 2,
+      "mine_code": 30,
+      "target_qualified": true
+    },
+    {
+      "mode": 5,
+      "kind": "timer",
+      "mask": 1,
+      "occupancy_presence": 0,
+      "mine_low": 2,
+      "mine_code": 20,
+      "target_qualified": false
+    },
+    {
+      "mode": 7,
+      "kind": "remote",
+      "mask": 0,
+      "occupancy_presence": 0,
+      "mine_low": 0,
+      "mine_code": 30,
+      "target_qualified": false
+    },
+    {
+      "mode": 7,
+      "kind": "remote",
+      "mask": 0,
+      "occupancy_presence": 2,
+      "mine_low": 1,
+      "mine_code": 30,
+      "target_qualified": true
+    },
+    {
+      "mode": 7,
+      "kind": "remote",
+      "mask": 0,
+      "occupancy_presence": 0,
+      "mine_low": 2,
+      "mine_code": 20,
+      "target_qualified": false
+    },
+    {
+      "mode": 7,
+      "kind": "remote",
+      "mask": 1,
+      "occupancy_presence": 0,
+      "mine_low": 1,
+      "mine_code": 30,
+      "target_qualified": false
+    }
+  ],
+  "lifecycle_vectors": [
+    {
+      "name": "place_timed_popup_cancel",
+      "mode": 2,
+      "before": "range mask",
+      "events": [
+        "valid_bright_click",
+        "round_dialog_cancel"
+      ],
+      "expected": "same range mask, mode2, no mine/inventory/action mutation"
+    },
+    {
+      "name": "timer_popup_cancel",
+      "mode": 5,
+      "before": "range mask and existing low>1",
+      "events": [
+        "valid_bright_click",
+        "round_dialog_cancel"
+      ],
+      "expected": "same range mask, mode5, existing low/high unchanged, action unspent"
+    },
+    {
+      "name": "confirmed_remote",
+      "mode": 7,
+      "events": [
+        "validate mask0+low!=0+high//10==3",
+        "reset_queue",
+        "enqueue_initial",
+        "clear_full_world_mask0",
+        "per_mine focus/flm/s0/numbers/death",
+        "mode0"
+      ],
+      "expected": "every death cell sees mask0"
+    },
+    {
+      "name": "right_cancel_each_mine_mode",
+      "modes": [
+        2,
+        3,
+        4,
+        5,
+        7
+      ],
+      "events": [
+        "right_release_without_drag",
+        "clear_full_world_mask0",
+        "redraw_actor_cell",
+        "reopen_action_menu"
+      ],
+      "expected": "mask all0; not move-range reconstruction"
+    },
+    {
+      "name": "wrong_target",
+      "modes": [
+        3,
+        4,
+        5,
+        7
+      ],
+      "events": [
+        "bright_click_but_extra_target_predicate_false"
+      ],
+      "expected": "mask/mode/inventory/action unchanged"
+    }
+  ]
+}

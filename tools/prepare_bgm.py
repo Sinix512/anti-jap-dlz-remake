@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
 NRG=ROOT.parent/'dlz/ANTI-JAP/ISO/抗日地雷战音效光盘.nrg'
 OUT=ROOT/'godot/assets/audio'
-TOC=ROOT/'extract/research_bgm_tracks_20261025.json'
+TOC=ROOT/'extract/contracts/bgm_tracks.json'
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--force',action='store_true');args=parser.parse_args()

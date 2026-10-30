@@ -1,7 +1,7 @@
 """4240B9/421DDB indexed death dissolve. No original executable is run.
 
 The third argument is an early-match squared-distance threshold, NOT a nearest
-color tolerance to apply after argmin. See research_death_palette_contract.
+color tolerance to apply after argmin. Fixtures live in extract/contracts/.
 """
 from pathlib import Path
 

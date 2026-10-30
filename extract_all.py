@@ -5,7 +5,7 @@ M0 覆盖全部 15 个 DAT：
     IMG / TXT / PEOPLE / GAME / FIGHT / TOWN / MAP / BLK
     FACE / ARMY / MINE / FLM / GOODS / MATERIAL / PLACE / WAVE
 
-数据管线的约定见 HANDOVER.md：
+数据管线约定：
     Python 只产出 data/*.json + 图片/音频；Godot 只读这层，不直接解析原版 DAT。
 """
 from __future__ import annotations

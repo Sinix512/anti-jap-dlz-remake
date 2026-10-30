@@ -9,7 +9,7 @@ func check(ok:bool,label:String) -> void:
 	if not ok:failures+=1;push_error("MEDIA_FAIL "+label)
 func run() -> void:
 	var m5:Dictionary=Codec.integers(JSON.parse_string(FileAccess.get_file_as_string("res://data/m5.json")))
-	var evidence:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://../extract/research_visual_remaining_20261025.checks.json"))
+	var evidence:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://../extract/contracts/history_photos.json"))
 	var hs=load("res://scripts/m5/HistorySlideshow.gd").new();root.add_child(hs)
 	hs.setup(load("res://assets/font/hzk16.fnt"),m5.history)
 	check(hs._timer.time_left>15.0 and hs._timer.time_left<=15.125,"history keeps original275 x55ms first hold")

@@ -41,7 +41,7 @@ class CampaignEvidenceTest(unittest.TestCase):
             script = root / "godot/scripts/Battle.gd"
             script.write_text("original")
             before = evidence_fingerprint(root)
-            (root / "HANDOVER.md").write_text("unrelated notes")
+            (root / "unrelated-notes.md").write_text("unrelated notes")
             self.assertEqual(before, evidence_fingerprint(root))
             script.write_text("different rules")
             self.assertNotEqual(before, evidence_fingerprint(root))
@@ -50,6 +50,11 @@ class CampaignEvidenceTest(unittest.TestCase):
             self.assertNotEqual(before, evidence_fingerprint(root))
             before = evidence_fingerprint(root)
             (root / "extract/txt.py").write_text("different source decoder")
+            self.assertNotEqual(before, evidence_fingerprint(root))
+            before = evidence_fingerprint(root)
+            contracts = root / "extract/contracts"
+            contracts.mkdir()
+            (contracts / "ui_controls.json").write_text('{"lut": [0]}')
             self.assertNotEqual(before, evidence_fingerprint(root))
             before = evidence_fingerprint(root)
             (root / "godot/data/m4.json").write_text("different generated data")

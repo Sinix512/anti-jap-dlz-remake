@@ -103,6 +103,8 @@ def evidence_fingerprint(root: Path = ROOT) -> str:
                 paths.add(path)
     paths.update((root / "godot/data").glob("*.json"))
     paths.update((root / "extract").glob("*.py"))
+    for suffix in ("*.json", "*.bin"):
+        paths.update((root / "extract/contracts").glob(suffix))
     paths.add(root / "extract_all.py")
     paths.add(root / "godot/project.godot")
     digest = hashlib.sha256()

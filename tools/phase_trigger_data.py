@@ -6,7 +6,7 @@ VICTORY_PHASES: 0x446690[old_level]; original caller uses
 0x44668C[new_level] after incrementing campaign_index.
 
 Every entry has a retained REA Evidence ID. Full ordered pseudocode and helper
-calls: extract/research_phase_20261025.evidence.json. messages/spawn_slots/etc
+calls decoded from the original phase table. messages/spawn_slots/etc
 are inventories, NOT an ordered executable script. For phases with interleaved
 movement, mines or movies, preserve original ordering from that evidence.
 Literal write offsets are bytes; width must be respected (see BYTE_WRITES).

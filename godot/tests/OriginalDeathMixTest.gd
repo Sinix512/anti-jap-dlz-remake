@@ -20,8 +20,8 @@ func run() -> void:
 	var source:Dictionary=Mix.sources("res://assets/map/map_00_index.png")
 	check(source.lut.size()==33*65536 and source.army.size()==91*19*2304,"lossless generated source dimensions")
 	check(source.box.size()==6*2304 and source.mine.size()==256,"native BOX and16px MINE indexed resources")
-	check(PackedByteArray(data.meta.map_dark_lut).hex_encode()==FileAccess.get_file_as_bytes("res://../extract/research_death_cell_highlight_lut_20261025.bin").hex_encode(),"generated dark LUT matches independent RE421D10 vector")
-	check(PackedByteArray(data.meta.luan_glyph)==FileAccess.get_file_as_bytes("res://../extract/research_death_cell_luan_glyph_20261025.bin"),"HZK16 C2D2 glyph exact source")
+	check(PackedByteArray(data.meta.map_dark_lut).hex_encode()==FileAccess.get_file_as_bytes("res://../extract/contracts/highlight_lut.bin").hex_encode(),"generated dark LUT matches independent RE421D10 vector")
+	check(PackedByteArray(data.meta.luan_glyph)==FileAccess.get_file_as_bytes("res://../extract/contracts/luan_glyph.bin"),"HZK16 C2D2 glyph exact source")
 	for s in range(4):
 		for d in range(4):
 			for p in range(6):

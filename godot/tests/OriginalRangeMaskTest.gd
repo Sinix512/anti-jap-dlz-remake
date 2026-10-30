@@ -15,7 +15,7 @@ func check(ok:bool,label:String) -> void:
 	if not ok:failures+=1;push_error("RANGE_MASK_FAIL "+label)
 func run() -> void:
 	var data:Dictionary=Codec.integers(JSON.parse_string(FileAccess.get_file_as_string("res://data/m4.json")))
-	var fixtures:Dictionary=Codec.integers(JSON.parse_string(FileAccess.get_file_as_string("res://../extract/research_range_mask_20261025.fixtures.json")))
+	var fixtures:Dictionary=Codec.integers(JSON.parse_string(FileAccess.get_file_as_string("res://../extract/contracts/range_mask.fixtures.json")))
 	var b=load("res://scripts/Battle.gd").new();root.add_child(b)
 	b.setup(data,data.levels[0].duplicate(true),load("res://assets/font/hzk16.fnt"),{})
 	b.set_process(false);b.sfx_enabled=false;b.fast_sim=true;b.scenario=Observer.new();b.finished_flag=false;b._finishing=false;b.busy=false;b.phase="player"
@@ -121,7 +121,7 @@ func run() -> void:
 	quit(1 if failures else 0)
 
 func mine_ranges(b,hero) -> void:
-	var fixtures:Dictionary=Codec.integers(JSON.parse_string(FileAccess.get_file_as_string("res://../extract/research_mine_ui_mask_20261025.fixtures.json")))
+	var fixtures:Dictionary=Codec.integers(JSON.parse_string(FileAccess.get_file_as_string("res://../extract/contracts/mine_ui_mask.fixtures.json")))
 	var width:int=b.map_w;var height:int=b.map_h;var saved_terrain:Array=b.terrain;var saved_index:int=b.level.index
 	for vector in fixtures.mask_vectors:
 		b.map_w=vector.width;b.map_h=vector.height

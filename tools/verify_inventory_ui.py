@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ORIGINAL = ROOT.parent / 'dlz' / 'ANTI-JAP'
 ASSETS = ROOT / 'godot/assets/ui'
 palette = [min(255, b * 4) for b in (ORIGINAL / 'KUANG04.IMG').read_bytes()[-768:]]
-lut = json.loads((ROOT / 'extract/research_ui_controls_20261025.json').read_text())['menu13']['selected_background_lut']
+lut = json.loads((ROOT / 'extract/contracts/ui_controls.json').read_text())['menu13']['selected_background_lut']
 checked = 0
 
 def verify(name, width, height, raw):

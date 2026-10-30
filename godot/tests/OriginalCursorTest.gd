@@ -1,5 +1,5 @@
 extends SceneTree
-# Static provenance: extract/research_cursor_contract_20261025.md.
+# Static cursor contract decoded from the original executable.
 # OS-native arrows differ by platform; these are semantic/input-shape checks,
 # not a claim that macOS pixels equal the historical Windows system cursor.
 var checks:=0

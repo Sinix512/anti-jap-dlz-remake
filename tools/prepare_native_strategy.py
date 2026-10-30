@@ -53,7 +53,7 @@ def prepare():
     for count in range(1,17):
         raster = raw[88*88:] if count==1 else raw[:32*88]+raw[32*88:56*88]*(count-2)+raw[56*88:88*88]
         (UI / f"choice_{count}_indices.bin").write_bytes(raster)
-    controls = json.loads((ROOT / "extract/research_ui_controls_20261025.json").read_text())
+    controls = json.loads((ROOT / "extract/contracts/ui_controls.json").read_text())
     (UI / "native_menu_lut.bin").write_bytes(bytes(controls["menu13"]["selected_background_lut"]))
     faces = (ORIGINAL / "FACE.DAT").read_bytes()
     (UI / "face_indices.bin").write_bytes(faces)
@@ -64,7 +64,7 @@ def prepare():
     for i in sorted({int(v["img_index"]) for v in m2["units"].values()}):
         start = i*19*48*48
         image(armies[start:start+48*48], (48,48), f"strategy_army_{i:03d}.png", palettes["K00"], 0)
-    evidence = json.loads((ROOT / "extract/research_strategic_ui_contract_20261025.evidence.json").read_text())
+    evidence = json.loads((ROOT / "extract/contracts/strategic_ui.json").read_text())
     def unescape(value):
         if isinstance(value, str): return value.replace("\\u3000", "　")
         if isinstance(value, list): return [unescape(v) for v in value]
@@ -72,7 +72,7 @@ def prepare():
         return value
     evidence = unescape(evidence)
     (ROOT / "godot/data/strategic_ui.json").write_text(json.dumps({
-        "source":"research_strategic_ui_contract_20261025; 4310B9/4304E0/43B680",
+        "source":"Static contract: 4310B9/4304E0/43B680",
         "world":evidence["world"],"towns":evidence["towns"],
     }, ensure_ascii=False, indent=1).replace("\\\\u3000", "　")+"\n")
 

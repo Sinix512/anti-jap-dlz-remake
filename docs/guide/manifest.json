@@ -1,6 +1,6 @@
 {
   "date": "2026-10-29",
-  "baseline_commit": "0c7d4bacf64731aa4e29413bd194c98ae7420ce0",
+  "baseline_commit": "8d3fb4e2d58daa694a8bd06bc081f9320080ab58",
   "scope": "current implementation documentation, not campaign completion evidence",
   "counts": {
     "unit_slots": 96,
@@ -33,7 +33,7 @@
     "tools/trigger_data.py": "1b6ca83d3608cdd2237ba11cf5ad023a240dbe2d7c0c8b4c84ae132dafe448b7",
     "tools/repair_yulai_save.py": "2e01c383cd72e989700ae52af363d7f601b28a356419c309daed6c86228bde20",
     "tools/test_repair_yulai_save.py": "4b3d3b40a70198f585e5bc969bb1dda67225824d16946a39970d301dd54f4798",
-    "tools/verify_original.py": "0df32f419612d5c857b363f2aa3054bc21f34ee307fe9114437d1d63a0f1432e",
+    "tools/verify_original.py": "e226af3104e28c0ba766c7d84130e0bad907d62ea2d2e48963cd422521362571",
     "docs/guide/README.md": "f2fc7defd336127af253e1155f327e649c82117dd18c619650c7c693d771c86f",
     "godot/scripts/Battle.gd": "a906bb58db6bbf1e89912b71752e12bf5633e1fb2d34b5e7f34118879d421d6a",
     "godot/scripts/BattleUnit.gd": "0e259c5e33ed09eed544b56e488280dc54efc80b8577d4d3423c2b080d04151f",
@@ -50,7 +50,7 @@
     "godot/scripts/m2/Campaign.gd": "bc20ba109b1611435e3608d7b4d1268db47681252d2f2817b50aeb03f6db83ef",
     "godot/scripts/m2/GBK.gd": "0a548f53aba8a88812d91c5dd394234d6211a1675ea04d93f2ccc988a3109044",
     "godot/scripts/m2/GameState.gd": "03ad7d82792812b1ff911103461543cde890dd626a01ded313f3bb4e36ac1411",
-    "godot/scripts/m2/OriginalSave.gd": "5a1eef3ecb22e958e0a49ca3cc300815e24f3208258b6e52f8daea992ea0a3d1",
+    "godot/scripts/m2/OriginalSave.gd": "ac8f9b18b1b28f06f6654a89ca1b2046b189d9d05d254abd5747327d3ef74796",
     "godot/scripts/m4/Campaign.gd": "3d90d13bf6f005b6de243d52ff4ff465f5fbdedd5f136640048c16d9e0cc7a09",
     "godot/scripts/m4/LevelBuilder.gd": "d93898ade95abb5b33d14082cb6020ffb93e336dd84f7a00616a87e81cdab3ea",
     "godot/scripts/m4/Scenario.gd": "a2501b352251134239c4fe3481fa22ebe76f8044b53e9e6b521748ed4ff18d52",

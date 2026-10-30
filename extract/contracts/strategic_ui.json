@@ -1,0 +1,2958 @@
+{
+  "schema": "dlz-strategic-ui-v1",
+  "world": {
+    "towns": [
+      {
+        "index": 0,
+        "name": "桃花岭",
+        "name_va": "0x447458",
+        "rect": [
+          494,
+          347,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 1,
+        "name": "赵　村",
+        "name_va": "0x447460",
+        "rect": [
+          429,
+          256,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 2,
+        "name": "花坪镇",
+        "name_va": "0x447468",
+        "rect": [
+          396,
+          331,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 3,
+        "name": "李　村",
+        "name_va": "0x447470",
+        "rect": [
+          317,
+          329,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 4,
+        "name": "土　桥",
+        "name_va": "0x447478",
+        "rect": [
+          373,
+          214,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 5,
+        "name": "白洋淀",
+        "name_va": "0x447480",
+        "rect": [
+          397,
+          167,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 6,
+        "name": "萧家庄",
+        "name_va": "0x447488",
+        "rect": [
+          368,
+          110,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 7,
+        "name": "冉　庄",
+        "name_va": "0x447490",
+        "rect": [
+          319,
+          159,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 8,
+        "name": "枣　庄",
+        "name_va": "0x447498",
+        "rect": [
+          284,
+          131,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 9,
+        "name": "阳　村",
+        "name_va": "0x4474a0",
+        "rect": [
+          331,
+          247,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 10,
+        "name": "清风寨",
+        "name_va": "0x4474a8",
+        "rect": [
+          241,
+          305,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 11,
+        "name": "鸡公山",
+        "name_va": "0x4474b0",
+        "rect": [
+          274,
+          272,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 12,
+        "name": "太平镇",
+        "name_va": "0x4474b8",
+        "rect": [
+          273,
+          204,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 13,
+        "name": "黑风寨",
+        "name_va": "0x4474c0",
+        "rect": [
+          145,
+          304,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 14,
+        "name": "长　湾",
+        "name_va": "0x4474c8",
+        "rect": [
+          218,
+          240,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 15,
+        "name": "施南镇",
+        "name_va": "0x4474d0",
+        "rect": [
+          216,
+          165,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 16,
+        "name": "红岩镇",
+        "name_va": "0x4474d8",
+        "rect": [
+          119,
+          187,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 17,
+        "name": "平阳县",
+        "name_va": "0x4474e0",
+        "rect": [
+          150,
+          125,
+          48,
+          16
+        ]
+      },
+      {
+        "index": 18,
+        "name": "天池山",
+        "name_va": "0x4474e8",
+        "rect": [
+          154,
+          247,
+          48,
+          16
+        ]
+      }
+    ],
+    "unlocked_color_index": "0xb7",
+    "locked_color_index": "0x89",
+    "system_icon": {
+      "rect": [
+        549,
+        20,
+        70,
+        81
+      ],
+      "normal": "BIGMINE0.IMG",
+      "hover": "BIGMINE1.IMG",
+      "transparent_index": "0x83"
+    },
+    "time": {
+      "rect": [
+        400,
+        20,
+        100,
+        16
+      ],
+      "format": "%02d:%02d:%02d",
+      "refresh_timer_ticks": 18
+    }
+  },
+  "towns": [
+    {
+      "index": 0,
+      "name": "桃花岭",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            163,
+            118,
+            100,
+            70
+          ],
+          "text_at": [
+            189,
+            145
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            288,
+            97,
+            97
+          ],
+          "text_at": [
+            24,
+            328
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 72,
+      "label_rgb": [
+        164,
+        252,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 803,
+          "x": 140,
+          "y": 50
+        },
+        {
+          "wave": 808,
+          "x": 160,
+          "y": 50
+        },
+        {
+          "wave": 812,
+          "x": 180,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "name": "赵　村",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            422,
+            288,
+            64,
+            25
+          ],
+          "text_at": [
+            430,
+            292
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            307,
+            251,
+            90,
+            31
+          ],
+          "text_at": [
+            328,
+            258
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            68,
+            318,
+            99,
+            67
+          ],
+          "text_at": [
+            93,
+            343
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            192,
+            283,
+            75,
+            45
+          ],
+          "text_at": [
+            205,
+            297
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            406,
+            397,
+            234,
+            83
+          ],
+          "text_at": [
+            499,
+            430
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            105,
+            333,
+            128,
+            115
+          ],
+          "text_at": [
+            145,
+            382
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 72,
+      "label_rgb": [
+        164,
+        252,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 818,
+          "x": 240,
+          "y": 60
+        },
+        {
+          "wave": 822,
+          "x": 90,
+          "y": 50
+        },
+        {
+          "wave": 827,
+          "x": 110,
+          "y": 30
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "name": "花坪镇",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            265,
+            27,
+            97,
+            50
+          ],
+          "text_at": [
+            289,
+            44
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            507,
+            57,
+            99,
+            143
+          ],
+          "text_at": [
+            532,
+            120
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            377,
+            295,
+            90,
+            90
+          ],
+          "text_at": [
+            398,
+            332
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            224,
+            249,
+            83,
+            72
+          ],
+          "text_at": [
+            241,
+            277
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            389,
+            205,
+            84
+          ],
+          "text_at": [
+            78,
+            423
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            204,
+            134,
+            94,
+            89
+          ],
+          "text_at": [
+            227,
+            170
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 72,
+      "label_rgb": [
+        164,
+        252,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 820,
+          "x": 80,
+          "y": 60
+        },
+        {
+          "wave": 830,
+          "x": 80,
+          "y": 80
+        },
+        {
+          "wave": 831,
+          "x": 100,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "name": "李　村",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            478,
+            167,
+            162,
+            98
+          ],
+          "text_at": [
+            535,
+            208
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            260,
+            67,
+            191,
+            101
+          ],
+          "text_at": [
+            331,
+            109
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            401,
+            32,
+            132,
+            100
+          ],
+          "text_at": [
+            443,
+            74
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            97,
+            424,
+            193,
+            56
+          ],
+          "text_at": [
+            169,
+            444
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            0,
+            161,
+            85
+          ],
+          "text_at": [
+            56,
+            34
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            0,
+            187,
+            160,
+            92
+          ],
+          "text_at": [
+            56,
+            225
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 72,
+      "label_rgb": [
+        164,
+        252,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 802,
+          "x": 80,
+          "y": 80
+        },
+        {
+          "wave": 822,
+          "x": 70,
+          "y": 60
+        },
+        {
+          "wave": 829,
+          "x": 120,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "name": "土　桥",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            279,
+            122,
+            50,
+            37
+          ],
+          "text_at": [
+            280,
+            132
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            334,
+            122,
+            104,
+            41
+          ],
+          "text_at": [
+            362,
+            134
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            450,
+            120,
+            190,
+            80
+          ],
+          "text_at": [
+            521,
+            152
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            129,
+            122,
+            129,
+            55
+          ],
+          "text_at": [
+            169,
+            141
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            318,
+            231,
+            165
+          ],
+          "text_at": [
+            91,
+            392
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            0,
+            119,
+            81,
+            99
+          ],
+          "text_at": [
+            16,
+            160
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 4,
+      "label_rgb": [
+        192,
+        236,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 808,
+          "x": 90,
+          "y": 80
+        },
+        {
+          "wave": 803,
+          "x": 120,
+          "y": 70
+        },
+        {
+          "wave": 809,
+          "x": 150,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "name": "白洋淀",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            342,
+            395,
+            170,
+            85
+          ],
+          "text_at": [
+            403,
+            429
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            162,
+            398,
+            136,
+            82
+          ],
+          "text_at": [
+            206,
+            431
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            67,
+            395,
+            90,
+            80
+          ],
+          "text_at": [
+            88,
+            427
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            385,
+            360,
+            64,
+            26
+          ],
+          "text_at": [
+            393,
+            365
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            287,
+            81,
+            124
+          ],
+          "text_at": [
+            16,
+            341
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            209,
+            365,
+            62,
+            21
+          ],
+          "text_at": [
+            216,
+            367
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 235,
+      "label_rgb": [
+        236,
+        200,
+        136
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 807,
+          "x": 60,
+          "y": 80
+        },
+        {
+          "wave": 826,
+          "x": 80,
+          "y": 70
+        },
+        {
+          "wave": 813,
+          "x": 90,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "name": "萧家庄",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            0,
+            400,
+            74,
+            80
+          ],
+          "text_at": [
+            13,
+            432
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            283,
+            387,
+            152,
+            64
+          ],
+          "text_at": [
+            335,
+            411
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            438,
+            397,
+            119,
+            49
+          ],
+          "text_at": [
+            473,
+            413
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            220,
+            404,
+            55,
+            41
+          ],
+          "text_at": [
+            223,
+            416
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            570,
+            426,
+            70,
+            54
+          ],
+          "text_at": [
+            581,
+            445
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            97,
+            399,
+            111,
+            46
+          ],
+          "text_at": [
+            128,
+            414
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 150,
+      "label_rgb": [
+        252,
+        248,
+        248
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 821,
+          "x": 90,
+          "y": 80
+        },
+        {
+          "wave": 830,
+          "x": 120,
+          "y": 70
+        },
+        {
+          "wave": 815,
+          "x": 150,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "name": "冉　庄",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            318,
+            13,
+            218,
+            79
+          ],
+          "text_at": [
+            403,
+            44
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            181,
+            167,
+            105,
+            61
+          ],
+          "text_at": [
+            209,
+            189
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            384,
+            314,
+            144,
+            119
+          ],
+          "text_at": [
+            432,
+            365
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            198,
+            307,
+            139,
+            147
+          ],
+          "text_at": [
+            243,
+            372
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            0,
+            299,
+            132
+          ],
+          "text_at": [
+            125,
+            58
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            60,
+            253,
+            119,
+            110
+          ],
+          "text_at": [
+            95,
+            300
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 72,
+      "label_rgb": [
+        164,
+        252,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 832,
+          "x": 800,
+          "y": 90
+        },
+        {
+          "wave": 805,
+          "x": 80,
+          "y": 70
+        },
+        {
+          "wave": -1,
+          "x": 999,
+          "y": 0
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "name": "枣　庄",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            183,
+            175,
+            98,
+            28
+          ],
+          "text_at": [
+            208,
+            181
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            330,
+            167,
+            60,
+            40
+          ],
+          "text_at": [
+            336,
+            179
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            280,
+            174,
+            50,
+            30
+          ],
+          "text_at": [
+            281,
+            181
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            117,
+            181,
+            58,
+            24
+          ],
+          "text_at": [
+            122,
+            185
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            334,
+            640,
+            146
+          ],
+          "text_at": [
+            296,
+            399
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            67,
+            185,
+            48,
+            21
+          ],
+          "text_at": [
+            67,
+            187
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 76,
+      "label_rgb": [
+        180,
+        236,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 820,
+          "x": 100,
+          "y": 90
+        },
+        {
+          "wave": 815,
+          "x": 130,
+          "y": 70
+        },
+        {
+          "wave": 827,
+          "x": 160,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "name": "阳　村",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            432,
+            267,
+            68,
+            24
+          ],
+          "text_at": [
+            442,
+            271
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            410,
+            339,
+            93,
+            67
+          ],
+          "text_at": [
+            432,
+            364
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            375,
+            268,
+            55,
+            30
+          ],
+          "text_at": [
+            378,
+            275
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            315,
+            312,
+            91,
+            50
+          ],
+          "text_at": [
+            336,
+            329
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            234,
+            453,
+            283,
+            27
+          ],
+          "text_at": [
+            351,
+            458
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            137,
+            366,
+            138,
+            82
+          ],
+          "text_at": [
+            182,
+            399
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 238,
+      "label_rgb": [
+        252,
+        204,
+        140
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 803,
+          "x": 90,
+          "y": 90
+        },
+        {
+          "wave": 804,
+          "x": 120,
+          "y": 70
+        },
+        {
+          "wave": -1,
+          "x": 999,
+          "y": 0
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "name": "清风寨",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            476,
+            231,
+            50,
+            23
+          ],
+          "text_at": [
+            477,
+            234
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            86,
+            231,
+            56,
+            27
+          ],
+          "text_at": [
+            90,
+            236
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            266,
+            233,
+            50,
+            22
+          ],
+          "text_at": [
+            267,
+            236
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            387,
+            232,
+            80,
+            37
+          ],
+          "text_at": [
+            403,
+            242
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            556,
+            287,
+            84,
+            192
+          ],
+          "text_at": [
+            574,
+            375
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            0,
+            218,
+            81,
+            107
+          ],
+          "text_at": [
+            16,
+            263
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 254,
+      "label_rgb": [
+        140,
+        232,
+        180
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 813,
+          "x": 90,
+          "y": 90
+        },
+        {
+          "wave": 826,
+          "x": 120,
+          "y": 70
+        },
+        {
+          "wave": 820,
+          "x": 160,
+          "y": 40
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "name": "鸡公山",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            193,
+            387,
+            77,
+            63
+          ],
+          "text_at": [
+            207,
+            410
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            360,
+            376,
+            170,
+            61
+          ],
+          "text_at": [
+            421,
+            398
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            999,
+            999,
+            999,
+            999
+          ],
+          "text_at": [
+            1474,
+            1490
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            534,
+            411,
+            106,
+            69
+          ],
+          "text_at": [
+            563,
+            437
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            405,
+            451,
+            128,
+            29
+          ],
+          "text_at": [
+            445,
+            457
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            266,
+            446,
+            120,
+            34
+          ],
+          "text_at": [
+            302,
+            455
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 95,
+      "label_rgb": [
+        220,
+        236,
+        236
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 826,
+          "x": 90,
+          "y": 80
+        },
+        {
+          "wave": 823,
+          "x": 120,
+          "y": 70
+        },
+        {
+          "wave": 830,
+          "x": 180,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "name": "太平镇",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            368,
+            305,
+            93,
+            54
+          ],
+          "text_at": [
+            390,
+            324
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            514,
+            326,
+            126,
+            77
+          ],
+          "text_at": [
+            553,
+            356
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            57,
+            374,
+            83,
+            66
+          ],
+          "text_at": [
+            74,
+            399
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            0,
+            328,
+            111,
+            39
+          ],
+          "text_at": [
+            31,
+            339
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            284,
+            418,
+            62,
+            62
+          ],
+          "text_at": [
+            291,
+            441
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            139,
+            328,
+            120,
+            25
+          ],
+          "text_at": [
+            175,
+            332
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 214,
+      "label_rgb": [
+        172,
+        236,
+        240
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 827,
+          "x": 80,
+          "y": 90
+        },
+        {
+          "wave": 829,
+          "x": 140,
+          "y": 80
+        },
+        {
+          "wave": 803,
+          "x": 160,
+          "y": 70
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "name": "黑风寨",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            406,
+            403,
+            50,
+            29
+          ],
+          "text_at": [
+            407,
+            409
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            416,
+            447,
+            50,
+            34
+          ],
+          "text_at": [
+            417,
+            456
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            521,
+            442,
+            52,
+            32
+          ],
+          "text_at": [
+            523,
+            450
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            364,
+            437,
+            50,
+            24
+          ],
+          "text_at": [
+            365,
+            441
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            432,
+            278,
+            48
+          ],
+          "text_at": [
+            115,
+            448
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            497,
+            403,
+            49,
+            36
+          ],
+          "text_at": [
+            497,
+            413
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 255,
+      "label_rgb": [
+        164,
+        200,
+        160
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 817,
+          "x": 100,
+          "y": 90
+        },
+        {
+          "wave": 813,
+          "x": 120,
+          "y": 80
+        },
+        {
+          "wave": -1,
+          "x": 999,
+          "y": 0
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "name": "长　湾",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            380,
+            206,
+            48,
+            20
+          ],
+          "text_at": [
+            380,
+            208
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            506,
+            200,
+            131,
+            119
+          ],
+          "text_at": [
+            547,
+            251
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            429,
+            210,
+            52,
+            49
+          ],
+          "text_at": [
+            431,
+            226
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            190,
+            216,
+            50,
+            21
+          ],
+          "text_at": [
+            191,
+            218
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            300,
+            465,
+            180
+          ],
+          "text_at": [
+            208,
+            382
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            25,
+            210,
+            157,
+            47
+          ],
+          "text_at": [
+            79,
+            225
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 190,
+      "label_rgb": [
+        236,
+        236,
+        236
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 803,
+          "x": 80,
+          "y": 100
+        },
+        {
+          "wave": 826,
+          "x": 150,
+          "y": 80
+        },
+        {
+          "wave": 830,
+          "x": 160,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "name": "施南镇",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            380,
+            127,
+            50,
+            146
+          ],
+          "text_at": [
+            381,
+            192
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            463,
+            68,
+            128,
+            263
+          ],
+          "text_at": [
+            503,
+            191
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            329,
+            114,
+            52,
+            123
+          ],
+          "text_at": [
+            331,
+            167
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            0,
+            8,
+            201,
+            399
+          ],
+          "text_at": [
+            76,
+            199
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            0,
+            415,
+            579,
+            65
+          ],
+          "text_at": [
+            265,
+            439
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            224,
+            92,
+            98,
+            217
+          ],
+          "text_at": [
+            249,
+            192
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 252,
+      "label_rgb": [
+        196,
+        244,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 834,
+          "x": 80,
+          "y": 80
+        },
+        {
+          "wave": 831,
+          "x": 120,
+          "y": 70
+        },
+        {
+          "wave": 830,
+          "x": 200,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "name": "红岩镇",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            464,
+            365,
+            62,
+            36
+          ],
+          "text_at": [
+            471,
+            375
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            476,
+            405,
+            154,
+            92
+          ],
+          "text_at": [
+            529,
+            443
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            0,
+            398,
+            72,
+            50
+          ],
+          "text_at": [
+            12,
+            415
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            113,
+            384,
+            157,
+            39
+          ],
+          "text_at": [
+            167,
+            395
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            422,
+            398,
+            49,
+            82
+          ],
+          "text_at": [
+            422,
+            431
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            168,
+            431,
+            115,
+            65
+          ],
+          "text_at": [
+            201,
+            455
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 84,
+      "label_rgb": [
+        148,
+        172,
+        180
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 834,
+          "x": 90,
+          "y": 90
+        },
+        {
+          "wave": 803,
+          "x": 150,
+          "y": 80
+        },
+        {
+          "wave": 827,
+          "x": 180,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "name": "平阳县",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            118,
+            0,
+            156,
+            66
+          ],
+          "text_at": [
+            172,
+            25
+          ],
+          "enabled": true,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            148,
+            218,
+            116,
+            66
+          ],
+          "text_at": [
+            182,
+            243
+          ],
+          "enabled": true,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            28,
+            107,
+            93,
+            57
+          ],
+          "text_at": [
+            50,
+            127
+          ],
+          "enabled": true,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            262,
+            165,
+            199,
+            75
+          ],
+          "text_at": [
+            337,
+            194
+          ],
+          "enabled": true,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            288,
+            267,
+            79,
+            78
+          ],
+          "text_at": [
+            303,
+            298
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            0,
+            227,
+            90,
+            64
+          ],
+          "text_at": [
+            21,
+            251
+          ],
+          "enabled": true,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 72,
+      "label_rgb": [
+        164,
+        252,
+        252
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 834,
+          "x": 80,
+          "y": 90
+        },
+        {
+          "wave": 831,
+          "x": 160,
+          "y": 80
+        },
+        {
+          "wave": 833,
+          "x": 160,
+          "y": 70
+        }
+      ]
+    },
+    {
+      "index": 18,
+      "name": "天池山",
+      "buildings": [
+        {
+          "slot": 0,
+          "name": "民房",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "民 房",
+          "label_va": "0x447f4c",
+          "label_gbk_hex": "c3f120b7bf",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 1,
+          "name": "指挥部",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "指挥部",
+          "label_va": "0x447f54",
+          "label_gbk_hex": "d6b8bbd3b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 2,
+          "name": "军械部",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "军械部",
+          "label_va": "0x447f5c",
+          "label_gbk_hex": "befcd0b5b2bf",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 3,
+          "name": "杂货铺",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "杂货铺",
+          "label_va": "0x447f64",
+          "label_gbk_hex": "d4d3bbf5c6cc",
+          "label_advance_width": 48
+        },
+        {
+          "slot": 4,
+          "name": "出口",
+          "rect": [
+            183,
+            380,
+            80,
+            100
+          ],
+          "text_at": [
+            199,
+            422
+          ],
+          "enabled": true,
+          "label": "出 口",
+          "label_va": "0x447f6c",
+          "label_gbk_hex": "b3f620bfda",
+          "label_advance_width": 40
+        },
+        {
+          "slot": 5,
+          "name": "作坊",
+          "rect": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text_at": [
+            -24,
+            -8
+          ],
+          "enabled": false,
+          "label": "作 坊",
+          "label_va": "0x447f74",
+          "label_gbk_hex": "d7f720b7bb",
+          "label_advance_width": 40
+        }
+      ],
+      "label_palette_index": 183,
+      "label_rgb": [
+        212,
+        220,
+        236
+      ],
+      "sound_hotspots": [
+        {
+          "wave": 817,
+          "x": 80,
+          "y": 100
+        },
+        {
+          "wave": 813,
+          "x": 100,
+          "y": 80
+        },
+        {
+          "wave": -1,
+          "x": -1,
+          "y": -1
+        }
+      ]
+    }
+  ]
+}

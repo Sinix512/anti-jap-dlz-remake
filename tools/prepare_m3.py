@@ -284,7 +284,7 @@ def main() -> None:
     retry = Image.frombytes("P", (128, 88), retry_pixels)
     retry.putpalette(palette)
     manifest["retry_original.png"] = save(retry.convert("RGBA"), "retry_original.png")
-    controls = json.loads((ROOT / "extract/research_ui_controls_20261025.json").read_text())
+    controls = json.loads((ROOT / "extract/contracts/ui_controls.json").read_text())
     selection_lut = bytes(controls["menu13"]["selected_background_lut"])
     assert len(selection_lut) == 256
     for row in range(2):

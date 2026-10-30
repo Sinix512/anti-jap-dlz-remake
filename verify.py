@@ -1,4 +1,4 @@
-"""格式校验：把 README/HANDOVER 里的每条结论都跑一遍。
+"""格式校验：检查原版文件结构、解析结果与关键数据边界。
 
 用法：python3 verify.py
 任一断言失败即退出码 1；全部通过退出码 0。
@@ -395,7 +395,7 @@ def main() -> int:
 
     from PIL import Image
     expected_counts = {
-        "map": 47, "map/thumb": 47, "face": 170, "army": 91, "mine": 10,
+        "map": 47, "map/thumb": 47, "face": 170, "army": 91, "mine": 40,
         "flm": 32, "goods": 128, "material": 10, "place": 19, "wave": 152,
         "blk": 14, "atlas": 7,
     }
@@ -416,7 +416,7 @@ def main() -> int:
     samples = {
         "face/face_000.png": (80, 100),
         "army/army_000.png": (912, 48),
-        "mine/mine_000.png": (192, 48),
+        "mine/mine_000.png": (48, 48),
         "flm/flm_000.png": (768, 48),
         "goods/goods_000.png": (48, 48),
         "material/material_00.png": (48, 48),
