@@ -104,13 +104,13 @@ func _place_mine(tile:=Vector2i(-1,-1),rounds:=1) -> void:
 	super._place_mine(tile,rounds)
 	await _probe_drain()
 
-func _detonate_mines(tile:Vector2i) -> void:
+func _detonate_mines(tile:Vector2i, focus_camera:=true) -> void:
 	var before:Dictionary={}
 	for u in units:
 		if u.alive:before[u.slot]={"hp":u.hp,"morale":u.morale,"xy":[u.x,u.y]}
 	var at:=_mine_at(tile)
 	var code:int=int(mines[at].get("code",mines[at].get("mine_id",0))) if at>=0 else -1
-	await super._detonate_mines(tile)
+	await super._detonate_mines(tile,focus_camera)
 	var changes:Array=[]
 	for u in units:
 		if before.has(u.slot) and (int(before[u.slot].hp)!=u.hp or int(before[u.slot].morale)!=u.morale or not u.alive):
