@@ -18,6 +18,7 @@ var current:=0
 var remaining:=1.0
 var wait_frame:=-1
 var done:=false
+var _touch_pressed:=false
 
 func setup(f:Font,stats:Dictionary,score:int,total:int,palette_key:="KUANG04") -> void:
 	font=f;palette=Palette.colors(palette_key)
@@ -28,6 +29,7 @@ func setup(f:Font,stats:Dictionary,score:int,total:int,palette_key:="KUANG04") -
 	values=[mine,gun,mine+gun,int(stats.get("losses",0)),int(stats.get("captured_items",0)),score,total]
 	displayed.resize(7);displayed.fill(-1)
 	grade=GRADES[0 if score<60 else 1 if score<80 else 2 if score<90 else 3 if score<=100 else 4]
+	OriginalUI.touch_back(self,font,_touch_advance,"继续")
 	queue_redraw()
 
 func _text(value:String,at:Vector2) -> void:
@@ -72,6 +74,12 @@ func _advance(delta:float) -> void:
 func _input(event:InputEvent) -> void:
 	if done or not is_visible_in_tree():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self):
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_advance();return
+		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+			if event.pressed:_touch_pressed=true;return
+			if _touch_pressed:_touch_pressed=false;OriginalUI.native_wait_left_blocked=false;_touch_advance();return
+			return # A release without its fresh DOWN belongs to the opening gesture.
 	if stage!="wait" or Engine.get_process_frames()<wait_frame:return
 	if event is InputEventKey and not event.pressed:_close()
 	elif event is InputEventMouseButton and not event.pressed:
@@ -83,3 +91,6 @@ func _input(event:InputEvent) -> void:
 func _close() -> void:
 	if done:return
 	done=true;stage="done";closed.emit()
+
+func _touch_advance() -> void:
+	if not done and stage=="wait" and Engine.get_process_frames()>=wait_frame:_close()

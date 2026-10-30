@@ -19,6 +19,8 @@ var restore_count:=0
 var saved_background:Texture2D
 var interactive:=false
 var roll_open:=true
+var row_height:=24
+var rows_per_column:=0
 func setup(font:Font,lines:Array,origin:Vector2,can_cancel:=true,colors:Array=[],animated:=true) -> void:
 	palette=colors
 	if not palette.is_empty():
@@ -30,7 +32,12 @@ func setup(font:Font,lines:Array,origin:Vector2,can_cancel:=true,colors:Array=[]
 	roll_open=animated and lines.size()>1
 	entries=lines.duplicate()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);mouse_filter=Control.MOUSE_FILTER_STOP
-	frame=Rect2(origin,Vector2(88,32 if lines.size()==1 else 24*lines.size()+16))
+	row_height=40 if UI.touch_mode(self) else 24
+	rows_per_column=mini(8,entries.size()) if row_height==40 else entries.size()
+	var columns:=ceili(float(entries.size())/rows_per_column)
+	frame=Rect2(origin,Vector2(128*columns if row_height==40 else 88,(40 if row_height==40 else 32) if lines.size()==1 else row_height*rows_per_column+16))
+	if row_height==40:
+		frame.position=frame.position.clamp(Vector2(8,8),Vector2(632-frame.size.x,428-frame.size.y));origin=frame.position
 	# 426A9C flushes queued entry input, then saves the original display rect.
 	preload("res://scripts/ui/OriginalPaletteFade.gd").discard_buffered_input(get_tree())
 	if DisplayServer.get_name()!="headless":
@@ -40,7 +47,7 @@ func setup(font:Font,lines:Array,origin:Vector2,can_cancel:=true,colors:Array=[]
 	raster_root=Control.new();raster_root.clip_contents=true;raster_root.size=Vector2(640,origin.y+frame.size.y)
 	raster_root.mouse_filter=Control.MOUSE_FILTER_IGNORE;add_child(raster_root)
 	var panel:=UI.panel("res://assets/ui/choice_%d_original.png"%lines.size(),frame)
-	if not palette.is_empty():
+	if not palette.is_empty() and row_height==24:
 		var p=preload("res://scripts/ui/OriginalPalette.gd")
 		var raw:=FileAccess.get_file_as_bytes("res://assets/ui/choice_%d_indices.bin"%lines.size())
 		panel.texture=p.texture(raw,88,int(frame.size.y),palette)
@@ -49,7 +56,7 @@ func setup(font:Font,lines:Array,origin:Vector2,can_cancel:=true,colors:Array=[]
 	selected_row=TextureRect.new();selected_row.mouse_filter=Control.MOUSE_FILTER_IGNORE;raster_root.add_child(selected_row);selected_row.hide()
 	for index in range(lines.size()):
 		var label:=UI.label(str(lines[index]),font,16,normal_color)
-		label.position=origin+Vector2(12,(4 if lines.size()==1 else 12)+24*index);label.size=Vector2(72,16)
+		label.position=origin+Vector2(12+(128*(index/rows_per_column) if row_height==40 else 0),(12 if row_height==40 else (4 if lines.size()==1 else 12))+row_height*(index%rows_per_column));label.size=Vector2(104 if row_height==40 else 72,16)
 		label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT);label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 		labels.append(label);raster_root.add_child(label)
 	if entries.size()>1 and DisplayServer.get_name()!="headless":get_viewport().warp_mouse(origin+Vector2(44,16))
@@ -61,27 +68,40 @@ func setup(font:Font,lines:Array,origin:Vector2,can_cancel:=true,colors:Array=[]
 			drawn_heights.append(height);raster_root.size.y=origin.y+height
 			if DisplayServer.get_name()!="headless":RenderingServer.force_sync();RenderingServer.force_draw()
 	_select(0);interactive=true
+	if allow_cancel:UI.touch_back(self,font,_touch_cancel,"取消")
 func _select(index:int) -> void:
 	choice=index
 	selected_row.visible=entries.size()>1
 	if entries.size()>1:
-		selected_row.texture=load("res://assets/ui/choice_%d_selected_%d.png"%[entries.size(),index]) if palette.is_empty() else selected_textures[index]
-		selected_row.position=frame.position+Vector2(4,8+24*index)
+		selected_row.texture=load("res://assets/ui/choice_%d_selected_%d.png"%[entries.size(),index]) if palette.is_empty() or row_height==40 else selected_textures[index]
+		if row_height==40:selected_row.expand_mode=TextureRect.EXPAND_IGNORE_SIZE;selected_row.size=Vector2(120,40)
+		selected_row.position=row_rect(index).position
 	for row in range(labels.size()):labels[row].add_theme_color_override("font_color",selected_color if row==choice else normal_color)
 func _input(event:InputEvent) -> void:
 	if done:return
 	if event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventKey:get_viewport().set_input_as_handled()
 	if not interactive:return
+	if UI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:
+		if allow_cancel:_touch_cancel()
+		return
 	if event is InputEventMouseMotion:
+		if row_height==40:
+			var hit:=_touch_row_at(event.position)
+			if hit>=0:_select(hit)
+			return
 		# 426A05/426E7D use the entire 640px-wide hover strip. Leaving
 		# that strip preserves the last row; the click never recalculates it.
 		var top:float=frame.position.y+(0 if entries.size()==1 else 8)
-		if event.position.x>=0 and event.position.x<640 and event.position.y>=top and event.position.y<top+24*entries.size():
-			_select(int((event.position.y-top)/24))
+		if event.position.x>=0 and event.position.x<640 and event.position.y>=top and event.position.y<top+row_height*entries.size():
+			_select(int((event.position.y-top)/row_height))
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index==MOUSE_BUTTON_RIGHT and allow_cancel:
 			done=true;_restore_background();cancelled.emit()
 		elif event.button_index==MOUSE_BUTTON_LEFT:
+			if UI.touch_mode(self):
+				var row:=_touch_row_at(event.position)
+				if row<0 or row>=entries.size() or not row_rect(row).has_point(event.position):return
+				_select(row)
 			done=true;_restore_background();chosen.emit(choice)
 
 func _restore_background() -> void:
@@ -93,4 +113,13 @@ func _restore_background() -> void:
 		RenderingServer.force_sync();RenderingServer.force_draw()
 
 func row_rect(index:int) -> Rect2:
-	return Rect2(frame.position+Vector2(4,(0 if entries.size()==1 else 8)+24*index),Vector2(80,24))
+	return Rect2(frame.position+Vector2(4+(128*(index/rows_per_column) if row_height==40 else 0),(0 if entries.size()==1 else 8)+row_height*(index%rows_per_column)),Vector2(120 if row_height==40 else 80,row_height))
+
+func _touch_row_at(point:Vector2) -> int:
+	for index in range(entries.size()):
+		if row_rect(index).has_point(point):return index
+	return -1
+
+func _touch_cancel() -> void:
+	if done or not allow_cancel:return
+	done=true;_restore_background();cancelled.emit()

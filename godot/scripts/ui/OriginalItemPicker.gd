@@ -25,6 +25,7 @@ func setup(font:Font,tables:Dictionary,bag:Array) -> void:
 			var label:=UI.label(GBK.decode(raw.slice(6*row,6*row+6)),font,16,Color("#a4fcfc"))
 			label.position=at+Vector2(0,52+16*row);label.size=Vector2(64,16)
 			label.add_theme_color_override("font_shadow_color",Color.TRANSPARENT);label.mouse_filter=Control.MOUSE_FILTER_IGNORE;add_child(label)
+	UI.touch_back(self,font,_touch_cancel,"取消")
 	call_deferred("_arm")
 func _arm() -> void:
 	await get_tree().process_frame
@@ -33,6 +34,7 @@ func _input(event:InputEvent) -> void:
 	if done:return
 	if event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventKey:
 		get_viewport().set_input_as_handled()
+	if UI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_cancel();return
 	if opening_release.consumes(event) or not armed or not event is InputEventMouseButton or event.pressed:return
 	if event.button_index==MOUSE_BUTTON_RIGHT:
 		done=true;cancelled.emit()
@@ -40,3 +42,7 @@ func _input(event:InputEvent) -> void:
 		for index in range(mini(8,slots.size())):
 			if int(slots[index])>0 and Rect2(194+67*(index%4),144+100*(index/4),48,48).has_point(event.position):
 				done=true;chosen.emit(int(slots[index])-1);return
+
+func _touch_cancel() -> void:
+	if done:return
+	done=true;cancelled.emit()

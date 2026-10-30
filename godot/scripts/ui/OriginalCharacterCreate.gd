@@ -44,6 +44,7 @@ func setup(f:Font,unit_data:Dictionary) -> void:
 	slider=load("res://assets/ui/creation_slider.png")
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter=Control.MOUSE_FILTER_STOP;texture_filter=CanvasItem.TEXTURE_FILTER_NEAREST
+	OriginalUI.touch_back(self,font,_touch_back)
 	queue_redraw()
 func color_at(index:int,naming:=false) -> Color:
 	var rgb:Array=data["name_palette" if naming else "palette"][index]
@@ -88,6 +89,7 @@ func _draw() -> void:
 func _input(event:InputEvent) -> void:
 	if done or not is_visible_in_tree():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_back();return
 	if name_mode:
 		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and not event.pressed and flash_index<0:_name_release(event.position)
 		return
@@ -159,3 +161,8 @@ func _advance(delta:float) -> void:
 	flash_remaining-=delta
 	if flash_remaining<=0:
 		name_buffer+=str(data.name_groups[section])[flash_index];flash_index=-1;queue_redraw()
+
+func _touch_back() -> void:
+	if done:return
+	if name_mode:name_mode=false;pressed_button=-1;queue_redraw()
+	else:done=true;cancelled.emit()

@@ -40,6 +40,7 @@ func setup(font: Font) -> void:
 		options.append(label)
 		prompt.add_child(label)
 	_select(0)
+	OriginalUI.touch_back(self,font,_touch_no,"返回")
 
 
 func _label(text: String, font: Font, at: Vector2, bounds: Vector2) -> Label:
@@ -81,12 +82,20 @@ func _choose(retry: bool) -> void:
 
 
 func _on_gui_input(event: InputEvent) -> void:
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_no();return
 	if event is InputEventMouseButton:
 		if stage == "retry" and event.pressed:
 			# 42738A confirms its current hover row on DOWN, even outside
 			# the panel. It does not reselect from the click coordinates.
 			if event.button_index == MOUSE_BUTTON_RIGHT:_choose(false)
-			elif event.button_index == MOUSE_BUTTON_LEFT:_choose(choice==0)
+			elif event.button_index == MOUSE_BUTTON_LEFT:
+				if OriginalUI.touch_mode(self):
+					if not Rect2(304,232,120,48).has_point(event.position):return
+					_select(int((event.position.y-232)/24))
+				_choose(choice==0)
 	elif event is InputEventMouseMotion and stage == "retry":
 		if event.position.x>=0 and event.position.x<640 and event.position.y>=232 and event.position.y<280:
 			_select(int((event.position.y-232)/24))
+
+func _touch_no() -> void:
+	if stage=="retry":_choose(false)

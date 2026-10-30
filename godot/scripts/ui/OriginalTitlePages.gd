@@ -28,6 +28,7 @@ func setup(f:Font,page:String,table:Array=[]) -> void:
 	background=load("res://assets/ui/title_transition.png")
 	if page=="scores":rows=Scores.read_table() if table.is_empty() else table
 	elif page=="supporters":credits=load("res://assets/ui/title_supporters.png")
+	if mode in ["scores","supporters"]:OriginalUI.touch_back(self,font,_touch_close)
 	queue_redraw()
 func color_at(index:int,battle:=false) -> Color:
 	var rgb:Array=palettes["battle_palette" if battle else "bg01_palette"][index]
@@ -74,3 +75,7 @@ func _input(event:InputEvent) -> void:
 	if mode in ["scores","supporters"]:
 		if (event is InputEventKey and event.pressed) or (event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and not event.pressed):
 			done=true;closed.emit()
+
+func _touch_close() -> void:
+	if done:return
+	done=true;closed.emit()

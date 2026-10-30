@@ -5,6 +5,7 @@ const UI=preload("res://scripts/ui/OriginalUI.gd")
 const AREA=Rect2i(80,60,480,360)
 var skip_left:=true
 var done:=false
+var _touch_pressed:=false
 var page:=0
 var pages:Array=[]
 var labels:Array[Label]=[]
@@ -42,9 +43,10 @@ func setup(font:Font,colors:Array,content:Array,background:Image=null,lut:Array=
 	backdrop=TextureRect.new();backdrop.position=Vector2(AREA.position);backdrop.size=Vector2(AREA.size);backdrop.mouse_filter=Control.MOUSE_FILTER_IGNORE;add_child(backdrop)
 	if background!=null:backdrop.texture=ImageTexture.create_from_image(darken(background,colors,lut))
 	show_page(0)
+	UI.touch_back(self,font,_advance,"继续")
 
 func show_page(index:int) -> void:
-	page=index;skip_left=true;UI.native_wait_left_blocked=true
+	page=index;skip_left=true;_touch_pressed=false;UI.native_wait_left_blocked=true
 	for label in labels:label.free()
 	labels.clear()
 	if pages.is_empty():_close();return
@@ -59,6 +61,12 @@ func show_page(index:int) -> void:
 func _input(event:InputEvent) -> void:
 	if done or not visible:return
 	if event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventKey:get_viewport().set_input_as_handled()
+	if UI.touch_mode(self):
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_advance();return
+		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+			if event.pressed:_touch_pressed=true;return
+			if _touch_pressed:_touch_pressed=false;UI.native_wait_left_blocked=false;_advance();return
+			return # A release without its fresh DOWN belongs to the opening gesture.
 	if event is InputEventKey and not event.pressed:_advance()
 	elif event is InputEventMouseButton and not event.pressed:
 		if event.button_index==MOUSE_BUTTON_RIGHT:_advance()

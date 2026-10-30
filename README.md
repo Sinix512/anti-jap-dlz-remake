@@ -2,9 +2,11 @@
 
 《抗日：地雷战》（1998）的非官方 Godot 重实现：用 GDScript 实现战斗、战役、城镇与界面，用 Python 解析本地原版数据并准备运行资源。
 
-**这是开发中的桌面项目，不是原版游戏资源包，也不是官方作品。** 运行需要有权使用的原版文件；Git 仓库不包含原版数据，获取入口见下方[原版数据](#原版数据)。已有 47 关的数据与流程支持；本地用户实玩存档已确认 **前23关通关，第24关进行中**。尚不代表47关全部验证完成。
+**这是开发中的桌面项目（含 Android 触控测试版），不是原版游戏资源包，也不是官方作品。** 运行需要有权使用的原版文件；Git 仓库不包含原版数据，获取入口见下方[原版数据](#原版数据)。已有 47 关的数据与流程支持；本地用户实玩存档已确认 **前23关通关，第24关进行中**。尚不代表47关全部验证完成。
 
 [玩家攻略](docs/guide/README.md) · [离线攻略](docs/guide/guide.html) · [地形图鉴](docs/guide/terrain.md) · [兵种范围](docs/guide/unit_ranges.md) · [数值参考](docs/guide/reference.md) · [关卡事件](docs/guide/missions.md)
+
+[触控操作](docs/TOUCH_CONTROLS.md) · [Android 测试包与构建](docs/android.md)（包名 `com.mwgames.dlz`，debug 签名测试版）
 
 ## 当前实现
 
@@ -80,8 +82,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install Pillow numpy
 
-# macOS 默认值；其他位置请改为自己的 Godot 可执行文件。
-export GODOT_BIN="/Applications/Godot.app/Contents/MacOS/Godot"
+# Godot 在 PATH 中时可这样设置；否则在本地环境指定编辑器可执行文件。
+export GODOT_BIN="$(command -v godot)"
 
 # 媒体工具默认从 PATH 查找；以下变量可显式指定其他构建。
 export M5_FFMPEG="$(command -v ffmpeg)"

@@ -3,7 +3,7 @@ extends RefCounted
 # DOWN; the UP belonging to that same held gesture must not dismiss its child.
 var pending_mouse_mask:=0
 func capture() -> void:
-	pending_mouse_mask=Input.get_mouse_button_mask() & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT)
+	pending_mouse_mask=(Input.get_mouse_button_mask() | OriginalUI.touch_dispatch_mask()) & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT)
 func consumes(event:InputEvent) -> bool:
 	if not event is InputEventMouseButton or event.pressed:return false
 	var bit:int=1 << (event.button_index-1)

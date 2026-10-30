@@ -26,6 +26,7 @@ func setup(f:Font, data:Dictionary, kind:String, id:int, person:Dictionary={}) -
 		"person":_person(person)
 		"mine":_mine(id)
 		_:_item(id)
+	UI.touch_back(canvas,font,close,"关闭")
 	call_deferred("_arm")
 
 func _arm() -> void:
@@ -35,10 +36,11 @@ func _arm() -> void:
 func _input(event:InputEvent) -> void:
 	if _closed or canvas==null or not canvas.is_visible_in_tree():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if UI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:close();return
 	if _opening_release.consumes(event) or not _armed:return
 	var release:bool=(event is InputEventKey and not event.pressed) or (event is InputEventMouseButton and not event.pressed and event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_RIGHT])
 	if release:
-		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and UI.native_wait_left_blocked:
+		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and UI.native_wait_left_blocked and not UI.touch_mode(self):
 			UI.native_wait_left_blocked=false
 			return
 		close()

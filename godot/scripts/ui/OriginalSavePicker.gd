@@ -25,6 +25,7 @@ func setup(f:Font,colors:Array,slots:Array,loading:=true) -> void:
 	highlight=SelectedRow.new();highlight.font=font;highlight.ink=Palette.color_at(palette,0xB7)
 	highlight.clip_contents=true;highlight.size=Vector2(400,18);highlight.mouse_filter=Control.MOUSE_FILTER_IGNORE;highlight.visible=false;add_child(highlight)
 	queue_redraw()
+	OriginalUI.touch_back(self,font,_finish.bind(-1),"取消")
 func entries(row:int) -> Array:
 	var result:Array=[{"x":36,"text":"进度"},{"x":68,"text":["一","二","三","四","五"][row]}]
 	var info:Dictionary=previews[row]
@@ -49,10 +50,15 @@ func _finish(slot:int) -> void:
 func _input(event:InputEvent) -> void:
 	if done or not is_visible_in_tree():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_finish(-1);return
 	if event is InputEventMouseMotion:
 		if Rect2(0,158,640,180).has_point(event.position):
 			var row:int=int((event.position.y-158)/36)
 			if choice!=row:_select(row)
 	elif event is InputEventMouseButton:
 		if event.button_index==MOUSE_BUTTON_RIGHT and not event.pressed:_finish(-1)
-		elif event.button_index==MOUSE_BUTTON_LEFT and event.pressed:_finish(-1 if choice<0 or (load_mode and previews[choice].is_empty()) else choice)
+		elif event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
+			if OriginalUI.touch_mode(self):
+				if not Rect2(92,158,456,180).has_point(event.position):return
+				_select(int((event.position.y-158)/36))
+			_finish(-1 if choice<0 or (load_mode and previews[choice].is_empty()) else choice)

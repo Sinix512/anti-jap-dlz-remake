@@ -18,6 +18,7 @@ var portrait:TextureRect
 var clip:Control
 var raster:Control
 var done:=false
+var _touch_pressed:=false
 var record_end:=true
 var battle_profile:=false
 
@@ -34,6 +35,7 @@ func setup(f:Font,glyphs:Array,face:=-1,palette_key:="KUANG04",width:=36) -> voi
 		if (face+1)*8000<=faces.size():portrait.texture=Palette.texture(faces.slice(face*8000,(face+1)*8000),80,100,palette)
 	add_child(portrait)
 	clip=Control.new();clip.position=Vector2(222 if face>=0 else 142,312);clip.size=Vector2(width*8,99);clip.clip_contents=true;clip.mouse_filter=Control.MOUSE_FILTER_IGNORE;add_child(clip)
+	OriginalUI.touch_back(self,font,_touch_advance,"继续")
 	raster=preload("res://scripts/ui/OriginalTextRaster.gd").new();raster.font=f;raster.palette=palette;raster.glyphs=glyphs;raster.position=Vector2(0,99);raster.mouse_filter=Control.MOUSE_FILTER_IGNORE;clip.add_child(raster)
 
 func _process(delta:float) -> void:_advance(delta)
@@ -61,6 +63,12 @@ func _scroll_step() -> void:
 func _input(event:InputEvent) -> void:
 	if done or not is_visible_in_tree():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self):
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_advance();return
+		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+			if event.pressed:_touch_pressed=true;return
+			if _touch_pressed:_touch_pressed=false;OriginalUI.native_wait_left_blocked=false;_touch_advance();return
+			return # A release without its fresh DOWN belongs to the opening gesture.
 	if stage=="scroll":
 		if event is InputEventMouseButton and not event.pressed and event.button_index==MOUSE_BUTTON_LEFT:height=99
 		return
@@ -79,3 +87,8 @@ func _accept() -> void:
 func _close() -> void:
 	if done:return
 	done=true;stage="done";confirmed.emit()
+
+func _touch_advance() -> void:
+	if done:return
+	if stage=="scroll":height=99
+	elif stage=="wait" and Engine.get_process_frames()>=wait_frame:_accept()

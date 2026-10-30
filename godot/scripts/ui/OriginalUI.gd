@@ -335,3 +335,21 @@ static func release_native_sfx() -> void:
 		if not is_instance_valid(p):continue
 		p.stop();p.stream=null;p.queue_free()
 	_native_players.clear()
+
+
+static func touch_mode(owner:Node) -> bool:
+	return preload("res://scripts/ui/TouchUiActions.gd").enabled(owner)
+
+
+static func touch_back(owner:Node,font:Font,callback:Callable,caption:="返回",at:=Vector2(560,436)) -> Control:
+	return preload("res://scripts/ui/TouchUiActions.gd").add_back(owner,font,callback,caption,at)
+
+
+static func touch_dispatch_mask() -> int:
+	var tree=Engine.get_main_loop()
+	if not tree is SceneTree:return 0
+	var bridge=tree.root.get_node_or_null("TouchInput")
+	if bridge==null or not bridge.has_method("is_dispatching_left_press"):return 0
+	var mask:=int(bridge.get("dispatch_button_mask"))
+	if bridge.has_method("is_pointer_down") and bridge.is_pointer_down():mask|=MOUSE_BUTTON_MASK_LEFT
+	return mask

@@ -41,6 +41,7 @@ func setup(owner_campaign,screen:String) -> void:
 		buttons.append(Palette.asset("service_button%d"%i,s.x,s.y,palette,0 if i in range(2,10) else -1))
 	for bank in ["army","goods","material","mine"]:banks[bank]=FileAccess.get_file_as_bytes("res://assets/ui/service_"+bank+"_indices.bin")
 	OriginalUI.native_text_index=0x48
+	OriginalUI.touch_back(self,campaign.font,_touch_back)
 	queue_redraw()
 
 func refresh() -> void:queue_redraw()
@@ -53,8 +54,16 @@ func _sprite(bank:String,index:int,key:=0) -> Texture2D:
 func _army(member:Dictionary) -> Texture2D:
 	return _sprite("army",int(campaign.state.data.units[str(member.get("bingzhong",0))].img_index))
 func _button(id:String,at:Vector2,label:String,selected:=false,arrow:=-1) -> void:
-	draw_texture(buttons[(0 if arrow<0 else arrow)+(1 if pressed==id or selected else 0)],at)
-	if not label.is_empty():_text(label,int(at.x)+8,int(at.y)+4)
+	var texture:Texture2D=buttons[(0 if arrow<0 else arrow)+(1 if pressed==id or selected else 0)]
+	if OriginalUI.touch_mode(self):
+		var control:Array=_controls()[id];var bounds:=Vector2(control[2],control[3])
+		draw_rect(Rect2(at,bounds),Color("#39485b") if pressed==id or selected else Color("#1f2c3b"))
+		draw_rect(Rect2(at,bounds),Color("#bd9b62"),false,1)
+		if label.is_empty():draw_texture(texture,at+(bounds-texture.get_size())/2)
+		else:_text(label,int(at.x)+8,int(at.y)+(int(bounds.y)-16)/2)
+	else:
+		draw_texture(texture,at)
+		if not label.is_empty():_text(label,int(at.x)+8,int(at.y)+4)
 func _outline(at:Vector2,size_:Vector2=Vector2(48,48)) -> void:
 	# Pixel endpoints inclusive, like the original 4267xx frame.
 	var c:=Palette.color_at(palette,0xB7)
@@ -74,6 +83,11 @@ func _draw() -> void:
 		"forge":_draw_forge()
 		"mines":_draw_mines()
 	if not drag.is_empty():draw_texture(_sprite(str(drag.bank),int(drag.icon)),drag_point)
+	if kind=="mines" and OriginalUI.touch_mode(self):
+		_text("点地雷→人物/库房/卖出；长按看详情",18,454)
+		if campaign.k04_held>=0:
+			var x:int=22+56*campaign.k04_source
+			_outline(Vector2(x,34))
 
 func shop_stock_at(point:Vector2) -> Dictionary:
 	var mode:int=campaign.shop_mode
@@ -129,13 +143,15 @@ func _draw_shop() -> void:
 
 func _shop_footer_text(value:String,y:int,color:Color) -> void:
 	var text:=value.replace("\\u3000","　")
-	while text.length()>0 and campaign.font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x>600:text=text.left(text.length()-1)
-	draw_string(campaign.font,Vector2(20,y+campaign.font.get_ascent(16)),text,HORIZONTAL_ALIGNMENT_LEFT,600,16,color)
+	while text.length()>0 and campaign.font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x>(530 if OriginalUI.touch_mode(self) else 600):text=text.left(text.length()-1)
+	draw_string(campaign.font,Vector2(20,y+campaign.font.get_ascent(16)),text,HORIZONTAL_ALIGNMENT_LEFT,530 if OriginalUI.touch_mode(self) else 600,16,color)
 
 func _draw_shop_help() -> void:
 	# This unused footer is below every person cell, not over shop controls.
 	draw_rect(Rect2(0,434,640,46),Color("#192632"))
 	var hint:String={0:"点选商品→点人物/库房；双击商品快速买入库房",1:"点选随身物品→人物/库房；可重复点上交，每次1件",2:"点选库房物品→人物；可重复点上交每次1件；滚轮翻页",3:"点击材料选择数量；确认后才扣款"}.get(campaign.shop_mode,"")
+	if OriginalUI.touch_mode(self):
+		hint={0:"点商品→人物/库房；长按商品或人物看详情",1:"点物品→人物/库房；重复点上交，每次1件",2:"点物品→人物/上交；重复点上交每次1件",3:"点材料选择数量；点击购买才扣款"}.get(campaign.shop_mode,"")
 	_shop_footer_text(hint,438,Color("#f2d78a"))
 	var detail:="右键：详情/取消　Esc：取消/返回　人物区滚轮：翻页"
 	if not campaign.shop_pending.is_empty():
@@ -144,6 +160,7 @@ func _draw_shop_help() -> void:
 		var label:="买入价" if campaign.shop_mode==0 else "上交价"
 		var amount:int=price if campaign.shop_mode==0 else price*(7-campaign.state.difficulty)/10
 		detail="已选：%s　%s：%d　右键/Esc取消"%[str(record.get("name","")).replace("\\u3000","　"),label,amount]
+	if OriginalUI.touch_mode(self):detail="长按详情；箭头翻页；右下返回先取消选择" if campaign.shop_pending.is_empty() else detail.replace("右键/Esc取消","返回取消")
 	_shop_footer_text(detail,460,Color("#e5edf4"))
 
 func _draw_forge() -> void:
@@ -213,7 +230,7 @@ func _draw_mines() -> void:
 	_text("资金：",508,154);_text(str(campaign.state.money),556,154)
 	for row in [["卖",502,312],["出",502,342],["库",502,376],["房",502,406]]:_text(str(row[0]),int(row[1]),int(row[2]))
 
-func _controls() -> Dictionary:
+func _native_controls() -> Dictionary:
 	if kind=="forge":return {"equip":[439,233,50,25,"装备"],"back":[522,233,50,25,"返回"],"reset":[542,132,50,25,"取消"],"max":[542,160,50,25,"最大"],"make":[542,188,50,25,"制造"],"plus":[496,151,35,19,""],"minus":[496,170,35,19,""]}
 	if kind=="mines":
 		var c:Dictionary={"switch":[533,178,50,25,"交换"],"back":[533,220,50,25,"返回"]}
@@ -228,6 +245,25 @@ func _controls() -> Dictionary:
 	if campaign.shop_mode==2:c.merge({"stock_up":[367,202,35,19,""],"stock_down":[367,221,35,19,""]})
 	c.merge({"people_up":[574,372,35,19,""],"people_down":[574,391,35,19,""]})
 	return c
+func _controls() -> Dictionary:
+	var controls:=_native_controls()
+	if not OriginalUI.touch_mode(self):return controls
+	for id in controls:
+		var rect:Array=controls[id];rect[3]=40
+	if kind=="shop":
+		controls.people_up=[574,340,50,40,""]
+		controls.people_down=[574,386,50,40,""]
+		if campaign.shop_mode==2:
+			controls.stock_up=[367,166,48,40,""]
+			controls.stock_down=[367,214,48,40,""]
+		# Grocery modes are42px apart, so40px targets do not overlap.
+	elif kind=="forge":
+		controls.plus=[496,132,40,40,""];controls.minus=[496,180,40,40,""]
+		controls.reset=[542,108,50,36,"取消"];controls.max=[542,150,50,36,"最大"];controls.make=[542,192,50,36,"制造"]
+	elif kind=="mines" and campaign.k04_person==-999:
+		controls.up=[588,16,48,40,""];controls.down=[588,62,48,40,""]
+	return controls
+
 func _control_at(point:Vector2) -> String:
 	for id in _controls():
 		var c:Array=_controls()[id]
@@ -236,6 +272,7 @@ func _control_at(point:Vector2) -> String:
 func _input(event:InputEvent) -> void:
 	if not enabled or not is_visible_in_tree() or campaign._service_input_blocked():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_back();return
 	if kind=="shop" and campaign.shop_convenience_enabled:
 		_shop_convenience_input(event)
 		return
@@ -244,6 +281,9 @@ func _input(event:InputEvent) -> void:
 		return
 	if not event is InputEventMouseButton:return
 	var point:Vector2=event.position
+	if kind=="mines" and OriginalUI.touch_mode(self) and event.button_index==MOUSE_BUTTON_LEFT:
+		if not event.pressed:_touch_mine_tap(point)
+		return
 	if event.button_index==MOUSE_BUTTON_RIGHT:
 		if kind=="shop" and event.pressed and event.double_click and campaign.shop_mode==2 and Rect2(536,134,64,54).has_point(point):campaign._shop_bulk_input(event)
 		elif not event.pressed and pressed.is_empty():_right_up(point)
@@ -489,3 +529,23 @@ func _index_text(raw:PackedByteArray,text:String,x:int,y:int) -> void:
 			for xx in range(stride*8):
 				if at+yy*stride+xx/8<source.size() and source[at+yy*stride+xx/8]&(0x80>>(xx%8)):_index_pixel(raw,x+xx,y+yy,0x48)
 		x+=stride*8;i+=stride
+
+func _touch_back() -> void:
+	if not enabled or campaign._service_input_blocked():return
+	if kind=="shop":
+		if not campaign.shop_pending.is_empty():campaign._shop_cancel_selection()
+		else:_activate("back")
+	elif kind=="mines" and campaign.k04_held>=0:
+		campaign.k04_held=-1;campaign.k04_source=-1;drag.clear();queue_redraw()
+	else:pressed="";drag.clear();_activate("back")
+
+func _touch_mine_tap(point:Vector2) -> void:
+	var control:=_control_at(point)
+	if not control.is_empty():_activate(control);return
+	var source:=mine_at(point)
+	if not source.is_empty() and (campaign.k04_person!=-999 or campaign.state.mine_count(int(source.packed))>0):
+		campaign._k04_pick(int(source.index),int(source.packed));queue_redraw();return
+	var pid:=mine_person_at(point)
+	if pid!=-999:campaign._k04_target(pid)
+	elif Rect2(525,308,64,54).has_point(point):campaign._k04_sell()
+	elif Rect2(525,372,64,54).has_point(point):campaign._k04_store()

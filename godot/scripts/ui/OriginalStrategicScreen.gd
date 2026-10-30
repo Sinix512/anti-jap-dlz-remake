@@ -39,6 +39,7 @@ func setup(f:Font,kind:String,game_state,index:=0,scene_palette:="BIGMAP") -> vo
 			palette=Palette.colors(scene_palette);background=Palette.asset("bg02",640,480,palette)
 		"command":
 			palette=Palette.colors("BACK19");background=load("res://assets/ui/strategy_back19.png")
+	OriginalUI.touch_back(self,font,_touch_back,"菜单" if mode=="world" else "返回")
 	queue_redraw()
 
 func _text(value:String,point:Vector2,color:Color) -> void:
@@ -89,6 +90,7 @@ func _input(event:InputEvent) -> void:
 	if not enabled or not is_visible_in_tree():return
 	if input_blocked.is_valid() and input_blocked.call():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_back();return
 	if event is InputEventMouseMotion and mode=="world":
 		var hover:=Rect2(549,20,70,81).has_point(event.position)
 		if hover!=mine_hover:mine_hover=hover;queue_redraw()
@@ -108,3 +110,10 @@ func _input(event:InputEvent) -> void:
 			if not event.pressed and Rect2(540,40,64,32).has_point(event.position):room_exit.emit()
 		"command":
 			if not event.pressed and Rect2(459,0,180,100).has_point(event.position):room_exit.emit()
+
+func _touch_back() -> void:
+	if not enabled or (input_blocked.is_valid() and input_blocked.call()):return
+	match mode:
+		"world":system_requested.emit(Vector2(460,260))
+		"town":building_enter.emit(4)
+		_:room_exit.emit()

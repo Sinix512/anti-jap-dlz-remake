@@ -93,7 +93,13 @@ func setup(f: Font, item_name: String, measure: String, price: int,
 	balance_label = _label("", Rect2(156, 258, 328, 20))
 	buy_button = _button("购买", Rect2(204, 288, 112, 30), _confirm)
 	cancel_button = _button("取消", Rect2(328, 288, 112, 30), _cancel)
-	_label("回车购买 / Esc或右键取消", Rect2(156, 334, 328, 20), UI.MUTED)
+	_label("点数字可输入；±调整；取消不扣款" if UI.touch_mode(self) else "回车购买 / Esc或右键取消", Rect2(156, 334, 328, 20), UI.MUTED)
+	if UI.touch_mode(self):
+		for control in [minus_button,quantity_input,plus_button,maximum_button]:
+			control.position.y=194;control.size.y=40;control.custom_minimum_size.y=40
+		for control in [buy_button,cancel_button]:
+			control.position.y=286;control.size.y=40;control.custom_minimum_size.y=40
+		UI.touch_back(self,font,_cancel,"取消")
 	_refresh()
 	call_deferred("_focus_quantity")
 
@@ -116,6 +122,7 @@ func _button(value: String, rect: Rect2, action: Callable) -> Button:
 func _focus_quantity() -> void:
 	if done or not is_inside_tree():
 		return
+	if UI.touch_mode(self):return
 	quantity_input.grab_focus()
 	quantity_input.select_all()
 

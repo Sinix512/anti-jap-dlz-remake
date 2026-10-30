@@ -15,6 +15,7 @@ var drag:Dictionary={}
 var drag_point:=Vector2.ZERO
 var button_pressed:=false
 var done:=false
+var info:CanvasLayer
 var background:Texture2D
 var buttons:Array=[]
 var icons:Dictionary={}
@@ -37,6 +38,7 @@ func setup(f:Font,game_state,index:int) -> void:
 	while left.size()<32:left.append({"active":false,"pid":EMPTY})
 	for slot in forced:right.append({"status":2,"value":state.PROTAGONIST_PID if int(slot)==0 else int(slot)})
 	while right.size()<32:right.append({"status":0,"value":EMPTY})
+	OriginalUI.touch_back(self,font,_touch_submit,"确定")
 	OriginalUI.native_text_index=0x48
 	queue_redraw()
 
@@ -136,16 +138,20 @@ func submit() -> void:
 	done=true;confirmed.emit(selected_slots())
 
 func _input(event:InputEvent) -> void:
-	if done or not is_visible_in_tree():return
+	if done or not is_visible_in_tree() or is_instance_valid(info):return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
 	if event is InputEventMouseMotion and not drag.is_empty():
 		drag_point=(event.position-Vector2(24,24)).clamp(Vector2.ZERO,Vector2(591,431));queue_redraw()
+	if OriginalUI.touch_mode(self):
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:
+			drag.clear();queue_redraw();return # Deployment cannot be abandoned without the campaign.
+		if event is InputEventMouseButton and not event.pressed and event.button_index==MOUSE_BUTTON_RIGHT:_touch_info(event.position);return
 	if not event is InputEventMouseButton or event.button_index!=MOUSE_BUTTON_LEFT:return
 	if event.pressed:
 		for side in range(2):
 			var slot:=hit_member(event.position,side)
 			if slot<0 or (side==1 and int(right[slot].status)==2) or (side==0 and count()>=limit):continue
-			if event.double_click:
+			if event.double_click or OriginalUI.touch_mode(self):
 				drag.clear();transfer(side,slot)
 			else:
 				drag={"side":side,"slot":slot};drag_point=(event.position-Vector2(24,24)).clamp(Vector2.ZERO,Vector2(591,431))
@@ -162,3 +168,14 @@ func _input(event:InputEvent) -> void:
 			return
 		for side in range(2):
 			if Rect2(245 if side==0 else 394,355,50,25).has_point(event.position):set_page(side)
+
+func _touch_submit() -> void:
+	if not is_instance_valid(info):submit()
+
+func _touch_info(point:Vector2) -> void:
+	for side in range(2):
+		var slot:=hit_member(point,side)
+		if slot<0:continue
+		info=preload("res://scripts/ui/OriginalInfo.gd").new();add_child(info)
+		info.closed.connect(func():info=null)
+		info.setup(font,state.data,"person",int(member(side,slot).pid),member(side,slot));return

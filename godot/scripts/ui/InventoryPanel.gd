@@ -9,6 +9,7 @@ var stock: Dictionary
 var mine_stock: Dictionary
 var material_stock: Dictionary
 var category := "items"
+var _closed:=false
 var list: VBoxContainer
 var detail: Label
 var icon: TextureRect
@@ -30,12 +31,12 @@ func setup(f: Font, d: Dictionary, items: Dictionary, mines: Dictionary = {},
 	var card := OriginalUI.nine_patch(OriginalUI.PANEL_RED, Rect2(28, 36, 584, 408), 10)
 	add_child(card)
 	add_child(_label("行 囊", Rect2(44, 46, 380, 24), OriginalUI.GOLD_LIGHT))
-	var close := OriginalUI.button("关闭", font, Vector2(64, 28), func(): closed.emit())
+	var close := OriginalUI.button("关闭", font, Vector2(64, 40 if OriginalUI.touch_mode(self) else 28), _touch_close)
 	close.position = Vector2(530, 44)
 	add_child(close)
 	var tabs := [["物品", "items"], ["地雷", "mines"], ["材料", "materials"]]
 	for i in range(tabs.size()):
-		var tab := OriginalUI.button(tabs[i][0], font, Vector2(78, 28),
+		var tab := OriginalUI.button(tabs[i][0], font, Vector2(78, 36 if OriginalUI.touch_mode(self) else 28),
 				_show_category.bind(str(tabs[i][1])))
 		tab.position = Vector2(44 + i * 84, 82)
 		add_child(tab)
@@ -59,6 +60,7 @@ func setup(f: Font, d: Dictionary, items: Dictionary, mines: Dictionary = {},
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(detail)
 	add_child(_label("宝箱收入与战斗消耗会随战役存档保存。", Rect2(44, 410, 540, 24)))
+	OriginalUI.touch_back(self,font,_touch_close,"关闭")
 	_show_category("items")
 
 
@@ -86,7 +88,7 @@ func _show_category(kind: String) -> void:
 			continue
 		var rec := _record(kind, int(key))
 		var b := OriginalUI.button("%s ×%d" % [_name(rec), int(inv[key])], font,
-				Vector2(248, 30), _show_detail.bind(kind, int(key), int(inv[key])))
+				Vector2(248, 40 if OriginalUI.touch_mode(self) else 30), _show_detail.bind(kind, int(key), int(inv[key])))
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		list.add_child(b)
 		if first:
@@ -127,3 +129,12 @@ func _show_detail(kind: String, id: int, count: int) -> void:
 			usage = "战斗中选择单位，再打开物品菜单使用。"
 	detail.text = "%s\n数量：%d\n\n%s\n\n%s" % [_name(rec), count,
 			str(rec.get("desc", rec.get("description", ""))), usage]
+
+func _input(event:InputEvent) -> void:
+	if _closed or not is_visible_in_tree():return
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:
+		get_viewport().set_input_as_handled();_touch_close()
+
+func _touch_close() -> void:
+	if _closed:return
+	_closed=true;closed.emit()

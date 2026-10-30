@@ -5,13 +5,16 @@ config_version=5
 [application]
 
 config/name="抗日：地雷战 · M3-M5"
+config/icon="res://android_icon.svg"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/show_image=false
+config/quit_on_go_back=false
 
 [autoload]
 
 Music="*res://scripts/ui/Music.gd"
+TouchInput="*res://scripts/ui/TouchInput.gd"
 
 [display]
 
@@ -21,12 +24,18 @@ window/size/window_width_override=1280
 window/size/window_height_override=960
 window/stretch/mode="viewport"
 window/stretch/aspect="keep"
+window/handheld/orientation=0
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=false
 
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
 
 [gui]
 

@@ -1,5 +1,6 @@
 extends Node2D
 const InventorySlots=preload("res://scripts/battle/InventorySlots.gd")
+const TouchBridge=preload("res://scripts/ui/TouchInput.gd")
 
 ## M1 战斗核心：地图、单位、Dijkstra 移动、普通攻击、地雷、回合与简单 AI。
 
@@ -85,6 +86,18 @@ var _right_dragged := false
 var _right_held := false
 var _ignore_right_release := false
 var _normal_hud_visible: Array = []
+# Mobile-only aim state. It is never included in snapshots or combat rules.
+var touch_layer: CanvasLayer
+var touch_confirm: Button
+var touch_cancel_button: Button
+var desktop_cancel_header: ColorRect
+var _cancel_view_rect := Rect2()
+var touch_hint: Label
+var touch_full_header: ColorRect
+var _touch_pan_allowed := false
+var _touch_aim := Vector2i(-1,-1)
+var _touch_aim_signature := ""
+var _touch_camera_start := Vector2.ZERO
 var animations_enabled := true
 var sfx_enabled := true
 
@@ -749,6 +762,11 @@ func _camera_focus_unit():
 
 
 func map_rect() -> Rect2:
+	# Reserve the same top/bottom touch chrome in full-map mode; do not put
+	# cancel/confirm over actionable cells. Desktop only reserves the top strip
+	# while a visible target-cancel button needs it in fullscreen.
+	if fullscreen_map and _touch_mode():return Rect2(0,32,624,432)
+	if fullscreen_map and _target_action_mode():return Rect2(0,32,624,448)
 	return FULL_MAP_RECT if fullscreen_map else NORMAL_MAP_RECT
 
 
@@ -829,6 +847,209 @@ func screen_to_tile(point: Vector2) -> Vector2i:
 	if not map_rect().has_point(point) or camera == null: return Vector2i(-1,-1)
 	var world := camera.position + point - Vector2(320,240)
 	return _tile_of(world)
+
+
+# ---------------- Touchscreen-only presentation adapter ----------------
+
+func _touch_mode() -> bool:
+	var touch = get_node_or_null("/root/TouchInput") if is_inside_tree() else null
+	return touch != null and touch.is_touch_mode()
+
+func _fit_topbar_button(button: Button) -> void:
+	# OriginalUI.button initially sizes against fallback font/theme metrics,
+	# which may leave a 31px control crossing y=32. Apply compact local
+	# padding after entering the tree, then settle the actual 28px size.
+	# Keep a local, compact style override; never shrink the shared theme.
+	for state in ["normal","hover","pressed","disabled"]:
+		var style:StyleBox = button.get_theme_stylebox(state).duplicate()
+		style.content_margin_top = 1
+		style.content_margin_bottom = 1
+		button.add_theme_stylebox_override(state,style)
+	button.custom_minimum_size.y = 28
+	button.size.y = 28
+
+func _touch_mode_changed(enabled: bool) -> void:
+	if enabled and touch_layer == null and hud_root != null:
+		touch_layer = CanvasLayer.new()
+		touch_layer.layer = 31
+		add_child(touch_layer)
+		var root := Control.new()
+		root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		touch_layer.add_child(root)
+		touch_full_header = ColorRect.new()
+		touch_full_header.size = Vector2(640,32)
+		touch_full_header.color = Color(0.04,0.04,0.04,1)
+		touch_full_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(touch_full_header)
+		for spec in [["取消",8,_touch_back],["确认",380,_touch_commit],["菜单",440,_touch_menu]]:
+			var button := OriginalUI.button(str(spec[0]),font,Vector2(80 if int(spec[1])==8 else 56,28),spec[2],16)
+			button.position = Vector2(int(spec[1]),2)
+			root.add_child(button)
+			_fit_topbar_button(button)
+			if int(spec[1]) == 380:touch_confirm = button
+			elif int(spec[1]) == 8:touch_cancel_button = button
+		var bg := ColorRect.new()
+		bg.position = Vector2(0,464);bg.size = Vector2(640,16)
+		bg.color = Color(0.04,0.04,0.04,0.95);bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(bg)
+		touch_hint = OriginalUI.label("",font,16,OriginalUI.GOLD_LIGHT)
+		touch_hint.position = Vector2(8,464);touch_hint.size = Vector2(624,16)
+		touch_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(touch_hint)
+	if touch_layer != null:touch_layer.visible = enabled
+	_update_touch_chrome()
+
+func _touch_signature() -> String:
+	return "%s/%s/%s/%s/%s/%s" % [selected.get_instance_id() if is_instance_valid(selected) else -1,
+		mode,native_range_phase,active_skill_id,active_item_id,mine_kind]
+
+func _touch_candidate_valid() -> bool:
+	return (_touch_target_requires_confirmation() and _touch_aim.x >= 0 and _touch_aim_signature == _touch_signature() and _touch_map_ready()
+		and RangeMask.allows(native_dark_mask,map_w,map_h,_touch_aim))
+
+func _touch_map_ready() -> bool:
+	return (not busy and not finished_flag and phase == "player" and not progress_fx_active
+		and not is_instance_valid(action_panel) and not is_instance_valid(context_menu))
+
+func _target_action_mode() -> bool:
+	return selected != null and (mode in ["attack","skill","item","item_give"] or mode.begins_with("mine_"))
+
+func _touch_target_requires_confirmation() -> bool:
+	# Moving only stages a reversible location. Timer landings only open the
+	# duration picker; choosing its duration is the final action confirmation.
+	return _target_action_mode() and mode != "mine_timer" and not (mode == "mine_place" and mine_kind / 10 == 2)
+
+func _target_cancel_text() -> String:
+	match mode:
+		"attack":return "取消攻击"
+		"skill":return "取消策略"
+		"item","item_give":return "取消物品"
+	return "取消地雷" if mode.begins_with("mine_") else "取消"
+
+func _update_target_cancel() -> void:
+	if btn_cancel == null:return
+	# This is one ordinary mouse HUD button, not touchscreen chrome. The old
+	# placeholder used to stay hidden, leaving only an undiscoverable right click.
+	var show_cancel := not _touch_mode() and _target_action_mode() and _touch_map_ready()
+	btn_cancel.visible = show_cancel
+	btn_cancel.disabled = not show_cancel
+	btn_cancel.text = _target_cancel_text()
+	if desktop_cancel_header != null:desktop_cancel_header.visible = show_cancel and fullscreen_map
+	var rect := map_rect()
+	if rect != _cancel_view_rect:
+		_cancel_view_rect = rect
+		# Target mode is set after the native mask is built. Synchronize the
+		# fullscreen top reservation at HUD update, not only next frame's pan.
+		_clamp_camera()
+		if is_instance_valid(native_range_layer):native_range_layer.queue_redraw()
+		if is_instance_valid(overlay):overlay.queue_redraw()
+
+func _update_touch_chrome() -> void:
+	if touch_layer == null:return
+	touch_full_header.visible = fullscreen_map
+	touch_confirm.disabled = not _touch_candidate_valid()
+	touch_cancel_button.text = _target_cancel_text()
+	if _touch_candidate_valid():
+		touch_hint.text = "再点同格或点确认结束行动；" + _target_cancel_text() + "返回"
+	elif mode == "move":
+		touch_hint.text = "点可达格即移动；取消可撤回；拖动地图；长按情报"
+	elif _target_action_mode() and not _touch_target_requires_confirmation():
+		touch_hint.text = "点目标选择回合；选择回合即确认结束行动"
+	elif _target_action_mode():
+		touch_hint.text = "点格预览，再确认结束行动；可点" + _target_cancel_text()
+	else:
+		touch_hint.text = "点人物选择；拖动地图；长按情报"
+
+func _touch_button_at(point: Vector2) -> int:
+	if Rect2(8,2,80,28).has_point(point):return 0
+	if Rect2(380,2,56,28).has_point(point):return 1
+	if Rect2(440,2,56,28).has_point(point):return 2
+	return -1
+
+func touch_accepts(point: Vector2) -> bool:
+	if not _touch_mode() or camera == null:return false
+	# The cancel affordance remains reachable above native modal input layers.
+	if _touch_button_at(point) >= 0:return true
+	return _touch_map_ready() and map_rect().has_point(point)
+
+func touch_begin(point: Vector2) -> void:
+	_touch_camera_start = camera.position
+	_touch_pan_allowed = map_rect().has_point(point)
+
+func touch_pan(total: Vector2) -> void:
+	if not _touch_pan_allowed or not _touch_map_ready():return
+	touch_cancel()
+	camera_follow = false
+	camera_follow_target = null
+	camera.position = _touch_camera_start - total
+	_clamp_camera()
+
+func touch_tap(point: Vector2, held: bool) -> void:
+	match _touch_button_at(point):
+		0:_touch_back();return
+		1:_touch_commit();return
+		2:_touch_menu();return
+	if not _touch_map_ready() or not map_rect().has_point(point):return
+	var tile := screen_to_tile(point)
+	if not _in_bounds(tile):return
+	if held:
+		touch_cancel()
+		var unit := _unit_at(tile)
+		if unit != null and unit.alive:
+			# Inspect without changing the actor or committing/reverting a
+			# reversible move. Returning to aim still needs a fresh preview.
+			_open_unit_info(unit)
+		return
+	hover_tile = tile
+	if is_instance_valid(overlay):overlay.queue_redraw()
+	if _touch_target_requires_confirmation():
+		if not RangeMask.allows(native_dark_mask,map_w,map_h,tile):
+			touch_cancel()
+			return
+		if _touch_aim == tile and _touch_aim_signature == _touch_signature():
+			_touch_commit()
+		else:
+			_touch_aim = tile
+			_touch_aim_signature = _touch_signature()
+			update_hud()
+			_update_touch_chrome()
+		return
+	touch_cancel()
+	hover_tile = tile
+	_on_map_click(tile)
+	_update_touch_chrome()
+
+func _touch_commit() -> void:
+	if not _touch_candidate_valid():return
+	var tile := _touch_aim
+	_touch_aim = Vector2i(-1,-1)
+	_touch_aim_signature = ""
+	_on_map_click(tile)
+	_update_touch_chrome()
+
+func _touch_back() -> void:
+	var touch = get_node_or_null("/root/TouchInput")
+	if touch != null:touch.request_back()
+	else:_cancel()
+
+func _touch_menu() -> void:
+	if not _touch_map_ready():return
+	touch_cancel()
+	_open_system_menu(Vector2(400,32))
+
+func touch_cancel() -> void:
+	_touch_aim = Vector2i(-1,-1)
+	_touch_aim_signature = ""
+	if _touch_mode():hover_tile = Vector2i(-1,-1)
+	if is_instance_valid(overlay):overlay.queue_redraw()
+	_update_touch_chrome()
+
+func _draw_touch_aim(ci: CanvasItem) -> void:
+	if not _touch_mode() or not _touch_candidate_valid():return
+	var rect := Rect2(Vector2(_touch_aim*TILE)+Vector2(3,3),Vector2(TILE-6,TILE-6))
+	var clip := Rect2(camera.position+map_rect().position-Vector2(320,240),map_rect().size)
+	var visible := rect.intersection(clip)
+	if visible.has_area():ci.draw_rect(visible,Color(1,0.95,0.35),false,3)
 
 
 # ---------------- HUD ----------------
@@ -936,6 +1157,27 @@ func _build_hud() -> void:
 	btn_wait = hud_stats.button_wait
 	btn_cancel = hud_stats.button_cancel
 	btn_end = hud_stats.button_end
+	btn_cancel.text = "取消攻击"
+	btn_cancel.position = Vector2(8,2)
+	btn_cancel.size = Vector2(80,28)
+	btn_cancel.custom_minimum_size = Vector2(80,28)
+	btn_cancel.add_theme_font_override("font",font)
+	btn_cancel.add_theme_font_size_override("font_size",16)
+	btn_cancel.focus_mode = Control.FOCUS_NONE
+	btn_cancel.pressed.connect(_on_cancel)
+	_fit_topbar_button(btn_cancel)
+	desktop_cancel_header = ColorRect.new()
+	desktop_cancel_header.size = Vector2(640,32)
+	desktop_cancel_header.color = Color(0.04,0.04,0.04,1)
+	desktop_cancel_header.visible = false
+	desktop_cancel_header.mouse_filter = Control.MOUSE_FILTER_STOP
+	hud_root.add_child(desktop_cancel_header)
+	hud_root.move_child(desktop_cancel_header,0)
+	add_to_group("touch_battle")
+	var touch = get_node_or_null("/root/TouchInput")
+	if touch != null and not touch.touch_mode_changed.is_connected(_touch_mode_changed):
+		touch.touch_mode_changed.connect(_touch_mode_changed)
+	_touch_mode_changed(_touch_mode())
 
 
 func _toolbar(index: int, system_menu:=false) -> void:
@@ -977,6 +1219,8 @@ func _toggle_map_mode() -> void:
 		_normal_hud_visible.clear()
 	_close_context_menu()
 	_clamp_camera()
+	_update_touch_chrome()
+	_update_target_cancel()
 
 
 func _show_task() -> void:
@@ -1043,7 +1287,7 @@ func _open_context_menu() -> void:
 	_close_context_menu()
 	if selected == null or not selected.alive or selected.acted or busy or phase != "player": return
 	if not selected.is_player() or not selected.control: return
-	var entries := [["休  息",_on_wait],["攻  击%2d"%CombatRules.skill_level(selected.attack_count),_on_attack],
+	var entries := [["休  息",_request_wait],["攻  击%2d"%CombatRules.skill_level(selected.attack_count),_on_attack],
 		["策  略",_on_skill],["地  雷",_on_mine],["物  品",_on_item],["情  报",_open_unit_info]]
 	_clear_native_range("menu")
 	mode="idle"
@@ -1160,6 +1404,7 @@ func update_hud() -> void:
 	btn_wait.disabled = not (can_act and controllable and not selected.acted)
 	btn_cancel.disabled = mode == "idle" and selected == null and action_panel == null
 	btn_end.disabled = not can_act
+	_update_target_cancel()
 	if phase == "player":
 		btn_end.text = "结束回合"
 	elif phase == "enemy":
@@ -1292,6 +1537,7 @@ func _advance_display_timer(delta:float) -> void:
 
 
 func _process(delta: float) -> void:
+	_update_target_cancel()
 	var modal_open:=is_instance_valid(action_panel) or is_instance_valid(context_menu)
 	# A modal can open without moving the mouse. Hide/reveal the aim aid even
 	# when the usual hover-update branch below is intentionally suspended.
@@ -1324,6 +1570,9 @@ func _process(delta: float) -> void:
 		var want := _focus_position(camera_follow_target.position)
 		camera.position = want
 		_clamp_camera()
+	if _touch_mode():
+		_update_touch_chrome()
+		return # Keep the last tapped aim; a touchscreen has no hover cursor.
 	var t := screen_to_tile(get_viewport().get_mouse_position())
 	if t != hover_tile:
 		hover_tile = t
@@ -1338,6 +1587,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if progress_fx_active or is_instance_valid(action_panel) or is_instance_valid(context_menu):return
+	if _touch_mode() and event is InputEventMouse and event.device == TouchBridge.SYNTHETIC_DEVICE:
+		# UI gestures are never map commands. A modal may disappear between
+		# finger-down and finger-up; do not let its synthesized release/tap
+		# bypass the map's preview/confirm route. Minimap panning is harmless.
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
+				and not fullscreen_map and minimap.actual_rect().has_point(event.position-minimap.position):
+			var tile:Vector2i=minimap.tile_at(event.position-minimap.position)
+			camera_follow=false
+			camera.position=_focus_position(Vector2(tile.x*TILE+24,tile.y*TILE+24))
+			_clamp_camera()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion and _right_held:
 		var diff: Vector2 = event.position - _right_down
 		if diff.length() >= 20:
@@ -1396,7 +1657,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_4:
 			_on_item()
 		elif event.keycode == KEY_5:
-			_on_wait()
+			_request_wait()
 		elif event.keycode == KEY_6:
 			_ask_end_turn()
 
@@ -1589,6 +1850,7 @@ func _focus_player() -> void:
 
 
 func _set_native_range(mask:PackedByteArray,range_phase:String) -> void:
+	touch_cancel()
 	native_dark_mask=mask
 	native_range_phase=range_phase
 	if is_instance_valid(native_range_layer):
@@ -3151,7 +3413,7 @@ func _item_option(id:int,index:int) -> void:
 			active_item_id=id;mode="item_give"
 			_set_native_range(RangeMask.mine_geometry(map_w,map_h,Vector2i(selected.x,selected.y)),"item-give")
 			move_tiles.clear();attack_tiles.clear();update_hud()
-		2:await _discard_item(id)
+		2:_confirm_touch_ending_action("丢弃结束行动？",_discard_item.bind(id))
 		3:
 			var info=preload("res://scripts/ui/OriginalInfo.gd").new();add_child(info)
 			busy=true
@@ -3199,7 +3461,7 @@ func _choose_item(item_id: int) -> void:
 	_close_action_panel()
 	if item_id>=81 or item_id in [31,32]:_return_action_menu();return
 	if item_id>=61 and item_id<=80:
-		await _use_manual_item(item_id);return
+		_confirm_touch_ending_action("尝试耗行动？",_use_manual_item.bind(item_id));return
 	if selected == null or busy:
 		return
 	var it: Dictionary = (data.get("items", {}) as Dictionary).get(str(item_id), {})
@@ -3493,26 +3755,30 @@ func _show_roster(side: String) -> void:
 	_open_readout(pages)
 
 
-func _open_unit_info() -> void:
-	if selected==null or busy:return
+func _open_unit_info(inspected: Node2D = null) -> void:
+	var actor = selected if inspected == null else inspected
+	if actor==null or busy:return
 	_close_context_menu()
 	var info=preload("res://scripts/ui/OriginalInfo.gd").new()
 	add_child(info)
 	# 419CDF compacts owned bags before rendering; state_record is a snapshot.
-	InventorySlots.compact(selected.item_slots)
-	InventorySlots.compact(selected.mine_slots)
-	var person:Dictionary=selected.state_record()
-	person["name"]=selected.unit_name
-	person["terrain_bonus"]=_terrain_defense(selected)
+	InventorySlots.compact(actor.item_slots)
+	InventorySlots.compact(actor.mine_slots)
+	var person:Dictionary=actor.state_record()
+	person["name"]=actor.unit_name
+	person["terrain_bonus"]=_terrain_defense(actor)
 	var tables:=data.duplicate(false)
 	tables["units"]=data.get("unit_types",{})
 	busy=true
 	info.closed.connect(func():
 		busy=false
+		if inspected != null:
+			update_hud()
+			return
 		if selected!=null and (not selected.is_player() or not selected.control or selected.acted):_clear_selection()
 		elif native_range_phase=="menu":_open_context_menu()
 	)
-	info.setup(font,tables,"person",int(selected.slot),person)
+	info.setup(font,tables,"person",int(actor.slot),person)
 
 
 func _ask_end_turn(system_menu:=false) -> void:
@@ -4035,6 +4301,33 @@ func _on_item() -> void:
 	_open_item_menu()
 
 
+func _confirm_touch_ending_action(title: String, commit: Callable) -> void:
+	# Guard UI entry points only: automated resolvers and the desktop keep their
+	# original semantics. Cancellation never reaches the irreversible callback.
+	if not _touch_mode():
+		commit.call()
+		return
+	if selected == null or busy or selected.acted or phase != "player":return
+	var actor = selected
+	_close_context_menu()
+	_close_action_panel()
+	touch_cancel()
+	var confirm = preload("res://scripts/ui/OriginalConfirm.gd").new()
+	hud_root.add_child(confirm)
+	action_panel = confirm
+	confirm.answered.connect(func(yes: bool):
+		if action_panel != confirm:return
+		_close_action_panel()
+		if not is_instance_valid(actor) or selected != actor or actor.acted or not actor.alive:return
+		if yes:commit.call()
+		else:_return_action_menu()
+	)
+	confirm.setup(font,title,Vector2(256,176))
+
+func _request_wait() -> void:
+	_confirm_touch_ending_action("休息结束行动？",_on_wait)
+
+
 func _on_wait() -> void:
 	if selected == null or busy or phase != "player":
 		return
@@ -4070,7 +4363,9 @@ func draw_overlay(ci: CanvasItem) -> void:
 	# Never paint over HUD.
 	var skill_preview:=mode=="skill"
 	var cells:=skill_preview_cells() if skill_preview else attack_preview_cells()
-	if cells.is_empty():return
+	if cells.is_empty():
+		_draw_touch_aim(ci)
+		return
 	var clip:=Rect2(Vector2.ZERO,Vector2(map_w*TILE,map_h*TILE))
 	if camera!=null:
 		clip=Rect2(camera.position+map_rect().position-Vector2(320,240),map_rect().size)

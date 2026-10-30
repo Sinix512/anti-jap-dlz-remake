@@ -25,6 +25,7 @@ func setup(f:Font) -> void:
 	background=load("res://assets/ui/title_bg.png")
 	for i in range(5):highlights.append(load("res://assets/ui/title_selected_%d.png"%i))
 	indicator=load("res://assets/ui/title_mine02.png")
+	OriginalUI.touch_back(self,font,_touch_exit,"退出")
 	queue_redraw()
 
 func row_at(point:Vector2) -> int:
@@ -49,6 +50,7 @@ func _process(delta:float) -> void:
 func _input(event:InputEvent) -> void:
 	if done or not is_visible_in_tree():return
 	if event is InputEventMouse or event is InputEventKey:get_viewport().set_input_as_handled()
+	if OriginalUI.touch_mode(self) and event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_ESCAPE:_touch_exit();return
 	if event is InputEventMouseMotion:
 		var row:=row_at(event.position)
 		if row>=0 and row!=selected:selected=row;queue_redraw()
@@ -63,3 +65,7 @@ func _input(event:InputEvent) -> void:
 			2:high_scores.emit()
 			3:supporters.emit()
 			4:quit_game.emit()
+
+func _touch_exit() -> void:
+	if done:return
+	done=true;quit_game.emit() # Main opens the existing confirmation, never direct quit.
