@@ -1,67 +1,144 @@
 # dlz-remake
 
-《抗日：地雷战》（1998）的Godot复刻。原版`../dlz/ANTI-JAP/`只读，未运行EXE。
+《抗日：地雷战》（1998）的非官方 Godot 重实现：用 GDScript 实现战斗、战役、城镇与界面，用 Python 解析本地原版数据并准备运行资源。
 
-**2026-10-27：用户已停止旧47关目标，本会话改为整理当前实现版攻略；可玩性/成长验证由另一会话负责。好玩优先，不要求严格原味或兼容原版旧存档。踩雷软锁仍有未解决反馈。以下验收/试验状态为历史记录，不是自动续跑指令。**
+**这是开发中的桌面项目，不是原版游戏资源包，也不是官方作品。** 运行需要自行准备有权使用的原版文件；本仓库不提供下载。已有 47 关的数据与流程支持；本地用户实玩存档已确认 **前23关通关，第24关进行中**。尚不代表47关全部验证完成。
 
-[玩家攻略](docs/guide/README.md) · [离线合订版](docs/guide/guide.html) · [地形图鉴](docs/guide/terrain.md) · [兵种范围图](docs/guide/unit_ranges.md) · [全部数值](docs/guide/reference.md) · [47关任务事件](docs/guide/missions.md)
+[玩家攻略](docs/guide/README.md) · [离线攻略](docs/guide/guide.html) · [地形图鉴](docs/guide/terrain.md) · [兵种范围](docs/guide/unit_ranges.md) · [数值参考](docs/guide/reference.md) · [关卡事件](docs/guide/missions.md)
 
-[交接](HANDOVER.md) · [缺口](GAPS.md) · [计划](PLAN.md) · [验收](ACCEPTANCE.md) · [试玩](MANUAL_PLAYTEST.md)
+## 当前实现
 
-```bash
-./run_game.sh
-./run_playtest.sh
-./verify_final.sh  # 47关未证不能成功退出
+- 回合制战斗：移动、攻击、策略、地雷、物品、装备、士气、经验与敌方 AI。
+- 战役与城镇：关卡部署、招募、商店、锻造、转职、库存及战报结算。
+- 原版数据解析、像素界面、剧情、音效与过场的本地转换管线。
+- 本项目存档及部分原版存档读取；**不支持原 EXE mode150 战中续战**，不承诺所有旧存档兼容。
+- 规则、数据和界面的回归测试，以及独立的新档路线验证工具。
+
+已知限制：后续主线、隐藏分支与全关通关尚未验证完成；仍可能出现战役阻塞或规则差异。详细状态见 [GAPS](GAPS.md) 与 [ACCEPTANCE](ACCEPTANCE.md)。旧实验日志中的通过数只对应当时版本，不能作为当前版本的验收结论。
+
+## 逆向与重实现成果
+
+| 战斗、移动范围与小地图 | 战略地图与城镇 |
+|---|---|
+| ![Godot 重实现中的战场和移动范围](docs/images/battle-movement.png) | ![重建的战略地图](docs/images/strategic-map.png) |
+
+![MINE.DAT 解码得到的地雷精灵图集](docs/images/mine-atlas.png)
+
+- **格式解析**：DAT/IMG 等文件已转成可检查的 JSON、精灵图集、地图、音频与字体资产。
+- **规则还原**：攻防/成长、16种策略、地雷机制、物品库存与存档边界，以原始数据和静态逆向证据交叉核对。
+- **流程重建**：47关模板、19城镇、剧情事件、部署、商店与战报在 Godot 中重实现；数据覆盖与实际通关数分别记录。
+
+上图为既有重实现回归截图与本地解码图集，**不是玩家存档截图，也不构成全关验收证据**。图中原版美术/字形不适用 MIT，详见[展示图说明](docs/images/README.md)。
+
+## 已验证可玩进度
+
+截至2026-10-30，已只读核对7个本地存档槽位：普通难度完成列表连续覆盖 **L00–L22，即前23关**，每关评分与总分一致；第24关 **“营救彼德”（L23）** 有未结束的非演练战斗续存。
+
+这作为**用户实玩通关记录**计入项目可玩性依据，不能把当前第24关算作已经通关，也不将多个槽位的关数相加。原始存档不上传，仅公开[脱敏核对摘要](docs/validation/MANUAL_PROGRESS.md)；这项人工实玩证据与自动全关回归门槛分开，不声称完成47关或全部分支。
+
+## 环境
+
+目前以 **macOS + Godot 4.7.2** 为开发验证环境；其他桌面系统未在本说明中承诺通过。
+
+- Godot 4.7.2（项目使用 GL Compatibility 渲染器）。
+- Python 3.10+，Python 包 `Pillow`、`numpy`。
+- `ffmpeg`、`ffprobe`：音轨和过场转换需要；完整过场管线需要 FFmpeg 支持 `libvpx-vp9`、`libvorbis`、`libtheora`。
+- 原版安装目录，包括 DAT、IMG、TGA、字体、动画/视频文件，以及音效光盘 NRG。
+
+## 首次运行
+
+以下命令均在仓库根目录执行。当前多个生成器仍约定原版目录为 `../dlz/ANTI-JAP/`，推荐采用这个目录布局（目录中保留原版文件名和层级）：
+
+```text
+workspace/
+├── dlz-remake/                  # 本仓库
+└── dlz/
+    └── ANTI-JAP/                # 自行准备的本地原版文件
+        ├── GAME.DAT
+        ├── TXT.DAT
+        ├── HZK16
+        ├── ASC16
+        ├── …
+        └── ISO/
+            └── 抗日地雷战音效光盘.nrg
 ```
 
-最新完整strict259：**67/69 PASS、195实际图+SHA、同源/UUID一致、exit1**。真正normal新档L00–07胜，L08 T7主角死亡，47未完成。失败保留。260进一步检出range背景/半像素拖影，262修复后完整无legal UI **69/69、195图、exit0同源**；263另纠正L22专用完整菜单，完整68/69、195图、exit1同源，world_system截图被桌面motion改行；267静态捕获隔离已应用，266终局原输入26项接runner；完整UI268 **70/70、195实际图、exit0同源f7ca6730…1b0a7**，无新fresh/47证明。详`out/evidence/strict259/`及当前验收页。
+原版位于其他位置时，可以将 `../dlz/ANTI-JAP` 建为指向该目录的符号链接。请勿把原版文件复制进仓库。`DLZ_GAME` 目前仅被部分脚本读取，**不能**用它统一改写整个管线的资源路径。
 
-已实现原47关/19镇资源与规则、成长/AI/技能/雷/库存、标题/战略/服务/部署/剧情/战报、END/JZ及JSON续存；**资源装载不等于47可玩已证明**。原EXE mode150续战明确拒绝，为高成本兼容边界。
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install Pillow numpy
 
-原标题仅五项；附加工具必须显式CLI，不作正常战役证据：
+# macOS 默认值；其他位置请改为自己的 Godot 可执行文件。
+export GODOT_BIN="/Applications/Godot.app/Contents/MacOS/Godot"
+
+# 媒体工具默认从 PATH 查找；以下变量可显式指定其他构建。
+export M5_FFMPEG="$(command -v ffmpeg)"
+export M5_FFPROBE="$(command -v ffprobe)"
+export M5_FFMPEG_THEORA="$M5_FFMPEG"  # 若该构建无 libtheora，改为支持它的 ffmpeg
+
+# 1. 从原版数据生成 data/ 和 out/。
+python3 extract_all.py
+# 2. 首次准备视频/动画；会花费一定时间和磁盘空间，重复执行会复用缓存。
+python3 tools/prepare_m5_media.py
+# 3. 准备 Godot 数据、图像、音轨和字体，然后启动。
+./run_game.sh
+```
+
+`run_game.sh` 不负责首次 `extract_all.py` 和媒体转换，不能在空资源目录中直接运行。启动及数据转换使用重写后的程序，不需要运行原版 EXE。
+
+生成目录 `out/`、`data/`、`assets/`、`godot/data/`、`godot/assets/` 和 Godot 导入缓存均被 Git 忽略。转换不会改变原版资源的权利归属，**不要把包含原版资源的生成目录或导出包直接当作 MIT 项目发布**。
+
+## 操作与存档
+
+- 鼠标左键选择、移动或确认；右键 / `Esc` 取消。
+- `WASD` / 方向键平移战场；更多操作见[玩家攻略](docs/guide/README.md)。
+- `./run_playtest.sh` 开启试玩日志，`F8` / `F9` 导出局面；日志和存档使用 Godot 的 `user://` 用户数据目录，不应提交到 Git。
+- 附加开发入口需要显式传参，不属于正常战役流程：
 
 ```bash
 ./run_game.sh -- --remake-tools=drill
-# drill / story / settings / intro / gallery
+# 可选：drill / story / settings / intro / gallery
 ```
 
-生成数据改生成器，新增中文后跑`python3 tools/rebuild_font.py`。新逆向只用GPT-6.1 Sol子代理；不改HP/等级/AI/时限救自动玩家，不拼开发档当新档。261固定缴获装备实际T6败已停止；264有限H2实际T7败已停止；269有限缴获制铁雷实际T6败（3杀/2损失）已停止，不是fresh；失败历史和未完成项见当前台账。
+## 验证
 
-270新增自然多档viewport路线驱动与联合来源gate，完整 **74/74、195图、同源6198508e…1b1e8、exit2**；两条真正fresh各仅L00–01胜，47不足被正确拒绝。后期自然路线仍未证明，不是通过47。详`out/evidence/routes270/full/summary.json`。
+无需原版资源的合成数据单元测试：
 
 ```bash
-# 工程短档：两条独立新档各两关，预期47门槛exit2，不代替完整验收
-./verify_original.sh --ui --legal --require-campaign --campaign-battle-limit=2
+PYTHONPATH=tools python3 -m unittest test_campaign_routes test_campaign_evidence test_repair_yulai_save
 ```
 
+准备好完整运行数据后：
 
-## 271–272补交（2026-10-26）
+```bash
+python3 verify.py                 # 原版数据/解析器检查
+./verify_original.sh             # 当前规则回归；不等于全关验收
+./verify_original.sh --ui        # 增加界面截图检查
+./verify_final.sh                # 严格路线门槛，未满足全关条件时非零退出
+```
 
-- **271正式一次原T11 escort_lost败，已停止**。source259完整entry0差、同源6198508e…1b1e8、UUID4cbd197b7bc7496fbd74c5f20356dcaa；183.560518333s/child exit0/maxRSS1067548672B。仅T7扩展一次/改选一次42合法wait中的@(4,29)；hero存活Lv1 XP23 HP90，NPC9李霜泗HP0；3枪杀/7损失/余13敌，权限/故事/运行诊断0错。只补测试玩家漏候选，不是原规则修复；不接默认、不重跑、不续L09、不算fresh。证据`out/evidence/candidate271/`与研究计划结果。
-- **272 Sol证实插曲/关系真实别名**：原D4/D8严格DWORD==0才进入44/45，而公共回合邻接及三类技能同址累加。source259 L08已有8/4，晚到30再访无法覆盖44/45。270晚访策略是测试玩家路线规划缺口，非生产规则差异。应在L00之后最早合法town0、phase!=1且两计数仍零时尝试；不得清零、换bit或强触发。44战中是否会堵45需实际验证，不能宣称多fresh必需或单fresh必足。报告`docs/research/interlude_alias272_20261026.md`，3082缓存指令按PE核同。
-- 270完整74/74/195图/exit2属于其固定619源；后续改早期路线后必须重新验证，不把旧绿归属新源码。**47关与goal仍未完成**。
+`--legal` 在测试器中表示按游戏权限进行路线验证，**不是版权或法律审查**。最终门槛失败不能通过修改数值、复用旧证据或开发档绕过。旧的 `verify_m*.sh` 为历史入口，不应代替当前验证器。
 
+## 目录与开发
 
-## 273–276进展（2026-10-26）
+| 路径 | 用途 |
+|---|---|
+| `godot/scripts/` | 游戏运行逻辑、界面、战役与存档 |
+| `godot/tests/` | 规则、界面和路线测试 |
+| `extract/*.py`、`extract_all.py` | 原版格式解析与数据抽取 |
+| `tools/` | 资源准备、回归检查、攻略生成与辅助工具 |
+| `docs/guide/` | 当前实现对应的玩家文档 |
+| `extract/research_*`、`docs/research/` | 研究证据；部分仍被构建或测试读取，不能整体删除 |
+| `docs/history/`、`docs/experiments/` | 历史开发记录与隔离试验，不是发布或验收承诺 |
 
-- 早期插曲策略已改：首个可用战略窗口寻访，不能把非零共享计数当完成记录。原L00胜后直接L01部署，首次实际可回访是L01胜后index2；初次budget2仅L00–01胜/无44，已保留而非虚报。修正观察预算3后，真正fresh normal103/4/100，25.451948125s/exit0、source前后02846e65…7ea58，7次实际民房输入自然launch44，D4=1/D8=0/R=2；联合validator valid=true、complete=false。**44仅观测入口，未打赢**。证据`out/evidence/early273/capture/`。
-- Sol273核1306指令确认44原手控41..55、保护自动40/杀56；固定阵容无7/8，已见正常路径不污染D8。46首轮全自动、turn2仅80可控，70..80必须全活且全歼。没有借此改AI/胜负/控制权。
-- **已修真实L45额外插队缺陷**：原直接模板入口不部署，Intro的raw17只是保留元数据。generator仅将45.party_deploy=false；builder不再添主线roster，Campaign清旧选择并跳K00。原17/Special坐标、原slot40手控/41..65敌军、虚构40..43正常部署均保留。新OriginalInterludeParty30/0已通过，已接strict；初版测试m2_data拼错及错误漏掉敌42..65的oracle均留失败，不称生产故障。早期route30/0继续通过。
-- Sol274核932指令确认L08 NPC9/10原b0驻守、control0不可接管；9无HP治疗、b0不使用疑兵，10不自动滚木。271不是NPC冲阵，是敌49..55追9到达；前排不等于挡枪/改仇恨。合法双战区方案仍待实际胜利，未发现新增确定规则差异。报告`docs/research/l08_escort274_20261026.md`。
-- 275旧局部fight_unit在273真实44入口的开发JSON续试，完整entry0差、同源970d09d7…a2e147、10.2518s/exit0，原T15 unit_40_lost败，4枪杀/余12敌，权限/故事0错。追兵穿中路打自动40，部分我军已前进北区，局部自身避险不足。停止同参、不接默认、不续45、不称fresh。276独立验证现默认全阶段forecast玩家，尚在运行，未有结果。
-- 已启动新源970d09d7…a2e147完整strict UI+两条fresh短链回归；**未结束前不称通过**。270旧619源74/74/195图/exit2继续独立保留。47关/持续成长/长档与goal仍未完成。
+修改生成数据时应修改生成器，而不是直接编辑输出 JSON。新增中文界面文字后运行 `python3 tools/rebuild_font.py`。提交前请检查差异，避免加入存档、日志、绝对用户路径、密钥、签名文件或无权发布的材料。
 
+## 许可证与来源
 
-### 273正式回归收口
+本项目有权授权的重写代码及原创文档采用 **[MIT License](LICENSE)**，允许商业使用与修改分发，需保留许可及版权声明；不提供担保。
 
-新源970d09d75e6eec908bd0830188156423e46070f42a2e033478a435c407a2e147前后一致，**75/75 PASS、195本次实际图、548.7323s、exit2（47不足，正确拒绝）**。六张当前实际图目检无明显异常。两条fresh仍各仅L00–01胜，来源/权限/故事0错；与旧028源早期44入口观察分开。276也已结束：419.8561s/exit0/整entry0差，原默认120工程watchdog停在T121、finished=false/result空，11枪杀/9损失/余5敌；自动40完整HP564、56仍688。**不是原超时败、不是胜利**。停止同参；278正独立测试原目标普通攻击收尾，不改游戏胜负或资源。
+MIT **不覆盖**展示图、原版游戏文件及其提取/转换资源、内嵌原版图像、字体字形、原版反汇编/反编译摘录、第三方内容或商标。项目名也不表示获得原权利人授权。具体边界和已知参考来源见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。
 
-
-## 277–280补交（2026-10-26）
-
-- 277只读检查：source259 L08整entry0差、未发任何战斗命令。T1北区敌远、双方无伤，旧/扩展均无技能候选；空集合不算控场有效证据。未改生产。
-- **278已终止：456.6353s/child exit0，同源970d09d7…a2e147，完整entry0差。T121仍player/finished=false/result空，11枪杀/9损失/余5敌，56仍688；不是原败或胜利。** 每轮普通攻击burst只读规划未找到足量合击，未战报确认，不续45，停止同参。证据`out/evidence/interlude278/`。潜在真胜后已释放battle再取snapshot的后处理问题未在本次watchdog触发；新试验已把终态捕获置于战报确认前。
-- **279已原T12 escort_lost败：202.59058s/exit0，UUID f7707c58aeb7435f9b0d0ff87b698561，source前后970一致、3脚本/input一致、双重整entry0差、历史前8精确、权限/故事/诊断0错。** 仅一次hero T7待机扩展改变，3枪杀/8损失/余13敌；hero活HP90/Lv1/XP29，9在原(30,9)HP0。补已学技能候选不等于联合护送规划；实际疑兵既有成功也有0目标。停止同参，不接默认、不续09、不称fresh。证据`out/evidence/skills279/`。
-- 280新增6.1 Sol窄审boss（报告及证据见`docs/research/boss280_original_20261026.md`），无新增确定生产差异。原56 behavior12/type45/智93，原治疗及低概率掠夺/持续骚扰均不能视为必中；初版报告误将两件装备防累加为76，主agent源码交叉核对指出，Sol原42B0EA复核应取max64，成功偷首件后剩12、净降52。错误历史需单留，不能据此改生产。
-- 281单次隔离合法编队试验正在执行：守40附近集结→追兵全灭后整队推进→现有54/55可达/存活时真实掠夺56；不改规则、不增资源、不称fresh。未有结果前不称通关。
-- 已补early273、277、278、279总artifact_manifest；273正式75/75、195图、exit2仍为最新完整工程回归，47/成长长档与goal仍未完成。
+格式研究参考了 [dlzopen/dlz_research](https://github.com/dlzopen/dlz_research)；相关文件保留来源说明及上游 MIT 许可。发布分支 `master` 基于脱敏线 `codex/publication-clean`，已重写提交身份及本机用户路径；远程仅同步 `master`。旧开发分支和 stash 仍作为本地私有资料保留，**不要镜像推送整个仓库或将旧历史一起公开**。审查范围、许可例外和剩余风险见[开源审查](docs/OPEN_SOURCE_AUDIT.md)。

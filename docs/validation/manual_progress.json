@@ -1,0 +1,49 @@
+{
+  "schema": "dlz-manual-progress-v1",
+  "checked_on": "2026-10-30",
+  "evidence_kind": "user-reported manual play, private saves inspected read-only",
+  "raw_saves": "private; not included in repository",
+  "sources_examined": 7,
+  "difficulty": 1,
+  "completed_indices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22
+  ],
+  "completed_count": 23,
+  "contiguous_main_completed_count": 23,
+  "observed_in_progress_indices": [
+    23
+  ],
+  "checks": {
+    "unique_valid_indices": true,
+    "score_entries_match_completions": true,
+    "score_totals_match": true,
+    "campaign_resume_not_standalone": true
+  },
+  "limitations": [
+    "Not an independently reproduced full campaign run",
+    "Save contents alone do not prove an unmodified play history",
+    "In-progress levels are not counted as completed"
+  ]
+}

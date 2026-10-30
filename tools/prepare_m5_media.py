@@ -43,7 +43,7 @@ Usage:
   python3 tools/prepare_m5_media.py --force      # rebuild everything
   python3 tools/prepare_m5_media.py --verify     # check only, no conversion
 
-Requires ffmpeg/ffprobe (default {ffmpeg,ffprobe}).
+Requires ffmpeg/ffprobe on PATH (override with M5_FFMPEG / M5_FFPROBE).
 The miniconda ffmpeg has no libtheora, so Theora .ogv playback copies are encoded
 with /opt/homebrew/bin/ffmpeg 7.1.1 (override with --ffmpeg-theora).  This is
 needed because the installed Godot 4.7.2 exposes VideoStreamTheora only, not

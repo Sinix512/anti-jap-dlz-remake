@@ -1,6 +1,6 @@
 {
   "date": "2026-10-29",
-  "baseline_commit": "065f7314a9fbedfb430c7d24184c63bc9f529fac",
+  "baseline_commit": "0c7d4bacf64731aa4e29413bd194c98ae7420ce0",
   "scope": "current implementation documentation, not campaign completion evidence",
   "counts": {
     "unit_slots": 96,
@@ -34,7 +34,7 @@
     "tools/repair_yulai_save.py": "2e01c383cd72e989700ae52af363d7f601b28a356419c309daed6c86228bde20",
     "tools/test_repair_yulai_save.py": "4b3d3b40a70198f585e5bc969bb1dda67225824d16946a39970d301dd54f4798",
     "tools/verify_original.py": "0df32f419612d5c857b363f2aa3054bc21f34ee307fe9114437d1d63a0f1432e",
-    "docs/guide/README.md": "50d209ba5a1f52d8703d6713f37b32b4bc11491e85ca512e9eaac02d80846714",
+    "docs/guide/README.md": "f2fc7defd336127af253e1155f327e649c82117dd18c619650c7c693d771c86f",
     "godot/scripts/Battle.gd": "a906bb58db6bbf1e89912b71752e12bf5633e1fb2d34b5e7f34118879d421d6a",
     "godot/scripts/BattleUnit.gd": "0e259c5e33ed09eed544b56e488280dc54efc80b8577d4d3423c2b080d04151f",
     "godot/scripts/Main.gd": "47cc4bbf3f2664ee60ef282b9a92d245e65bef0a47ecc4a7a2e10fd7393ded2d",
@@ -145,7 +145,7 @@
     "unit_ranges.md": "15e29d602c8537a423765ab6519baa706cb7985488c703317b69e7d33e6e5874",
     "reference.md": "85eb9ebb0c977236d1cd5ac39dd2aa64eec81667511543500948191df5472ce4",
     "missions.md": "0e9b29a3c0d5450342686380d142bea036ac04fb47c4e968dc2284ede491ae67",
-    "guide.html": "650a8a7718c4f0c1b1f4691bca271e125c1212d286dd16c6aec507fb6b80d26e",
+    "guide.html": "b735c3ad66a0bbd9295a8206485c3be4e8cc0dbdd3fd3d074d162a36363cbe33",
     "terrain_samples.json": "98a0adceeedb1c156e7ac4030cb8f9f3f4ecf00439d7e68b32478dc01cccda5c",
     "mission_rules.json": "a1b7c8c72368d7201a6f95f96fa5ec8fa560d5d62090dc03fa88c69cc84e0f49"
   }

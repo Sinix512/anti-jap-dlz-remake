@@ -12,3 +12,27 @@ godot/data/
 godot/assets/
 godot/.godot/
 godot/**/*.import
+
+# 本地环境、凭据及签名产物；不影响已跟踪文件或既有历史。
+.venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+*.apk
+*.aab
+
+# 私人存档/自动存档/修复备份与试玩日志（测试源码和合成夹具仍可跟踪）。
+saves/
+user_data/
+dlz_m2_save_*.json*
+dlz_original.dat*
+save[0-9]*.dat*
+/save*.json
+hiscore.dat
+dlz_playtest*.jsonl
