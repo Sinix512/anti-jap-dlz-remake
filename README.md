@@ -2,7 +2,7 @@
 
 《抗日：地雷战》（1998）的非官方 Godot 重实现：用 GDScript 实现战斗、战役、城镇与界面，用 Python 解析本地原版数据并准备运行资源。
 
-**这是开发中的桌面项目，不是原版游戏资源包，也不是官方作品。** 运行需要自行准备有权使用的原版文件；本仓库不提供下载。已有 47 关的数据与流程支持；本地用户实玩存档已确认 **前23关通关，第24关进行中**。尚不代表47关全部验证完成。
+**这是开发中的桌面项目，不是原版游戏资源包，也不是官方作品。** 运行需要有权使用的原版文件；Git 仓库不包含原版数据，获取入口见下方[原版数据](#原版数据)。已有 47 关的数据与流程支持；本地用户实玩存档已确认 **前23关通关，第24关进行中**。尚不代表47关全部验证完成。
 
 [玩家攻略](docs/guide/README.md) · [离线攻略](docs/guide/guide.html) · [地形图鉴](docs/guide/terrain.md) · [兵种范围](docs/guide/unit_ranges.md) · [数值参考](docs/guide/reference.md) · [关卡事件](docs/guide/missions.md)
 
@@ -44,6 +44,16 @@
 - Python 3.10+，Python 包 `Pillow`、`numpy`。
 - `ffmpeg`、`ffprobe`：音轨和过场转换需要；完整过场管线需要 FFmpeg 支持 `libvpx-vp9`、`libvorbis`、`libtheora`。
 - 原版安装目录，包括 DAT、IMG、TGA、字体、动画/视频文件，以及音效光盘 NRG。
+
+## 原版数据
+
+- 文件：`anti-jap-original-data.zip`（约 768 MiB）。
+- [百度网盘下载](https://pan.baidu.com/s/1VdD0rDb_Sr08U2qkaryJhQ?pwd=i7hm)，提取码：**`i7hm`**。
+- 也可扫描二维码打开分享：
+
+<a href="https://pan.baidu.com/s/1VdD0rDb_Sr08U2qkaryJhQ?pwd=i7hm"><img src="docs/images/original-data-qr.png" alt="原版数据百度网盘分享二维码，提取码 i7hm" width="280"></a>
+
+压缩包内含顶层 `ANTI-JAP/` 目录；解压到仓库旁的 `../dlz/` 后，应得到 `../dlz/ANTI-JAP/GAME.DAT` 等文件，再按下文准备运行资源。原版数据不适用本项目 MIT 许可，请仅在有权使用的前提下获取和使用；不要将压缩包或解压文件提交到 Git。
 
 ## 首次运行
 
